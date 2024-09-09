@@ -20,6 +20,8 @@ torchsummary = "*"
 matplotlib = "*"
 seaborn = "*"
 opencv-contrib-python = "*"
+lightning = { version = "*", extras = ["pytorch-extra"] }
+tensorboard = "*"
 
 [dev-packages]
 pylint = "*"

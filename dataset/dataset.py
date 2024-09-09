@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from cv2 import typing as cvt
 from numpy import typing as npt
-from torch.utils.data import DataLoader, Dataset, SubsetRandomSampler
+from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
 from torchvision.transforms import Compose
 
 SEED_CUS = 1
@@ -21,11 +21,13 @@ class CineDataset(Dataset[Any]):
         self,
         img_dir: str,
         mask_dir: str,
+        idxs_dir: str,
         frames: int,
         select_frame_method: Literal["consecutive", "specific"],
         transform_1: Compose,
         transform_2: Compose,
         batch_size: int = 2,
+        mode: Literal["train", "val", "test"] = "train",
     ) -> None:
         super().__init__()
         # Set paths to CINE and mask directories
@@ -51,6 +53,12 @@ class CineDataset(Dataset[Any]):
         self.valid_idxs: list[int]
 
         self.batch_size = batch_size
+
+        if mode != "test":
+            self.load_train_indices(
+                os.path.join(idxs_dir, "train_indices.pkl"),
+                os.path.join(idxs_dir, "val_indices.pkl"),
+            )
 
     def __len__(self) -> int:
         return len(self.img_list)
@@ -178,6 +186,8 @@ class CineDataset(Dataset[Any]):
                 train_idxs: list[int] = pickle.load(f)
             with open(valid_idxs_path, "rb") as f:
                 valid_idxs: list[int] = pickle.load(f)
+            self.train_idxs = train_idxs
+            self.valid_idxs = valid_idxs
             return train_idxs, valid_idxs
 
         names = os.listdir(self.img_dir)
@@ -194,11 +204,11 @@ class CineDataset(Dataset[Any]):
             if name not in blacklisted:
                 if len(grouped_names) == 0:
                     grouped_names[base] = [names[i]]
-            else:
-                if base in grouped_names:
-                    grouped_names[base] += [names[i]]
                 else:
-                    grouped_names[base] = [names[i]]
+                    if base in grouped_names:
+                        grouped_names[base] += [names[i]]
+                    else:
+                        grouped_names[base] = [names[i]]
 
         # Attach an index to each file
         for i in range(len(names)):
@@ -224,7 +234,7 @@ class CineDataset(Dataset[Any]):
                 for i in range(len(grouped_names[patient])):
                     name, idx = grouped_names[patient][i]
                     train_idxs.append(idx)
-                    train_names.append(idx)
+                    train_names.append(name)
                 break
 
             else:
@@ -261,9 +271,11 @@ class LGEDataset(Dataset[Any]):
         self,
         img_dir: str,
         mask_dir: str,
+        idxs_dir: str,
         transform_1: Compose,
         transform_2: Compose,
         batch_size: int = 8,
+        mode: Literal["train", "val", "test"] = "train",
     ) -> None:
         super().__init__()
 
@@ -280,6 +292,11 @@ class LGEDataset(Dataset[Any]):
         self.valid_idxs: list[int]
 
         self.batch_size = batch_size
+        if mode != "test":
+            self.load_train_indices(
+                os.path.join(idxs_dir, "train_indices.pkl"),
+                os.path.join(idxs_dir, "val_indices.pkl"),
+            )
 
     @override
     def __getitem__(
@@ -322,6 +339,8 @@ class LGEDataset(Dataset[Any]):
                 train_idxs: list[int] = pickle.load(f)
             with open(valid_idxs_path, "rb") as f:
                 valid_idxs: list[int] = pickle.load(f)
+            self.train_idxs = train_idxs
+            self.valid_idxs = valid_idxs
             return train_idxs, valid_idxs
 
         names = os.listdir(self.img_dir)
@@ -406,7 +425,17 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
-def get_dataloaders(dataset: LGEDataset | CineDataset) -> tuple[DataLoader, DataLoader]:
+def get_trainval_data_subsets(
+    dataset: LGEDataset | CineDataset,
+) -> tuple[Subset, Subset]:
+    train_set = Subset(dataset, dataset.train_idxs)
+    valid_set = Subset(dataset, dataset.valid_idxs)
+    return train_set, valid_set
+
+
+def get_trainval_dataloaders(
+    dataset: LGEDataset | CineDataset,
+) -> tuple[DataLoader, DataLoader]:
     # Define fixed seeds
     random.seed(SEED_CUS)
     torch.manual_seed(SEED_CUS)

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from json import decoder, encoder
 from typing import Any, Callable, Literal, Sequence, override
 
 import torch
 from segmentation_models_pytorch.base import modules as md
-from segmentation_models_pytorch.base.encoders import get_encoder
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.base.model import SegmentationModel
+from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
 from torch.nn import functional as F
 
@@ -128,6 +127,10 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
     # -- (6.2) Reshape (batch_size, n * n, num_channels) to (batch_size, n, n,
     # num_channels) using permute. --
+    final_output = final_output.unflatten(1, (n, n))
+
+    # -- (6.3) Reshape (batch_size, n, n, channels) to (batch_size, channels, n, n)
+    # using permute.
     final_output = final_output.permute(0, 3, 1, 2)
 
     return final_output
@@ -371,7 +374,7 @@ class UnetDecoder(nn.Module):
         return x
 
 
-class Unet(SegmentationModel):
+class Unet(CustomSegmentationModel):
     def __init__(
         self,
         encoder_name: str = "resnet34",
@@ -383,9 +386,10 @@ class Unet(SegmentationModel):
         in_channels: int = 3,
         classes: int = 1,
         activation: str | Callable | None = None,
+        num_frames: Literal[5, 10, 15, 20, 30] = 5,
         aux_params: dict[str, Any] | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(num_frames=num_frames)
 
         self.encoder = get_encoder(
             encoder_name,
