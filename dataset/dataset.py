@@ -263,6 +263,20 @@ class CineDataset(Dataset[Any]):
         self.train_idxs = train_idxs
         self.valid_idxs = valid_idxs
 
+        if not os.path.exists(
+            (train_indices_dir := os.path.dirname(os.path.normpath(train_idxs_path)))
+        ):
+            os.makedirs(train_indices_dir)
+        if not os.path.exists(
+            (valid_indices_dir := os.path.dirname(os.path.normpath(valid_idxs_path)))
+        ):
+            os.makedirs(valid_indices_dir)
+
+        with open(train_idxs_path, "wb") as f:
+            pickle.dump(train_idxs, f)
+        with open(valid_idxs_path, "wb") as f:
+            pickle.dump(valid_idxs, f)
+
         return train_idxs, valid_idxs
 
 

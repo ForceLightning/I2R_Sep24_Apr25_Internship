@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Literal, override
+from typing import Literal, OrderedDict, override
 
 import lightning as L
 import segmentation_models_pytorch as smp
@@ -17,16 +17,20 @@ from lightning.pytorch.cli import (
 from models.two_plus_one import Unet
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from torch import nn
+from torch.nn import functional as F
 from torch.optim.adamw import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
-from torchmetrics import Dice, Metric
+from torchmetrics import Metric
+from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from warmup_scheduler import GradualWarmupScheduler
 
 BATCH_SIZE_TRAIN = 4
+
+
 BATCH_SIZE_VAL = 4
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 LEARNING_RATE = 1e-4
@@ -70,6 +74,7 @@ class UnetLightning(L.LightningModule):
         in_channels: int = 3,
         classes: int = 1,
         num_frames: int = 5,
+        weights_from_ckpt_path: str | None = None,
         optimizer: OptimizerCallable = AdamW,
         scheduler: LRSchedulerCallable | str = "gradual_warmup_scheduler",
         multiplier: int = 2,
@@ -111,13 +116,37 @@ class UnetLightning(L.LightningModule):
         self.scheduler = scheduler
         self.loss = loss
         self.metric = (
-            metric if metric else Dice(average="samples", mdmc_average="samplewise")
+            metric
+            if metric
+            else GeneralizedDiceScore(
+                num_classes=classes,
+                per_class=True,
+                include_background=True,
+                weight_type="linear",
+            )
         )
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
 
         self.alpha = alpha
+
+        # Attempts to load checkpoint if provided.
+        self.weights_from_ckpt_path = weights_from_ckpt_path
+        if self.weights_from_ckpt_path:
+            ckpt = torch.load(self.weights_from_ckpt_path)
+            try:
+                self.load_state_dict(ckpt["state_dict"])
+            except KeyError:
+                # HACK: So that legacy checkpoints can be loaded.
+                try:
+                    new_state_dict = OrderedDict()
+                    for k, v in ckpt.items():
+                        name = k[7:]  # remove 'module.' of dataparallel
+                        new_state_dict[name] = v
+                    self.model.load_state_dict(new_state_dict)
+                except RuntimeError as e:
+                    raise e
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
@@ -126,17 +155,48 @@ class UnetLightning(L.LightningModule):
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ) -> torch.Tensor:
         images, masks, _ = batch
+        bs = images.shape[0]
         images = images.permute(1, 0, 2, 3, 4)
         images = images.to(DEVICE, dtype=torch.float32)
         masks = masks.to(DEVICE).long()
 
         with torch.autocast(device_type=self.device.type):
-            masks_pred = self.model(images)
+            masks_proba = self.model(images)
 
-        loss_seg = self.alpha * self.loss(masks_pred, masks)
+        loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
-        metric = self.metric(masks_pred, masks).detach().cpu().item()
-        self.log(f"train_{self.metric.__class__.__name__}", metric)
+
+        if isinstance(self.metric, GeneralizedDiceScore):
+            masks = masks.squeeze(1)  # BS x H x W
+
+            masks_one_hot = F.one_hot(masks, num_classes=4).permute(
+                0, -1, 1, 2
+            )  # BS x C x H x W
+            masks_preds = masks_proba.argmax(dim=1)  # BS x H x W
+
+            masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(
+                0, -1, 1, 2
+            )  # BS x C x H x W
+
+            class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
+            class_distribution = class_distribution.div(
+                class_distribution[1:].sum()
+            ).squeeze()
+
+            metric: torch.Tensor = self.metric(masks_preds_one_hot, masks_one_hot)
+            weighted_avg = metric[1:] @ class_distribution[1:]
+
+            self.log(f"train_dice_(weighted_avg)", weighted_avg.item(), batch_size=bs)
+            self.log(f"train_dice_(macro_avg)", metric.mean().item(), batch_size=bs)
+
+            for i, class_metric in enumerate(metric.detach().cpu()):
+                if i == 0:  # NOTE: Skips background class.
+                    continue
+                self.log(
+                    f"train_dice_class_{i}",
+                    class_metric.item(),
+                    batch_size=bs,
+                )
         return loss_all
 
     def on_train_epoch_end(self):
@@ -160,16 +220,48 @@ class UnetLightning(L.LightningModule):
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int, prefix: str
     ):
         images, masks, _ = batch
+        bs = images.shape[0] if len(images.shape) > 3 else 1
         images = images.permute(1, 0, 2, 3, 4)
         images = images.to(DEVICE, dtype=torch.float32)
         masks = masks.to(DEVICE).long()
-        masks_pred = self.model(images)
-        loss_seg = self.alpha * self.loss(masks_pred, masks)
+        masks_proba = self.model(images)  # BS x C x H x W
+        loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
-        self.log(f"{prefix}_loss", loss_all.detach().cpu().item())
+        self.log(f"{prefix}_loss", loss_all.detach().cpu().item(), batch_size=bs)
 
-        metric = self.metric(masks_pred, masks).detach().cpu().item()
-        self.log(f"{prefix}_{self.metric.__class__.__name__}", metric)
+        if isinstance(self.metric, GeneralizedDiceScore):
+            masks = masks.squeeze(1)  # BS x H x W
+
+            masks_one_hot = F.one_hot(masks, num_classes=4).permute(
+                0, -1, 1, 2
+            )  # BS x C x H x W
+            masks_preds = masks_proba.argmax(dim=1)  # BS x H x W
+
+            masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(
+                0, -1, 1, 2
+            )  # BS x C x H x W
+
+            class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
+            class_distribution = class_distribution.div(
+                class_distribution[1:].sum()
+            ).squeeze()
+
+            metric: torch.Tensor = self.metric(masks_preds_one_hot, masks_one_hot)
+            weighted_avg = metric[1:] @ class_distribution[1:]
+
+            self.log(
+                f"{prefix}_dice_(weighted_avg)", weighted_avg.item(), batch_size=bs
+            )
+            self.log(f"{prefix}_dice_(macro_avg)", metric.mean().item(), batch_size=bs)
+
+            for i, class_metric in enumerate(metric.detach().cpu()):
+                if i == 0:  # NOTE: Skips background class.
+                    continue
+                self.log(
+                    f"{prefix}_dice_class_{i}",
+                    class_metric.item(),
+                    batch_size=bs,
+                )
 
     @override
     def configure_optimizers(self):
@@ -356,11 +448,9 @@ if __name__ == "__main__":
     cli = TwoPlusOneCLI(
         UnetLightning,
         CineDataModule,
-        save_config_kwargs={
-            "config_filename": "config.yaml",
-            "multifile": True,
-        },
+        # save_config_kwargs={
+        #     "config_filename": "config.yaml",
+        #     "multifile": True,
+        # },
+        save_config_callback=None,
     )
-    # datamod = CineDataModule()
-    # datamod.setup(stage="train")
-    # assert len(datamod.train) > 0, "train dataset length is 0"
