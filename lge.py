@@ -1,33 +1,17 @@
 from __future__ import annotations
 
 import os
-from collections import OrderedDict
-from collections.abc import Sequence
-from typing import Any, Literal, override
+from typing import Union, override
 
-import cv2
 import lightning as L
-import numpy as np
-import segmentation_models_pytorch as smp
 import torch
 from cine import LightningUnetWrapper
-from cv2 import typing as cvt
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.cli import (
-    LightningArgumentParser,
-    LightningCLI,
-    LRSchedulerCallable,
-    OptimizerCallable,
-)
-from numpy import typing as npt
-from segmentation_models_pytorch.losses.dice import DiceLoss
-from torch import nn
-from torch.nn import functional as F
+from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
+from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
-from torchmetrics import Metric
-from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from two_plus_one import LightningGradualWarmupScheduler
@@ -144,38 +128,39 @@ class LGEBaselineDataModule(L.LightningDataModule):
         )
 
 
-class CineCLI(LightningCLI):
+class LGECLI(LightningCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
+        parser.add_class_arguments(TensorBoardLogger, "tensorboard")
+        parser.add_argument("--version", type=Union[str, None], default=None)
+        parser.link_arguments("version", "tensorboard.version")
+        parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
+
         parser.set_defaults(
             {
                 "trainer.max_epochs": 50,
-                "trainer.logger": {
-                    "class_path": "lightning.pytorch.loggers.TensorBoardLogger",
-                    "init_args": {
-                        "save_dir": os.path.join(
-                            os.getcwd(), "checkpoints/lge-baseline"
-                        )
-                    },
-                },
                 "model.encoder_name": "resnet50",
                 "model.encoder_weights": "imagenet",
                 "model.in_channels": 3,
                 "model.classes": 4,
                 "model_checkpoint.monitor": "val_loss",
                 "model_checkpoint.dirpath": os.path.join(
-                    os.getcwd(), "checkpoints/lge-baseline"
+                    os.getcwd(), "checkpoints/lge-baseline/"
                 ),
+                "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
+                "tensorboard.save_dir": os.path.join(
+                    os.getcwd(), "checkpoints/lge-baseline/"
+                ),
             }
         )
 
 
 if __name__ == "__main__":
-    cli = CineCLI(
+    cli = LGECLI(
         LightningUnetWrapper,
         LGEBaselineDataModule,
         # save_config_kwargs={
@@ -183,4 +168,5 @@ if __name__ == "__main__":
         #     "multifile": True,
         # },
         save_config_callback=None,
+        auto_configure_optimizers=False,
     )

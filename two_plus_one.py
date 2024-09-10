@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Literal, OrderedDict, override
+from typing import Literal, OrderedDict, Union, override
 
 import lightning as L
 import segmentation_models_pytorch as smp
@@ -14,6 +14,7 @@ from lightning.pytorch.cli import (
     LRSchedulerCallable,
     OptimizerCallable,
 )
+from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from models.two_plus_one import Unet
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from torch import nn
@@ -29,7 +30,6 @@ from torchvision.transforms.transforms import Compose
 from warmup_scheduler import GradualWarmupScheduler
 
 BATCH_SIZE_TRAIN = 4
-
 
 BATCH_SIZE_VAL = 4
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -67,7 +67,7 @@ class UnetLightning(L.LightningModule):
     def __init__(
         self,
         metric: Metric | None = None,
-        loss: nn.Module = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True),
+        loss: nn.Module | None = None,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
@@ -114,7 +114,9 @@ class UnetLightning(L.LightningModule):
         )
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self.loss = loss
+        self.loss = (
+            loss if loss else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+        )
         self.metric = (
             metric
             if metric
@@ -165,6 +167,7 @@ class UnetLightning(L.LightningModule):
 
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
+        self.log(f"train_loss", loss_all.item(), batch_size=bs, on_epoch=True)
 
         if isinstance(self.metric, GeneralizedDiceScore):
             masks = masks.squeeze(1)  # BS x H x W
@@ -419,6 +422,11 @@ class TwoPlusOneCLI(LightningCLI):
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
+        parser.add_class_arguments(TensorBoardLogger, "tensorboard")
+        parser.add_argument("--version", type=Union[str, None], default=None)
+        parser.link_arguments("version", "tensorboard.version")
+        parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
+
         parser.set_defaults(
             {
                 "trainer.max_epochs": 50,
@@ -430,16 +438,12 @@ class TwoPlusOneCLI(LightningCLI):
                 "model_checkpoint.dirpath": os.path.join(
                     os.getcwd(), "checkpoints/two-plus-one/"
                 ),
+                "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
-                "trainer.logger": {
-                    "class_path": "lightning.pytorch.loggers.TensorBoardLogger",
-                    "init_args": {
-                        "save_dir": os.path.join(
-                            os.getcwd(), "checkpoints/two-plus-one/"
-                        )
-                    },
-                },
+                "tensorboard.save_dir": os.path.join(
+                    os.getcwd(), "checkpoints/two-plus-one/"
+                ),
             }
         )
 
@@ -453,4 +457,5 @@ if __name__ == "__main__":
         #     "multifile": True,
         # },
         save_config_callback=None,
+        auto_configure_optimizers=False,
     )

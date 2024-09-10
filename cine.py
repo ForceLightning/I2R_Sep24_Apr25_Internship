@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from collections.abc import Sequence
-from typing import Any, Literal, override
+from typing import Any, Literal, Union, override
 
 import cv2
 import lightning as L
@@ -19,6 +19,7 @@ from lightning.pytorch.cli import (
     LRSchedulerCallable,
     OptimizerCallable,
 )
+from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from numpy import typing as npt
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from torch import nn
@@ -31,8 +32,8 @@ from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from two_plus_one import LightningGradualWarmupScheduler
 
-BATCH_SIZE_TRAIN = 8
-BATCH_SIZE_VAL = 8
+BATCH_SIZE_TRAIN = 4
+BATCH_SIZE_VAL = 4
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 LEARNING_RATE = 1e-4
 NUM_FRAMES = 5
@@ -201,7 +202,9 @@ class LightningUnetWrapper(L.LightningModule):
 
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
-        self.log(f"train_loss", loss_all.detach().cpu().item(), batch_size=bs)
+        self.log(
+            f"train_loss", loss_all.detach().cpu().item(), batch_size=bs, on_epoch=True
+        )
 
         if isinstance(self.metric, GeneralizedDiceScore):
             masks = masks.squeeze(1)  # BS x H x W
@@ -303,6 +306,31 @@ class LightningUnetWrapper(L.LightningModule):
                     class_metric.item(),
                     batch_size=bs,
                 )
+
+    @override
+    def configure_optimizers(self):
+        optimizer = self.optimizer(self.model.parameters())
+        if isinstance(self.scheduler, str):
+            if self.scheduler == "gradual_warmup_scheduler":
+                scheduler = {
+                    "scheduler": LightningGradualWarmupScheduler(
+                        optimizer,
+                        multiplier=self.multiplier,
+                        total_epoch=self.total_epochs,
+                        T_max=50,
+                    ),
+                    "interval": "epoch",
+                    "frequency": 1,
+                    "monitor": "val_loss",
+                    "strict": True,
+                }
+            else:
+                raise NotImplementedError(
+                    f"Scheduler of type {self.scheduler} not implemented"
+                )
+        else:
+            scheduler = self.scheduler(optimizer)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
 class CineBaselineDataModule(L.LightningDataModule):
@@ -408,31 +436,44 @@ class CineBaselineDataModule(L.LightningDataModule):
 
 
 class CineCLI(LightningCLI):
+    @classmethod
+    def get_checkpoint_filename(cls, version: str | None) -> str | None:
+        if version:
+            return version + "-epoch={epoch}-step={step}"
+        else:
+            return version
+
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
+        parser.add_class_arguments(TensorBoardLogger, "tensorboard")
+        parser.add_argument("--version", type=Union[str, None], default=None)
+        parser.link_arguments("version", "tensorboard.version")
+        parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
+        parser.link_arguments(
+            "version",
+            "model_checkpoint.filename",
+            compute_fn=CineCLI.get_checkpoint_filename,
+        )
+
         parser.set_defaults(
             {
                 "trainer.max_epochs": 50,
-                "trainer.logger": {
-                    "class_path": "lightning.pytorch.loggers.TensorBoardLogger",
-                    "init_args": {
-                        "save_dir": os.path.join(
-                            os.getcwd(), "checkpoints/cine-baseline"
-                        )
-                    },
-                },
                 "model.encoder_name": "resnet50",
                 "model.encoder_weights": "imagenet",
                 "model.in_channels": 90,
                 "model.classes": 4,
                 "model_checkpoint.monitor": "val_loss",
                 "model_checkpoint.dirpath": os.path.join(
-                    os.getcwd(), "checkpoints/cine-baseline"
+                    os.getcwd(), "checkpoints/cine-baseline/"
                 ),
+                "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
+                "tensorboard.save_dir": os.path.join(
+                    os.getcwd(), "checkpoints/cine-baseline/"
+                ),
             }
         )
 
@@ -446,4 +487,5 @@ if __name__ == "__main__":
         #     "multifile": True,
         # },
         save_config_callback=None,
+        auto_configure_optimizers=False,
     )
