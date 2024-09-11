@@ -12,6 +12,7 @@ from torch.nn import functional as F
 
 
 class OneD(nn.Module):
+
     def __init__(
         self,
         in_channels: int,
@@ -79,6 +80,9 @@ class OneD(nn.Module):
                     f"Model with num_frames of {num_frames} not implemented!"
                 )
 
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
     @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.one(x)
@@ -95,11 +99,12 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
         torch.Tensor: 4D tensor of shape (batch_size, num_channels, n, n).
     """
     # -- (1) Swap axes. Output shape: (batch size, n * n, num_frames, num_channels) --
+    _num_frames, batch_size, num_channels, _n1, _n2 = stacked_outputs.shape
     reshaped_output0 = stacked_outputs.permute(1, 3, 4, 0, 2).flatten(1, 2)
 
     # -- (2) Reorder channels so that the first num_frames channels are the first
     # channel from the num_frames. --
-    batch_size, n_n, _, _ = reshaped_output0.shape
+    n_n = reshaped_output0.shape[1]
     reordered_output = (
         reshaped_output0.permute(0, 1, 3, 2).contiguous().view(batch_size, n_n, -1)
     )
@@ -110,11 +115,11 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
     # -- (4) Apply the 1d temporal conv block. Output shape is (batch_size, n * n,
     # n * n * num_channels) --
-    compressed_image = block(flattened_output)
+    compressed_image: torch.Tensor = block(flattened_output)
 
     # -- (5) Average layers --
     channel_dim = 1
-    averaged_img = compressed_image.mean(channel_dim).squeeze(channel_dim)
+    averaged_img = compressed_image.mean(dim=channel_dim).squeeze(channel_dim)
 
     # -- (6) Reshape the input shape of (batch_size, 1, n * n * num_channels) to
     # (batch_size, num_channels, n, n) --
@@ -126,7 +131,7 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     final_output = averaged_img.unflatten(-1, (n * n, num_channels))
 
     # -- (6.2) Reshape (batch_size, n * n, num_channels) to (batch_size, n, n,
-    # num_channels) using permute. --
+    # num_channels) using unflatten. --
     final_output = final_output.unflatten(1, (n, n))
 
     # -- (6.3) Reshape (batch_size, n, n, channels) to (batch_size, channels, n, n)

@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from cv2 import typing as cvt
 from numpy import typing as npt
+from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
 from torchvision.transforms import Compose
 
@@ -90,11 +91,27 @@ class CineDataset(Dataset[Any]):
 
         lab_mask = mask / [1.0]
         lab_mask = cv2.resize(lab_mask, (224, 224)).astype(np.float32)
-        lab_mask = lab_mask[:, :, 0]
-        if self.transform_2:
-            lab_mask = self.transform_2(lab_mask)
+        lab_mask = lab_mask[:, :, 0]  # H x W
 
-        return combined_imgs, lab_mask, img_name
+        # NOTE: This turns the problem into a multilabel segmentation problem.
+        # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+        # bitwise or operations to adhere to those conditions.
+        lab_mask_one_hot = F.one_hot(
+            torch.from_numpy(lab_mask).long(), num_classes=4
+        )  # H x W x C
+        lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+            lab_mask_one_hot[:, :, 3]
+        )
+        lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+            lab_mask_one_hot[:, :, 2]
+        )
+
+        lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
+
+        if self.transform_2:
+            lab_mask_one_hot = self.transform_2(lab_mask_one_hot)
+
+        return combined_imgs, lab_mask_one_hot, img_name
 
     @classmethod
     def concatenate_imgs(
@@ -336,9 +353,24 @@ class LGEDataset(Dataset[Any]):
         lab_mask = lab_mask.astype(np.float32)[:, :, 0]
 
         lab_img = self.transform_1(lab_img)
-        lab_mask = self.transform_2(lab_mask)
 
-        return lab_img, lab_mask, img_name
+        # NOTE: This turns the problem into a multilabel segmentation problem.
+        # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+        # bitwise or operations to adhere to those conditions.
+        lab_mask_one_hot = F.one_hot(
+            torch.from_numpy(lab_mask).long(), num_classes=4
+        )  # H x W x C
+        lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+            lab_mask_one_hot[:, :, 3]
+        )
+        lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+            lab_mask_one_hot[:, :, 2]
+        )
+        lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
+
+        lab_mask_one_hot = self.transform_2(lab_mask_one_hot)
+
+        return lab_img, lab_mask_one_hot, img_name
 
     def __len__(self) -> int:
         return len(self.img_list)

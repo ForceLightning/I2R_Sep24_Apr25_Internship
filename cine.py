@@ -26,13 +26,17 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Dice, Metric
 from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
+from torchvision.utils import draw_segmentation_masks
 from two_plus_one import LightningGradualWarmupScheduler
+from utils.utils import InverseNormalize
 
 BATCH_SIZE_TRAIN = 4
+
 BATCH_SIZE_VAL = 4
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 LEARNING_RATE = 1e-4
@@ -130,7 +134,7 @@ class LightningUnetWrapper(L.LightningModule):
     def __init__(
         self,
         metric: Metric | None = None,
-        loss: nn.Module = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True),
+        loss: nn.Module = DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True),
         encoder_name: str = "resnet34",
         encoder_weights: str | None = "imagenet",
         in_channels: int = 90,
@@ -170,6 +174,14 @@ class LightningUnetWrapper(L.LightningModule):
 
         self.alpha = alpha
 
+        self.example_input_array = torch.randn(
+            (2, in_channels, 224, 224), dtype=torch.float32
+        ).to(DEVICE)
+
+        self.de_transform = Compose(
+            [InverseNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
+        )
+
         self.weights_from_ckpt_path = weights_from_ckpt_path
         if self.weights_from_ckpt_path:
             ckpt = torch.load(self.weights_from_ckpt_path)
@@ -198,36 +210,32 @@ class LightningUnetWrapper(L.LightningModule):
         masks = masks.to(DEVICE).long()
 
         with torch.autocast(device_type=self.device.type):
-            masks_proba = self.model(images)
+            masks_proba: torch.Tensor = self.model(images)
+
+        assert (
+            masks_proba.size() == masks.size()
+        ), f"Output of shape {masks_proba.shape} != target shape {masks.shape}"
 
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
         self.log(
-            f"train_loss", loss_all.detach().cpu().item(), batch_size=bs, on_epoch=True
+            f"train_loss",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+            prog_bar=True,
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks = masks.squeeze(1)  # BS x H x W
+            masks_preds = masks_proba > 0.5
 
-            masks_one_hot = F.one_hot(masks, num_classes=4).permute(
-                0, -1, 1, 2
-            )  # BS x C x H x W
-            masks_preds = masks_proba.argmax(dim=1)  # BS x H x W
-
-            masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(
-                0, -1, 1, 2
-            )  # BS x C x H x W
-
-            class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
-            class_distribution = class_distribution.div(
-                class_distribution[1:].sum()
-            ).squeeze()
-
-            metric: torch.Tensor = self.metric(masks_preds_one_hot, masks_one_hot)
-            weighted_avg = metric[1:] @ class_distribution[1:]
-
-            self.log(f"train_dice_(weighted_avg)", weighted_avg.item(), batch_size=bs)
-            self.log(f"train_dice_(macro_avg)", metric.mean().item(), batch_size=bs)
+            metric: torch.Tensor = self.metric(masks_preds, masks)
+            self.log(
+                f"train_dice_(macro_avg)",
+                metric.mean().item(),
+                batch_size=bs,
+                on_epoch=True,
+            )
 
             for i, class_metric in enumerate(metric.detach().cpu()):
                 if i == 0:  # NOTE: Skips background class.
@@ -236,27 +244,74 @@ class LightningUnetWrapper(L.LightningModule):
                     f"train_dice_class_{i}",
                     class_metric.item(),
                     batch_size=bs,
+                    on_epoch=True,
                 )
+            self._shared_image_logging(
+                batch_idx, images, masks, masks_preds, "train", 20
+            )
         return loss_all
-
-    def on_train_epoch_end(self):
-        self.metric.reset()
 
     def validation_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ):
         self._shared_eval(batch, batch_idx, "val")
 
-    def on_validation_epoch_end(self) -> None:
-        self.metric.reset()
-
     def test_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ) -> None:
         self._shared_eval(batch, batch_idx, "test")
 
-    def on_test_epoch_end(self) -> None:
-        self.metric.reset()
+    def _shared_image_logging(
+        self,
+        batch_idx: int,
+        images: torch.Tensor,
+        masks: torch.Tensor,
+        masks_preds: torch.Tensor,
+        prefix: str,
+        every_interval: int = 10,
+    ):
+        if batch_idx % every_interval == 0:
+            # This adds images to the tensorboard.
+            tensorboard_logger: SummaryWriter = self.logger.experiment
+            inv_norm_img = self.de_transform(images).detach().cpu()
+            pred_images_with_masks = [
+                draw_segmentation_masks(
+                    img,
+                    masks=mask.bool(),
+                    alpha=0.7,
+                    colors=["black", "red", "blue", "green"],
+                )
+                # Get only the first frame of images.
+                for img, mask in zip(
+                    inv_norm_img[:, 0:3, :, :].detach().cpu(),
+                    masks_preds.detach().cpu(),
+                )
+            ]
+            tensorboard_logger.add_images(
+                tag=f"{prefix}_pred_masks_{batch_idx}",
+                img_tensor=torch.stack(tensors=pred_images_with_masks, dim=0)
+                .detach()
+                .cpu(),
+            )
+            gt_images_with_masks = [
+                draw_segmentation_masks(
+                    img,
+                    masks=mask.bool(),
+                    alpha=0.7,
+                    colors=["black", "red", "blue", "green"],
+                )
+                # Get only the first frame of images.
+                for img, mask in zip(
+                    inv_norm_img[:, 0:3, :, :].detach().cpu(),
+                    masks.detach().cpu(),
+                )
+            ]
+            tensorboard_logger.add_images(
+                tag=f"{prefix}_gt_masks_{batch_idx}",
+                img_tensor=torch.stack(tensors=gt_images_with_masks, dim=0)
+                .detach()
+                .cpu(),
+            )
 
     def _shared_eval(
         self,
@@ -268,34 +323,21 @@ class LightningUnetWrapper(L.LightningModule):
         images = images.to(DEVICE, dtype=torch.float32)  # BS x TS x C x H x W
         bs = images.shape[0] if len(images.shape) > 3 else 1
         masks = masks.to(DEVICE).long()
-        masks_proba = self.model(images)
+        masks_proba: torch.Tensor = self.model(images)
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
-        self.log(f"{prefix}_loss", loss_all.detach().cpu().item(), batch_size=bs)
+        self.log(
+            f"{prefix}_loss",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+            prog_bar=True,
+        )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks = masks.squeeze(1)  # BS x H x W
+            masks_preds = masks_proba > 0.5
 
-            masks_one_hot = F.one_hot(masks, num_classes=4).permute(
-                0, -1, 1, 2
-            )  # BS x C x H x W
-            masks_preds = masks_proba.argmax(dim=1)  # BS x H x W
-
-            masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(
-                0, -1, 1, 2
-            )  # BS x C x H x W
-
-            class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
-            class_distribution = class_distribution.div(
-                class_distribution[1:].sum()
-            ).squeeze()
-
-            metric: torch.Tensor = self.metric(masks_preds_one_hot, masks_one_hot)
-            weighted_avg = metric[1:] @ class_distribution[1:]
-
-            self.log(
-                f"{prefix}_dice_(weighted_avg)", weighted_avg.item(), batch_size=bs
-            )
+            metric = self.metric(masks_preds, masks)
             self.log(f"{prefix}_dice_(macro_avg)", metric.mean().item(), batch_size=bs)
 
             for i, class_metric in enumerate(metric.detach().cpu()):
@@ -306,6 +348,7 @@ class LightningUnetWrapper(L.LightningModule):
                     class_metric.item(),
                     batch_size=bs,
                 )
+            self._shared_image_logging(batch_idx, images, masks, masks_preds, prefix)
 
     @override
     def configure_optimizers(self):
@@ -316,8 +359,8 @@ class LightningUnetWrapper(L.LightningModule):
                     "scheduler": LightningGradualWarmupScheduler(
                         optimizer,
                         multiplier=self.multiplier,
-                        total_epoch=self.total_epochs,
-                        T_max=50,
+                        total_epoch=5,
+                        T_max=self.total_epochs,
                     ),
                     "interval": "epoch",
                     "frequency": 1,

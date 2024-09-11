@@ -9,8 +9,8 @@ verify_ssl = true
 name = "downloadpytorch"
 
 [packages]
-torch = {version = "*", index = "downloadpytorch"}
-torchvision = {version = "*", index = "downloadpytorch"}
+torch = { index = "downloadpytorch"}
+torchvision = { index = "downloadpytorch"}
 tqdm = "*"
 pillow = "*"
 numpy = "*"
@@ -20,7 +20,7 @@ torchsummary = "*"
 matplotlib = "*"
 seaborn = "*"
 opencv-contrib-python = "*"
-lightning = { version = "*", extras = ["pytorch-extra"] }
+lightning = {  extras = ["pytorch-extra"] }
 tensorboard = "*"
 
 [dev-packages]
@@ -32,6 +32,8 @@ black = "*"
 pre-commit = "*"
 debugpy = "*"
 basedpyright = "*"
+onnx = "*"
+onnxscript = "*"
 
 [requires]
 python_version = "3.12"

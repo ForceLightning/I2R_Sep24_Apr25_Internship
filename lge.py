@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import ssl
 from typing import Union, override
 
 import lightning as L
@@ -23,6 +24,7 @@ LEARNING_RATE = 1e-4
 NUM_FRAMES = 5
 SEED_CUS = 1  # RNG seed.
 torch.set_float32_matmul_precision("medium")
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 class LGEBaselineDataModule(L.LightningDataModule):
@@ -129,6 +131,13 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
 
 class LGECLI(LightningCLI):
+    @classmethod
+    def get_checkpoint_filename(cls, version: str | None) -> str | None:
+        if version:
+            return version + "-epoch={epoch}-step={step}"
+        else:
+            return version
+
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
@@ -137,6 +146,11 @@ class LGECLI(LightningCLI):
         parser.add_argument("--version", type=Union[str, None], default=None)
         parser.link_arguments("version", "tensorboard.version")
         parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
+        parser.link_arguments(
+            "version",
+            "model_checkpoint.filename",
+            compute_fn=LGECLI.get_checkpoint_filename,
+        )
 
         parser.set_defaults(
             {
