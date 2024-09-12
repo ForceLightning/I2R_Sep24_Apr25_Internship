@@ -12,14 +12,11 @@ from lightning.pytorch.cli import (
     LightningArgumentParser,
     LightningCLI,
     LRSchedulerCallable,
-    OptimizerCallable,
 )
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from models.two_plus_one import Unet
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from torch import nn
-from torch.nn import functional as F
-from torch.optim.adam import Adam
 from torch.optim.adamw import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
 from torch.optim.optimizer import Optimizer
@@ -30,7 +27,8 @@ from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from torchvision.utils import draw_segmentation_masks
-from utils.utils import InverseNormalize
+from utils import utils
+from utils.utils import ClassificationType, InverseNormalize
 from warmup_scheduler import GradualWarmupScheduler
 
 BATCH_SIZE_TRAIN = 4
@@ -85,26 +83,37 @@ class UnetLightning(L.LightningModule):
         alpha: float = 1.0,
         _beta: float = 0.0,
         learning_rate: float = 1e-4,
+        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ):
         """A LightningModule wrapper for the modified Unet for the two-plus-one
         architecture.
 
         Args:
-            loss: Loss/Criterion callable.
-            metric: Metric object for tracking performance.
-            encoder_name: Encoder/Backbone model name for the Unet.
-            encoder_depth: Number of encoder blocks in the Unet.
-            encoder_weights: Weights for the encoder/backbone model.
-            in_channels: Number of channels in input.
-            classes: Number of classes for output.
-            num_frames: Number of frames to use from dataset.
-            optimizer: Instantiable optimizer for model parameters.
-            scheduler: Instantiable LR Scheduler or string (for custom schedulers)
-            multiplier: For the GradualWarmupScheduler LR Scheduler.
-            total_epochs: For the CosineAnnealingLR portion of the
-            GradualWarmupScheduler.
-            alpha: Loss scaler.
+            metric: Optional, metric object for tracking performance. Defaults to None.
+            loss: Optional, loss/criterion callable. Defaults to None.
+            encoder_name: Optional, encoder/Backbone model name for the Unet. Defaults
+                to "resnet34"
+            encoder_depth: Optional,number of encoder blocks in the Unet. Defaults to 5.
+            encoder_weights: Optional, weights for the encoder/backbone model. Defaults
+                to "imagenet"
+            in_channels: Optional, number of channels in input. Defaults to 3.
+            classes: Optional, number of classes for output. Defaults to 1.
+            num_frames: Optional, number of frames to use from dataset. Defaults to 5.
+            weights_from_ckpt_path: Optional, checkpoint path to load weights from.
+                Defaults to None.
+            optimizer: Optional, instantiable optimizer for model parameters. Defaults
+                to "adamw"
+            scheduler: Optional, instantiable LR Scheduler or string (for custom
+                schedulers). Defaults to "gradual_warmup_scheduler".
+            multiplier: Optional, hyperparameter for the GradualWarmupScheduler LR
+                Scheduler. Defaults to 2.
+            total_epochs: Optional, hyperparameter for the CosineAnnealingLR portion of
+                the GradualWarmupScheduler. Defaults to 50.
+            alpha: Optional, hyperparameter for loss scaling. Defaults to 1.0.
             _beta: (Unused) Loss scaler.
+            learning_rate: Optional, starting learning rate. Defaults to 1e-4.
+            classification_mode: Optional, classification task. Defaults to
+                MULTICLASS_MODE.
         """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -122,7 +131,13 @@ class UnetLightning(L.LightningModule):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.loss = (
-            loss if loss else DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+            loss
+            if loss
+            else (
+                DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+                if classification_mode == ClassificationType.MULTILABEL_MODE
+                else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+            )
         )
         self.metric = (
             metric
@@ -146,6 +161,7 @@ class UnetLightning(L.LightningModule):
         ).to(DEVICE)
 
         self.learning_rate = learning_rate
+        self.classification_mode = classification_mode
 
         # Attempts to load checkpoint if provided.
         self.weights_from_ckpt_path = weights_from_ckpt_path
@@ -177,37 +193,23 @@ class UnetLightning(L.LightningModule):
         masks = masks.to(DEVICE).long()
 
         with torch.autocast(device_type=self.device.type):
-            masks_proba = self.model(images_input)
+            # B x C x H x W
+            masks_proba: torch.Tensor = self.model(images_input)
 
-        assert (
-            masks_proba.size() == masks.size()
-        ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
+        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+            # GUARD: Check that the sizes match.
+            assert (
+                masks_proba.size() == masks.size()
+            ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
         self.log(f"train_loss", loss_all.item(), batch_size=bs, on_epoch=True)
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds = masks_proba > 0.5  # BS x H x W
-
-            metric: torch.Tensor = self.metric(masks_preds, masks)
-
-            self.log(
-                f"train_dice_(macro_avg)",
-                metric.mean().item(),
-                batch_size=bs,
-                on_epoch=True,
+            masks_preds = utils.shared_metric_calculation(
+                self, images, masks, masks_proba, "train"
             )
-
-            for i, class_metric in enumerate(metric.detach().cpu()):
-                if i == 0:  # NOTE: Skips background class.
-                    continue
-                self.log(
-                    f"train_dice_class_{i}",
-                    class_metric.item(),
-                    batch_size=bs,
-                    on_epoch=True,
-                )
 
             self._shared_image_logging(
                 batch_idx, images, masks, masks_preds, "train", 25
@@ -285,30 +287,20 @@ class UnetLightning(L.LightningModule):
         masks = masks.to(DEVICE).long()
         masks_proba: torch.Tensor = self.model(images)  # BS x C x H x W
 
-        # GUARD: Check that the sizes match.
-        assert (
-            masks_proba.size() == masks.size()
-        ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
+        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+            # GUARD: Check that the sizes match.
+            assert (
+                masks_proba.size() == masks.size()
+            ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
         self.log(f"{prefix}_loss", loss_all.detach().cpu().item(), batch_size=bs)
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds = masks_proba > 0.5
-
-            metric: torch.Tensor = self.metric(masks_preds, masks)
-
-            self.log(f"{prefix}_dice_(macro_avg)", metric.mean().item(), batch_size=bs)
-
-            for i, class_metric in enumerate(metric.detach().cpu()):
-                if i == 0:  # NOTE: Skips background class.
-                    continue
-                self.log(
-                    f"{prefix}_dice_class_{i}",
-                    class_metric.item(),
-                    batch_size=bs,
-                )
+            masks_preds = utils.shared_metric_calculation(
+                self, images, masks, masks_proba, prefix
+            )
 
             self._shared_image_logging(
                 batch_idx, images, masks, masks_preds, prefix, 10
@@ -316,36 +308,7 @@ class UnetLightning(L.LightningModule):
 
     @override
     def configure_optimizers(self):
-        match self.optimizer:
-            case "adam":
-                optimizer = Adam(params=self.model.parameters(), lr=self.learning_rate)
-            case "adamw":
-                optimizer = AdamW(params=self.model.parameters(), lr=self.learning_rate)
-            case _:
-                raise NotImplementedError(
-                    f"optimizer {self.optimizer} not implemented!"
-                )
-        if isinstance(self.scheduler, str):
-            if self.scheduler == "gradual_warmup_scheduler":
-                scheduler = {
-                    "scheduler": LightningGradualWarmupScheduler(
-                        optimizer,
-                        multiplier=self.multiplier,
-                        total_epoch=5,
-                        T_max=self.total_epochs,
-                    ),
-                    "interval": "epoch",
-                    "frequency": 1,
-                    "monitor": "val_loss",
-                    "strict": True,
-                }
-            else:
-                raise NotImplementedError(
-                    f"Scheduler of type {self.scheduler} not implemented"
-                )
-        else:
-            scheduler = self.scheduler(optimizer)
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return utils.configure_optimizers(self)
 
     def on_exception(self, exception: BaseException):
         raise exception
@@ -360,6 +323,7 @@ class CineDataModule(L.LightningDataModule):
         batch_size: int = BATCH_SIZE_TRAIN,
         frames: int = NUM_FRAMES,
         select_frame_method: Literal["consecutive", "specific"] = "specific",
+        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ):
         """Datamodule for the Cine dataset for PyTorch Lightning compatibility.
 
@@ -382,6 +346,7 @@ class CineDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.frames = frames
         self.select_frame_method = select_frame_method
+        self.classification_mode = classification_mode
 
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
@@ -409,6 +374,7 @@ class CineDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_1=transforms_img,
             transform_2=transforms_mask,
+            classification_mode=self.classification_mode,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -434,6 +400,7 @@ class CineDataModule(L.LightningDataModule):
             transform_1=transforms_img,
             transform_2=transforms_mask,
             mode="test",
+            classification_mode=self.classification_mode,
         )
 
         self.train = train_set
@@ -474,20 +441,6 @@ class CineDataModule(L.LightningDataModule):
 
 
 class TwoPlusOneCLI(LightningCLI):
-    @classmethod
-    def get_checkpoint_filename(cls, version: str | None) -> str | None:
-        if version is not None:
-            return version + "-epoch={epoch}-step={step}"
-        else:
-            return version
-
-    # @classmethod
-    # def get_version_name(cls, ckpt_path: str | None) -> str | None:
-    #     if ckpt_path is not None:
-    #         version = ckpt_path.split("-")[0]
-    #         return version
-    #     return None
-
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
@@ -498,11 +451,23 @@ class TwoPlusOneCLI(LightningCLI):
         parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
         parser.link_arguments("model.num_frames", "data.frames")
 
+        parser.add_argument("--classification_mode", type=str)
+        parser.link_arguments(
+            "classification_mode",
+            "model.classification_mode",
+            compute_fn=utils.get_classification_mode,
+        )
+        parser.link_arguments(
+            "classification_mode",
+            "data.classification_mode",
+            compute_fn=utils.get_classification_mode,
+        )
+
         # Sets the checkpoint filename if version is provided.
         parser.link_arguments(
             "version",
             "model_checkpoint.filename",
-            compute_fn=TwoPlusOneCLI.get_checkpoint_filename,
+            compute_fn=utils.get_checkpoint_filename,
         )
         # # Gets the version name from the checkpoint path if provided.
         # parser.link_arguments(
@@ -513,6 +478,7 @@ class TwoPlusOneCLI(LightningCLI):
 
         parser.set_defaults(
             {
+                "classification_mode": "MULTICLASS_MODE",
                 "trainer.max_epochs": 50,
                 "model.encoder_name": "resnet50",
                 "model.encoder_weights": "imagenet",

@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from two_plus_one import LightningGradualWarmupScheduler
+from utils import utils
+from utils.utils import ClassificationType
 
 BATCH_SIZE_TRAIN = 8
 BATCH_SIZE_VAL = 8
@@ -34,6 +36,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         test_dir: str = "data/test-20240905T012341Z-001/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
+        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ):
 
         super().__init__()
@@ -42,6 +45,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         self.test_dir = test_dir
         self.indices_dir = indices_dir
         self.batch_size = batch_size
+        self.classification_mode = classification_mode
 
     @override
     def setup(self, stage):
@@ -68,6 +72,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             indices_dir,
             transform_1=transforms_img,
             transform_2=transforms_mask,
+            classification_mode=self.classification_mode,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -91,6 +96,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             transform_1=transforms_img,
             transform_2=transforms_mask,
             mode="test",
+            classification_mode=self.classification_mode,
         )
 
         self.train = train_set
@@ -131,13 +137,6 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
 
 class LGECLI(LightningCLI):
-    @classmethod
-    def get_checkpoint_filename(cls, version: str | None) -> str | None:
-        if version:
-            return version + "-epoch={epoch}-step={step}"
-        else:
-            return version
-
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
@@ -149,11 +148,23 @@ class LGECLI(LightningCLI):
         parser.link_arguments(
             "version",
             "model_checkpoint.filename",
-            compute_fn=LGECLI.get_checkpoint_filename,
+            compute_fn=utils.get_checkpoint_filename,
         )
 
+        parser.add_argument("--classification_mode", type=str)
+        parser.link_arguments(
+            "classification_mode",
+            "model.classification_mode",
+            compute_fn=utils.get_classification_mode,
+        )
+        parser.link_arguments(
+            "classification_mode",
+            "data.classification_mode",
+            compute_fn=utils.get_classification_mode,
+        )
         parser.set_defaults(
             {
+                "classification_mode": "MULTICLASS_MODE",
                 "trainer.max_epochs": 50,
                 "model.encoder_name": "resnet50",
                 "model.encoder_weights": "imagenet",
