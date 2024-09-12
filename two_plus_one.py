@@ -14,6 +14,7 @@ from lightning.pytorch.cli import (
     LRSchedulerCallable,
 )
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
+from metrics.dice import GeneralizedDiceScoreVariant
 from models.two_plus_one import Unet
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from torch import nn
@@ -142,7 +143,7 @@ class UnetLightning(L.LightningModule):
         self.metric = (
             metric
             if metric
-            else GeneralizedDiceScore(
+            else GeneralizedDiceScoreVariant(
                 num_classes=classes,
                 per_class=True,
                 include_background=True,
