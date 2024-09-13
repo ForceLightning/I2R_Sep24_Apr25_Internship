@@ -384,6 +384,7 @@ class CineDataModule(L.LightningDataModule):
         frames: int = NUM_FRAMES,
         select_frame_method: Literal["consecutive", "specific"] = "specific",
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        num_workers: int = 8,
     ):
         """Datamodule for the Cine dataset for PyTorch Lightning compatibility.
 
@@ -407,6 +408,7 @@ class CineDataModule(L.LightningDataModule):
         self.frames = frames
         self.select_frame_method = select_frame_method
         self.classification_mode = classification_mode
+        self.num_workers = num_workers
 
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
@@ -475,9 +477,9 @@ class CineDataModule(L.LightningDataModule):
             self.train,
             batch_size=self.batch_size,
             pin_memory=True,
-            num_workers=8,
+            num_workers=self.num_workers,
             drop_last=True,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def val_dataloader(self):
@@ -485,9 +487,9 @@ class CineDataModule(L.LightningDataModule):
             self.val,
             batch_size=self.batch_size,
             pin_memory=True,
-            num_workers=8,
+            num_workers=self.num_workers,
             drop_last=True,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def test_dataloader(self):
@@ -495,8 +497,8 @@ class CineDataModule(L.LightningDataModule):
             self.test,
             batch_size=self.batch_size,
             pin_memory=True,
-            num_workers=8,
-            persistent_workers=True,
+            num_workers=self.num_workers,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
 

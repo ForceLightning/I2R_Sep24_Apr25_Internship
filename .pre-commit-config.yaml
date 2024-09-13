@@ -1,14 +1,22 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: stable
+    rev: 24.8.0
     hooks:
       - id: black
-        language_version: python3.10
+        language_version: python3.12
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.4.0
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
       # - id: end-of-file-fixer
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-symlinks
+      # - id: check-illegal-windows-names
+      - id: destroyed-symlinks
+      - id: mixed-line-ending
+      - id: name-tests-test
+        args: ['--unittest']
+
+default_language_version:
+  python: python3.12

@@ -330,7 +330,7 @@ class LightningUnetWrapper(L.LightningModule):
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
-            inv_norm_img = self.de_transform(images).detach().cpu()
+            inv_norm_img = self.de_transform(images[:, :3, :, :]).detach().cpu()
             pred_images_with_masks = [
                 draw_segmentation_masks(
                     img,
@@ -407,12 +407,12 @@ class LightningUnetWrapper(L.LightningModule):
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds = utils.shared_metric_calculation(
+            masks_preds, masks_one_hot = utils.shared_metric_calculation(
                 self, images, masks, masks_proba, prefix
             )
 
             self._shared_image_logging(
-                batch_idx, images, masks, masks_preds, prefix, 10
+                batch_idx, images, masks_one_hot, masks_preds, prefix, 10
             )
 
     @override
@@ -428,6 +428,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        num_workers: int = 8,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -436,6 +437,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         self.indices_dir = indices_dir
         self.batch_size = batch_size
         self.classification_mode = classification_mode
+        self.num_workers = num_workers
 
     @override
     def setup(self, stage):
@@ -501,9 +503,9 @@ class CineBaselineDataModule(L.LightningDataModule):
             self.train,
             batch_size=self.batch_size,
             pin_memory=True,
-            num_workers=8,
+            num_workers=self.num_workers,
             drop_last=True,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def val_dataloader(self):
@@ -511,9 +513,9 @@ class CineBaselineDataModule(L.LightningDataModule):
             self.val,
             batch_size=self.batch_size,
             pin_memory=True,
-            num_workers=8,
+            num_workers=self.num_workers,
             drop_last=True,
-            persistent_workers=True,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def test_dataloader(self):
@@ -521,8 +523,8 @@ class CineBaselineDataModule(L.LightningDataModule):
             self.test,
             batch_size=self.batch_size,
             pin_memory=True,
-            num_workers=8,
-            persistent_workers=True,
+            num_workers=self.num_workers,
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
 
