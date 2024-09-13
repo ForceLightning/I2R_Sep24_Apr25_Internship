@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+"""Cine Baseline model training script."""
 from __future__ import annotations
 
 import os
@@ -36,12 +38,8 @@ from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
 from utils.utils import ClassificationType, InverseNormalize
 
-BATCH_SIZE_TRAIN = 4
-BATCH_SIZE_VAL = 4
+BATCH_SIZE_TRAIN = 4  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-LEARNING_RATE = 1e-4
-NUM_FRAMES = 5
-SEED_CUS = 1  # RNG seed.
 torch.set_float32_matmul_precision("medium")
 
 
@@ -57,6 +55,18 @@ class CineBaselineDataset(CineDataset):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ) -> None:
+        """Dataset for the Cine baseline implementation
+
+        Args:
+            img_dir: Path to the directory containing the images.
+            mask_dir: Path to the directory containing the masks.
+            idxs_dir: Path to the directory containing the indices.
+            transform_1: Transform to apply to the images.
+            transform_2: Transform to apply to the masks.
+            batch_size: Batch size for the dataset.
+            mode: Runtime mode.
+            classification_mode: Classification mode for the dataset.
+        """
         super(CineDataset).__init__()
 
         self.img_dir = img_dir
@@ -175,6 +185,28 @@ class LightningUnetWrapper(L.LightningModule):
         dl_classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
         eval_classification_mode: ClassificationType = ClassificationType.MULTILABEL_MODE,
     ):
+        """Wrapper for the UNet model.
+
+        Args:
+            metric: Metric to use for evaluation.
+            loss: Loss function to use for training.
+            encoder_name: Name of the encoder to use.
+            encoder_weights: Weights to use for the encoder.
+            in_channels: Number of input channels.
+            classes: Number of classes.
+            weights_from_ckpt_path: Path to the checkpoint to load weights from.
+            optimizer: Optimizer to use.
+            optimizer_kwargs: Optimizer keyword arguments.
+            scheduler: Learning rate scheduler to use.
+            scheduler_kwargs: Learning rate scheduler keyword arguments.
+            multiplier: Multiplier for the learning rate.
+            total_epochs: Total number of epochs to train.
+            alpha: Alpha value for the loss function.
+            _beta: Beta value for the loss function.
+            learning_rate: Learning rate for the optimizer.
+            dl_classification_mode: Classification mode for the dataloader.
+            eval_classification_mode: Classification mode for evaluation.
+        """
         super().__init__()
         self.save_hyperparameters(ignore=["loss"])
         self.model = smp.Unet(
@@ -327,6 +359,16 @@ class LightningUnetWrapper(L.LightningModule):
         prefix: str,
         every_interval: int = 10,
     ):
+        """Logs images to tensorboard.
+
+        Args:
+            batch_idx: Index of the batch.
+            images: Images to log.
+            masks: Ground truth masks.
+            masks_preds: Predicted masks.
+            prefix: Prefix for the logger.
+            every_interval: Interval to log images
+        """
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
@@ -378,6 +420,13 @@ class LightningUnetWrapper(L.LightningModule):
         batch_idx: int,
         prefix: str,
     ):
+        """Shared evaluation step for validation and test.
+
+        Args:
+            batch: Batch of data.
+            batch_idx: Index of the batch.
+            prefix: Prefix for the logger.
+        """
         images, masks, _ = batch
         images = images.to(DEVICE, dtype=torch.float32)  # BS x TS x C x H x W
         bs = images.shape[0] if len(images.shape) > 3 else 1
@@ -430,6 +479,16 @@ class CineBaselineDataModule(L.LightningDataModule):
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
         num_workers: int = 8,
     ):
+        """DataModule for the Cine baseline implementation.
+
+        Args:
+            data_dir: Path to the directory containing the training and validation data.
+            test_dir: Path to the directory containing the test data.
+            indices_dir: Path to the directory containing the indices.
+            batch_size: Batch size for the data loader.
+            classification_mode: Classification mode for the data loader.
+            num_workers: Number of workers for the data loader.
+        """
         super().__init__()
         self.save_hyperparameters()
         self.data_dir = data_dir

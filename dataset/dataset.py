@@ -13,9 +13,10 @@ from numpy import typing as npt
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
 from torchvision.transforms import Compose
+
 from utils.utils import ClassificationType
 
-SEED_CUS = 1
+SEED_CUS = 1  # RNG seed.
 
 
 class CineDataset(Dataset[Any]):
@@ -32,6 +33,24 @@ class CineDataset(Dataset[Any]):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ) -> None:
+        """Cine dataset for the cardiac cine MRI images.
+
+        Args:
+            img_dir: The directory containing the CINE images.
+            mask_dir: The directory containing the masks for the CINE images.
+            idxs_dir: The directory containing the indices for the training and
+                validation sets.
+            frames: The number of frames to concatenate.
+            select_frame_method: The method of selecting frames to concatenate.
+            transform_1: The transform to apply to the images.
+            transform_2: The transform to apply to the masks.
+            batch_size: The batch size for the dataset.
+            mode: The mode of the dataset.
+            classification_mode: The classification mode for the dataset.
+
+        Raises:
+            RuntimeError: If the indices fail to load.
+        """
         super().__init__()
         # Set paths to CINE and mask directories
         self.img_dir = img_dir
@@ -133,6 +152,22 @@ class CineDataset(Dataset[Any]):
         img_list: Sequence[cvt.MatLike],
         transform: Compose,
     ) -> torch.Tensor:
+        """Concatenates the images based on the number of frames and the method of
+        selecting frames.
+
+        Args:
+            frames: The number of frames to concatenate.
+            select_frame_method: The method of selecting frames.
+            img_list: The list of images to concatenate.
+            transform: The transform to apply to the images.
+
+        Returns:
+            torch.Tensor: The concatenated images.
+
+        Raises:
+            ValueError: If the number of frames is not within [5, 10, 15, 20, 30].
+            ValueError: If the method of selecting frames is not valid.
+        """
         chosen_frames_dict = {
             5: [0, 6, 12, 18, 24],
             10: [0, 3, 6, 9, 12, 15, 18, 21, 24, 27],
@@ -188,6 +223,13 @@ class CineDataset(Dataset[Any]):
         indices: Sequence[int],
         transform: Compose,
     ) -> torch.Tensor:
+        """Concatenates the images based on the indices provided.
+
+        Args:
+            img_list: The list of images to concatenate.
+            indices: The indices to concatenate.
+            transform: The transform to apply to the images
+        """
         starting_idx = indices[0]
         first_img = img_list[starting_idx]
         tuned = first_img / [255.0]
@@ -210,6 +252,25 @@ class CineDataset(Dataset[Any]):
         train_idxs_path: str,
         valid_idxs_path: str,
     ) -> tuple[list[int], list[int]]:
+        """Loads the training and validation indices for the dataset.
+
+        If the path to the indices are invalid, it then generates the indices in a
+        possibly deterministic way and dumps the indices into a pickled file. This
+        method also sets the `self.train_idxs` and `self.valid_idxs` properties.
+
+        Args:
+            train_idxs_path: Path to training indices pickle file.
+            valid_idxs_path: Path to validation indices pickle file.
+
+        Returns:
+            tuple[list[int], list[int]]: Training and Validation indices
+
+        Raises:
+            RuntimeError: If there are duplicates in the training and validation
+            indices.
+            RuntimeError: If patients have images in both the training and testing.
+            AssertionError: If the training and validation indices are not disjoint.
+        """
         if os.path.exists(train_idxs_path) and os.path.exists(valid_idxs_path):
             with open(train_idxs_path, "rb") as f:
                 train_idxs: list[int] = pickle.load(f)
@@ -321,6 +382,22 @@ class LGEDataset(Dataset[Any]):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ) -> None:
+        """LGE dataset for the cardiac LGE MRI images.
+
+        Args:
+            img_dir: The directory containing the LGE images.
+            mask_dir: The directory containing the masks for the LGE images.
+            idxs_dir: The directory containing the indices for the training and
+            validation sets.
+            transform_1: The transform to apply to the images.
+            transform_2: The transform to apply to the masks.
+            batch_size: The batch size for the dataset.
+            mode: The mode of the dataset.
+            classification_mode: The classification mode for the dataset.
+
+        Raises:
+            RuntimeError: If the indices fail to load.
+        """
         super().__init__()
 
         self.img_dir = img_dir
@@ -348,6 +425,19 @@ class LGEDataset(Dataset[Any]):
     def __getitem__(
         self, index: int
     ) -> tuple[torch.Tensor, torch.Tensor | npt.NDArray[np.floating[Any]], str]:
+        """Gets a batch of images, masks, and the image names from the dataset.
+
+        Args:
+            index: The index of the batch.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor | npt.NDArray[np.floating[Any]], str]: The
+            images, masks, and image names.
+
+        Raises:
+            ValueError: If the image is not in .PNG format.
+            NotImplementedError: If the classification mode is not implemented
+        """
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + "_0000.nii.png"
 
@@ -414,6 +504,11 @@ class LGEDataset(Dataset[Any]):
 
         Returns:
             tuple[list[int], list[int]]: Training and Validation indices
+
+        Raises:
+            RuntimeError: If there are duplicates in the training and validation
+            indices.
+            AssertionError: If the training and validation indices are not disjoint.
 
         Example:
             lge_dataset = LGEDataset()
@@ -517,6 +612,23 @@ class TwoStreamDataset(Dataset[Any]):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
     ):
+        """WIP: Two stream dataset for the cardiac LGE MRI images.
+
+        Args:
+            lge_dir: The directory containing the LGE images.
+            cine_dir: The directory containing the CINE images.
+            mask_dir: The directory containing the masks for the LGE images.
+            idxs_dir: The directory containing the indices for the training and
+            validation sets.
+            transform_1: The transform to apply to the images.
+            transform_2: The transform to apply to the masks.
+            batch_size: The batch size for the dataset.
+            mode: The mode of the dataset.
+            classification_mode: The classification mode for the dataset.
+
+        Raises:
+            RuntimeError: If the indices fail to load.
+        """
         super().__init__()
 
         self.lge_dir = lge_dir
@@ -540,7 +652,23 @@ class TwoStreamDataset(Dataset[Any]):
 
         self.classification_mode = classification_mode
 
-    def __getitem__(self, index: int):
+    def __getitem__(
+        self, index: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+        """Gets a batch of LGE images, CINE images, masks, and the image names from the
+        dataset.
+
+        Args:
+            index: The index of the batch.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]: The LGE images, CINE
+            images, masks, and image names.
+
+        Raises:
+            ValueError: If the image is not in .PNG format.
+            NotImplementedError: If the classification mode is not implemented.
+        """
         # Define names for all files using the same LGE base
         lge_name = self.lge_list[index]
         mask_name = self.mask_list[index].split(".")[0] + "_0000.nii.png"
@@ -607,6 +735,11 @@ class TwoStreamDataset(Dataset[Any]):
 
 
 def seed_worker(worker_id):
+    """Sets the seed for the worker based on the initial seed.
+
+    Args:
+        worker_id: The worker ID (not used).
+    """
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
@@ -634,6 +767,10 @@ def get_trainval_dataloaders(
 ) -> tuple[DataLoader, DataLoader]:
     """Gets the dataloaders of the data as train/val splits from a superset consisting
     of both.
+
+    The dataloaders are created using the `SubsetRandomSampler` to ensure that the
+    training and validation sets are disjoint. The dataloaders are also set to have a
+    fixed seed for reproducibility.
 
     Args:
         dataset: The original dataset.
@@ -679,7 +816,19 @@ def get_trainval_dataloaders(
     return train_loader, valid_loader
 
 
-def get_class_weights(train_set: Subset[Any]) -> npt.NDArray[float32]:
+def get_class_weights(train_set: Subset[Any]) -> npt.NDArray[np.float32]:
+    """Gets the class weights based on the occurrence of the classes in the training
+    set.
+
+    Args:
+        train_set: The training set.
+
+    Returns:
+        npt.NDArray[np.float32]: The class weights.
+
+    Raises:
+        AssertionError: If the classification mode is not multilabel.
+    """
     assert train_set.classification_mode == ClassificationType.MULTILABEL_MODE
     counts = np.array([0.0, 0.0, 0.0, 0.0])
     for _, masks, _ in [train_set[i] for i in range(len(train_set))]:

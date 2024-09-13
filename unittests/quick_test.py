@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+"""Quick testing script for the project."""
 import unittest
 from unittest import mock
 

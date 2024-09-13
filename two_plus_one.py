@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
+"""Two-plus-one architecture training script."""
 from __future__ import annotations
 
 import os
-from functools import partial
 from typing import Any, Literal, OrderedDict, Union, override
 
 import lightning as L
@@ -13,7 +14,7 @@ from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
 from torch.optim.adamw import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
+from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -22,45 +23,21 @@ from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from torchvision.utils import draw_segmentation_masks
-from warmup_scheduler import GradualWarmupScheduler
 
 from dataset.dataset import CineDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from models.two_plus_one import Unet
 from utils import utils
-from utils.utils import ClassificationType, InverseNormalize
+from utils.utils import (
+    ClassificationType,
+    InverseNormalize,
+    LightningGradualWarmupScheduler,
+)
 
-BATCH_SIZE_TRAIN = 4
-BATCH_SIZE_VAL = 4
+BATCH_SIZE_TRAIN = 4  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-LEARNING_RATE = 1e-4
-NUM_FRAMES = 5
-SEED_CUS = 1  # RNG seed.
+NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
-
-
-class LightningGradualWarmupScheduler(LRScheduler):
-    def __init__(
-        self,
-        optimizer: Optimizer,
-        multiplier: int = 2,
-        total_epoch: int = 5,
-        T_max=50,
-        after_scheduler=None,
-    ):
-        self.optimizer = optimizer
-        after_scheduler = (
-            after_scheduler if after_scheduler else CosineAnnealingLR(optimizer, T_max)
-        )
-        self.scheduler = GradualWarmupScheduler(
-            optimizer,
-            multiplier=multiplier,
-            total_epoch=total_epoch,
-            after_scheduler=after_scheduler,
-        )
-
-    def step(self, epoch=None, metrics=None):
-        return self.scheduler.step(epoch, metrics)
 
 
 class UnetLightning(L.LightningModule):
@@ -91,31 +68,30 @@ class UnetLightning(L.LightningModule):
         architecture.
 
         Args:
-            metric: Optional, metric object for tracking performance. Defaults to None.
-            loss: Optional, loss/criterion callable. Defaults to None.
-            encoder_name: Optional, encoder/Backbone model name for the Unet. Defaults
-                to "resnet34"
-            encoder_depth: Optional,number of encoder blocks in the Unet. Defaults to 5.
-            encoder_weights: Optional, weights for the encoder/backbone model. Defaults
-                to "imagenet"
-            in_channels: Optional, number of channels in input. Defaults to 3.
-            classes: Optional, number of classes for output. Defaults to 1.
-            num_frames: Optional, number of frames to use from dataset. Defaults to 5.
-            weights_from_ckpt_path: Optional, checkpoint path to load weights from.
-                Defaults to None.
-            optimizer: Optional, instantiable optimizer for model parameters. Defaults
-                to "adamw"
-            scheduler: Optional, instantiable LR Scheduler or string (for custom
-                schedulers). Defaults to "gradual_warmup_scheduler".
-            multiplier: Optional, hyperparameter for the GradualWarmupScheduler LR
-                Scheduler. Defaults to 2.
-            total_epochs: Optional, hyperparameter for the CosineAnnealingLR portion of
-                the GradualWarmupScheduler. Defaults to 50.
-            alpha: Optional, hyperparameter for loss scaling. Defaults to 1.0.
-            _beta: (Unused) Loss scaler.
-            learning_rate: Optional, starting learning rate. Defaults to 1e-4.
-            classification_mode: Optional, classification task. Defaults to
-                MULTICLASS_MODE.
+            metric: The metric to use for evaluation.
+            loss: The loss function to use for training.
+            encoder_name: The encoder name to use for the Unet.
+            encoder_depth: The depth of the encoder.
+            encoder_weights: The weights to use for the encoder.
+            in_channels: The number of input channels.
+            classes: The number of classes.
+            num_frames: The number of frames to use.
+            weights_from_ckpt_path: The path to the checkpoint to load weights from.
+            optimizer: The optimizer to use.
+            optimizer_kwargs: The optimizer keyword arguments.
+            scheduler: The learning rate scheduler to use.
+            scheduler_kwargs: The scheduler keyword arguments.
+            multiplier: The multiplier for the learning rate.
+            total_epochs: The total number of epochs.
+            alpha: The alpha value for the loss function.
+            _beta: The beta value for the loss function (Unused).
+            learning_rate: The learning rate.
+            dl_classification_mode: The classification mode for the dataloader.
+            eval_classification_mode: The classification mode for evaluation.
+
+        Raises:
+            NotImplementedError: If the loss type is not implemented.
+            RuntimeError: If the checkpoint is not loaded correctly.
         """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -271,6 +247,16 @@ class UnetLightning(L.LightningModule):
         prefix: str,
         every_interval: int = 10,
     ):
+        """Logs the images to tensorboard.
+
+        Args:
+            batch_idx: The batch index.
+            images: The input images.
+            masks: The ground truth masks.
+            masks_preds: The predicted masks.
+            prefix: The runtime mode (train, val, test).
+            every_interval: The interval to log images.
+        """
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
@@ -320,6 +306,13 @@ class UnetLightning(L.LightningModule):
     def _shared_eval(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int, prefix: str
     ):
+        """Shared evaluation step for validation and test steps.
+
+        Args:
+            batch: The batch of images and masks.
+            batch_idx: The batch index.
+            prefix: The runtime mode (val, test).
+        """
         self.eval()
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
@@ -398,6 +391,8 @@ class CineDataModule(L.LightningDataModule):
             batch_size: Minibatch sizes for the DataLoader.
             frames: Number of frames from the original dataset to use.
             select_frame_method: How frames < 30 are selected for training.
+            classification_mode: The classification mode for the dataloader.
+            num_workers: The number of workers for the DataLoader.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -517,7 +512,9 @@ class TwoPlusOneCLI(LightningCLI):
             ModelCheckpoint, "model_checkpoint_dice_weighted"
         )
         parser.add_class_arguments(TensorBoardLogger, "tensorboard")
-        parser.add_argument("--version", type=Union[str, None], default=None)
+        parser.add_argument(
+            "--version", type=Union[str, None], default=None, help="Experiment name"
+        )
         parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
         parser.link_arguments("model.num_frames", "data.frames")
 

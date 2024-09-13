@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
+"""LGE Baseline model training script.
+"""
 from __future__ import annotations
 
 import os
 import ssl
-import sys
 from typing import Union, override
 
 import lightning as L
@@ -21,12 +23,8 @@ from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
 from utils.utils import ClassificationType
 
-BATCH_SIZE_TRAIN = 8
-BATCH_SIZE_VAL = 8
+BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-LEARNING_RATE = 1e-4
-NUM_FRAMES = 5
-SEED_CUS = 1  # RNG seed.
 torch.set_float32_matmul_precision("medium")
 ssl._create_default_https_context = ssl._create_unverified_context
 
