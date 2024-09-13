@@ -59,8 +59,21 @@ class ClassificationType(Enum):
 
 
 def get_checkpoint_filename(version: str | None) -> str | None:
+    if version is None:
+        return None
+    return version + "-epoch={epoch}-step={step}"
+
+
+def get_best_weighted_avg_dice_filename(version: str | None) -> str:
+    suffix = "-epoch={epoch}-step={step}-dice={val_dice_(weighted_avg):.4f}"
+    if version is None:
+        return suffix
+    return version + suffix
+
+
+def get_last_checkpoint_filename(version: str | None) -> str | None:
     if version is not None:
-        return version + "-epoch={epoch}-step={step}"
+        return version + "-last"
     else:
         return version
 
@@ -124,6 +137,7 @@ def configure_optimizers(module: L.LightningModule):
     return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
+@torch.no_grad()
 def shared_metric_calculation(
     module: L.LightningModule,
     images: torch.Tensor,
@@ -133,36 +147,42 @@ def shared_metric_calculation(
 ):
     bs = images.shape[0]
     metric: torch.Tensor
-    if module.classification_mode == ClassificationType.MULTILABEL_MODE:
-        masks_preds = masks_proba > 0.5  # BS x C x H x W
-        metric = module.metric(masks_preds, masks)
-    elif module.classification_mode == ClassificationType.MULTICLASS_MODE:
-        # Output: BS x C x H x W
-        masks_one_hot = F.one_hot(masks.squeeze(), num_classes=4).permute(0, -1, 1, 2)
+    masks_one_hot = F.one_hot(masks.squeeze(dim=1), num_classes=4).permute(0, -1, 1, 2)
+    class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
+    class_distribution = class_distribution.div(class_distribution[1:].sum()).squeeze()
 
+    # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
+    # of the combinations of classification modes and sets the metrics correctly.
+    if module.eval_classification_mode == ClassificationType.MULTILABEL_MODE:
+        masks_preds = masks_proba > 0.5  # BS x C x H x W
+        if module.dl_classification_mode == ClassificationType.MULTICLASS_MODE:
+            metric = module.metric(masks_preds, masks_one_hot)
+        else:
+            metric = module.metric(masks_preds, masks)
+    elif module.eval_classification_mode == ClassificationType.MULTICLASS_MODE:
         # Output: BS x C x H x W
         masks_preds = masks_proba.argmax(dim=1)
         masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
-
-        class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
-        class_distribution = class_distribution.div(
-            class_distribution[1:].sum()
-        ).squeeze()
-
         metric = module.metric(masks_preds_one_hot, masks_one_hot)
-        weighted_avg = metric[1:] @ class_distribution[1:]
-        module.log(
-            f"{prefix}_dice_(weighted_avg)",
-            weighted_avg.item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
     else:
         raise NotImplementedError(
-            f"The mode {module.classification_mode.name} is not implemented."
+            f"The mode {module.eval_classification_mode.name} is not implemented."
         )
 
-    module.log(f"{prefix}_dice_(macro_avg)", metric.mean().item(), batch_size=bs)
+    # Calculate the weighted average of the metrics.
+    weighted_avg = metric[1:] @ class_distribution[1:]
+    module.log(
+        f"{prefix}_dice_(weighted_avg)",
+        weighted_avg.item(),
+        batch_size=bs,
+        on_epoch=True,
+    )
+
+    module.log(
+        f"{prefix}_dice_(macro_avg)",
+        metric.mean().item(),
+        batch_size=bs,
+    )
 
     for i, class_metric in enumerate(metric.detach().cpu()):
         if i == 0:  # NOTE: Skips background class.
@@ -173,4 +193,4 @@ def shared_metric_calculation(
             batch_size=bs,
         )
 
-    return masks_preds
+    return masks_preds, masks_one_hot.bool()

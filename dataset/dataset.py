@@ -77,6 +77,7 @@ class CineDataset(Dataset[Any]):
 
         # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
         # loaded as RBG.
+        # XXX: Check if it actually is RBG rather than RGB.
         img_tuple = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
         )
@@ -503,6 +504,108 @@ class LGEDataset(Dataset[Any]):
         return train_idxs, valid_idxs
 
 
+class TwoStreamDataset(Dataset[Any]):
+    def __init__(
+        self,
+        lge_dir: str,
+        cine_dir: str,
+        mask_dir: str,
+        idxs_dir: str,
+        transform_1: Compose,
+        transform_2: Compose,
+        batch_size: int = 8,
+        mode: Literal["train", "val", "test"] = "train",
+        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+    ):
+        super().__init__()
+
+        self.lge_dir = lge_dir
+        self.cine_dir = cine_dir
+        self.mask_dir = mask_dir
+
+        self.lge_list = os.listdir(self.lge_dir)
+        self.cine_list = os.listdir(self.cine_dir)
+        self.mask_list = os.listdir(self.mask_dir)
+
+        self.transform_1 = transform_1
+        self.transform_2 = transform_2
+
+        self.batch_size = batch_size
+
+        if mode != "test":
+            self.load_train_indices(
+                os.path.join(idxs_dir, "train_indices.pkl"),
+                os.path.join(idxs_dir, "val_indices.pkl"),
+            )
+
+        self.classification_mode = classification_mode
+
+    def __getitem__(self, index: int):
+        # Define names for all files using the same LGE base
+        lge_name = self.lge_list[index]
+        mask_name = self.mask_list[index].split(".")[0] + "_0000.nii.png"
+        cine_name = self.cine_list[index].split(".")[0] + "_0000.nii.tiff"
+
+        if not lge_name.endswith(".png"):
+            raise ValueError("Invalid image type for file: {lge_name}")
+
+        # TODO: See if these can be turned into PIL operations (to maintain RGB)
+        lge = cv2.imread(os.path.join(self.lge_dir, lge_name))
+        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
+        cine_tuple = cv2.imreadmulti(
+            os.path.join(self.cine_dir, cine_name), flags=cv2.IMREAD_COLOR
+        )
+
+        cine_list = cine_tuple[1]
+        in_stack = np.dstack(cine_list)
+
+        n, h, w, c = in_stack.shape
+
+        # Resize all images to (224, 224)
+        in_stack = in_stack.transpose((1, 2, 3, 0)).reshape(h, w, c * n)
+        out_stack = cv2.resize(in_stack, (224, 224))
+        out_images = out_stack.reshape((h, w, c, n)).transpose(3, 0, 1, 2)
+        out_images = out_images / [255.0]
+
+        combined_cines = torch.from_numpy(out_images)
+        combined_cines = self.transform_1(combined_cines)
+
+        # Perform transformations on mask
+        lab_mask = mask / [1.0]
+        lab_mask = cv2.resize(lab_mask, (224, 224)).astype(np.float32)
+        lab_mask = lab_mask[:, :, 0]
+        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+            # NOTE: This turns the problem into a multilabel segmentation problem.
+            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+            # bitwise or operations to adhere to those conditions.
+            lab_mask_one_hot = F.one_hot(
+                torch.from_numpy(lab_mask).long(), num_classes=4
+            )  # H x W x C
+            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                lab_mask_one_hot[:, :, 3]
+            )
+            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                lab_mask_one_hot[:, :, 2]
+            )
+
+            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
+
+            lab_mask = self.transform_2(lab_mask_one_hot)
+        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
+            lab_mask = self.transform_2(lab_mask)
+        else:
+            raise NotImplementedError(
+                f"The mode {self.classification_mode.name} is not implemented"
+            )
+
+        # Perform transformations on LGE
+        lge = lge / [255.0]
+        lge = cv2.resize(lge, (224, 224)).astype(np.float32)
+        lge = self.transform_1(lge)
+
+        return lge, combined_cines, lab_mask, lge_name
+
+
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
@@ -574,3 +677,16 @@ def get_trainval_dataloaders(
     )
 
     return train_loader, valid_loader
+
+
+def get_class_weights(train_set: Subset[Any]) -> npt.NDArray[float32]:
+    assert train_set.classification_mode == ClassificationType.MULTILABEL_MODE
+    counts = np.array([0.0, 0.0, 0.0, 0.0])
+    for _, masks, _ in [train_set[i] for i in range(len(train_set))]:
+        class_occurrence = masks.sum(dim=(1, 2))
+        counts = counts + class_occurrence.numpy()
+
+    inv_counts = [1.0] / counts
+    inv_counts = inv_counts / inv_counts.sum()
+
+    return inv_counts

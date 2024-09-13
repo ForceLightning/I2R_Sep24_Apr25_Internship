@@ -11,13 +11,12 @@ import numpy as np
 import segmentation_models_pytorch as smp
 import torch
 from cv2 import typing as cvt
-from dataset.dataset import CineDataset, get_trainval_data_subsets
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
-from metrics.dice import GeneralizedDiceScoreVariant
 from numpy import typing as npt
 from segmentation_models_pytorch.losses.dice import DiceLoss
+from segmentation_models_pytorch.losses.focal import FocalLoss
 from torch import nn
 from torch.nn import functional as F
 from torch.optim.adamw import AdamW
@@ -30,12 +29,14 @@ from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from torchvision.utils import draw_segmentation_masks
+
+from dataset.dataset import CineDataset, get_trainval_data_subsets
+from metrics.dice import GeneralizedDiceScoreVariant
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
 from utils.utils import ClassificationType, InverseNormalize
 
 BATCH_SIZE_TRAIN = 4
-
 BATCH_SIZE_VAL = 4
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 LEARNING_RATE = 1e-4
@@ -156,7 +157,7 @@ class LightningUnetWrapper(L.LightningModule):
     def __init__(
         self,
         metric: Metric | None = None,
-        loss: nn.Module | None = None,
+        loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
         encoder_weights: str | None = "imagenet",
         in_channels: int = 90,
@@ -171,7 +172,8 @@ class LightningUnetWrapper(L.LightningModule):
         alpha: float = 1.0,
         _beta: float = 0.0,
         learning_rate: float = 1e-4,
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        dl_classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        eval_classification_mode: ClassificationType = ClassificationType.MULTILABEL_MODE,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["loss"])
@@ -186,16 +188,36 @@ class LightningUnetWrapper(L.LightningModule):
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
 
-        # Sets loss if None.
-        self.loss = (
-            loss
-            if loss
-            else (
-                DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
-                if classification_mode == ClassificationType.MULTILABEL_MODE
-                else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+        # Sets loss if it's a string
+        if isinstance(loss, str):
+            match loss:
+                case "cross_entropy":
+                    class_weights = torch.Tensor(
+                        [
+                            0.00018531001957368073,
+                            0.015518576429048081,
+                            0.058786240529692384,
+                            0.925509873021686,
+                        ],
+                    ).to(DEVICE)
+                    self.loss = nn.CrossEntropyLoss(weight=class_weights)
+                case "focal":
+                    self.loss = FocalLoss("multiclass", normalized=True)
+                case _:
+                    raise NotImplementedError(
+                        f"Loss type of {loss} is not implemented!"
+                    )
+        # Otherwise, set if nn.Module
+        else:
+            self.loss = (
+                loss
+                if isinstance(loss, nn.Module)
+                else (
+                    DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+                    if dl_classification_mode == ClassificationType.MULTILABEL_MODE
+                    else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+                )
             )
-        )
 
         # Sets metric if None.
         self.metric = (
@@ -211,18 +233,17 @@ class LightningUnetWrapper(L.LightningModule):
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
-
         self.alpha = alpha
-
+        self.de_transform = Compose(
+            [InverseNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
+        )
         self.example_input_array = torch.randn(
             (2, in_channels, 224, 224), dtype=torch.float32
         ).to(DEVICE)
 
-        self.de_transform = Compose(
-            [InverseNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
-        )
-
-        self.classification_mode = classification_mode
+        self.learning_rate = learning_rate
+        self.dl_classification_mode = dl_classification_mode
+        self.eval_classification_mode = eval_classification_mode
 
         self.weights_from_ckpt_path = weights_from_ckpt_path
         if self.weights_from_ckpt_path:
@@ -254,13 +275,20 @@ class LightningUnetWrapper(L.LightningModule):
         with torch.autocast(device_type=self.device.type):
             masks_proba: torch.Tensor = self.model(images)
 
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
             ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-        loss_seg = self.alpha * self.loss(masks_proba, masks)
+        # HACK: This ensures that the dimensions to the loss function are correct.
+        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+            self.loss, FocalLoss
+        ):
+            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+        else:
+            loss_seg = self.alpha * self.loss(masks_proba, masks)
+
         loss_all = loss_seg
         self.log(
             f"train_loss",
@@ -271,12 +299,12 @@ class LightningUnetWrapper(L.LightningModule):
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds = utils.shared_metric_calculation(
+            masks_preds, masks_one_hot = utils.shared_metric_calculation(
                 self, images, masks, masks_proba, "train"
             )
 
             self._shared_image_logging(
-                batch_idx, images, masks, masks_preds, "train", 25
+                batch_idx, images, masks_one_hot, masks_preds, "train", 25
             )
         return loss_all
 
@@ -321,6 +349,7 @@ class LightningUnetWrapper(L.LightningModule):
                 img_tensor=torch.stack(tensors=pred_images_with_masks, dim=0)
                 .detach()
                 .cpu(),
+                global_step=batch_idx if prefix == "test" else self.global_step,
             )
             gt_images_with_masks = [
                 draw_segmentation_masks(
@@ -340,6 +369,7 @@ class LightningUnetWrapper(L.LightningModule):
                 img_tensor=torch.stack(tensors=gt_images_with_masks, dim=0)
                 .detach()
                 .cpu(),
+                global_step=batch_idx if prefix == "test" else self.global_step,
             )
 
     def _shared_eval(
@@ -354,7 +384,7 @@ class LightningUnetWrapper(L.LightningModule):
         masks = masks.to(DEVICE).long()
         masks_proba: torch.Tensor = self.model(images)
 
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
@@ -368,6 +398,12 @@ class LightningUnetWrapper(L.LightningModule):
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
+        )
+        self.log(
+            f"hp_metric",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
@@ -491,57 +527,75 @@ class CineBaselineDataModule(L.LightningDataModule):
 
 
 class CineCLI(LightningCLI):
-    @classmethod
-    def get_checkpoint_filename(cls, version: str | None) -> str | None:
-        if version:
-            return version + "-epoch={epoch}-step={step}"
-        else:
-            return version
+    def before_instantiate_classes(self) -> None:
+        if (config := self.config.get(self.subcommand)) is not None:
+            if (version := config.get("version")) is not None:
+                name = utils.get_last_checkpoint_filename(version)
+                ModelCheckpoint.CHECKPOINT_NAME_LAST = name
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
+        parser.add_lightning_class_args(
+            ModelCheckpoint, "model_checkpoint_dice_weighted"
+        )
         parser.add_class_arguments(TensorBoardLogger, "tensorboard")
         parser.add_argument("--version", type=Union[str, None], default=None)
-        parser.link_arguments("version", "tensorboard.version")
         parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
+
+        # Sets the checkpoint filename if version is provided.
         parser.link_arguments(
             "version",
             "model_checkpoint.filename",
             compute_fn=utils.get_checkpoint_filename,
         )
+        parser.link_arguments(
+            "version",
+            "model_checkpoint_dice_weighted.filename",
+            compute_fn=utils.get_best_weighted_avg_dice_filename,
+        )
+        parser.link_arguments("version", "tensorboard.name")
 
         # Adds the classification mode argument
-        parser.add_argument("--classification_mode", type=str)
+        parser.add_argument("--dl_classification_mode", type=str)
+        parser.add_argument("--eval_classification_mode", type=str)
         parser.link_arguments(
-            "classification_mode",
-            "model.classification_mode",
+            "dl_classification_mode",
+            "model.dl_classification_mode",
             compute_fn=utils.get_classification_mode,
         )
         parser.link_arguments(
-            "classification_mode",
+            "eval_classification_mode",
+            "model.eval_classification_mode",
+            compute_fn=utils.get_classification_mode,
+        )
+        parser.link_arguments(
+            "dl_classification_mode",
             "data.classification_mode",
             compute_fn=utils.get_classification_mode,
         )
 
         parser.set_defaults(
             {
-                "classification_mode": "MULTICLASS_MODE",
+                "dl_classification_mode": "MULTICLASS_MODE",
+                "eval_classification_mode": "MULTILABEL_MODE",
                 "trainer.max_epochs": 50,
                 "model.encoder_name": "resnet50",
                 "model.encoder_weights": "imagenet",
                 "model.in_channels": 90,
                 "model.classes": 4,
                 "model_checkpoint.monitor": "val_loss",
-                "model_checkpoint.dirpath": os.path.join(
-                    os.getcwd(), "checkpoints/cine-baseline/"
-                ),
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
+                "model_checkpoint_dice_weighted.monitor": "val_dice_(weighted_avg)",
+                "model_checkpoint_dice_weighted.save_top_k": 1,
+                "model_checkpoint_dice_weighted.save_weights_only": True,
+                "model_checkpoint_dice_weighted.save_last": False,
+                "model_checkpoint_dice_weighted.mode": "max",
                 "tensorboard.save_dir": os.path.join(
-                    os.getcwd(), "checkpoints/cine-baseline/"
+                    os.getcwd(), "checkpoints/cine-baseline/lightning_logs"
                 ),
             }
         )
@@ -551,10 +605,6 @@ if __name__ == "__main__":
     cli = CineCLI(
         LightningUnetWrapper,
         CineBaselineDataModule,
-        # save_config_kwargs={
-        #     "config_filename": "config.yaml",
-        #     "multifile": True,
-        # },
         save_config_callback=None,
         auto_configure_optimizers=False,
     )

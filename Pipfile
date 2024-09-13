@@ -34,6 +34,7 @@ debugpy = "*"
 basedpyright = "*"
 onnx = "*"
 onnxscript = "*"
+seaborn = "*"
 
 [requires]
 python_version = "3.12"
