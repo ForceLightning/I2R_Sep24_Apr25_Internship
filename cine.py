@@ -4,23 +4,17 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
-from collections.abc import Sequence
-from typing import Any, Literal, Union, override
+from typing import Any, Union, override
 
-import cv2
 import lightning as L
-import numpy as np
 import segmentation_models_pytorch as smp
 import torch
-from cv2 import typing as cvt
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
-from numpy import typing as npt
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from segmentation_models_pytorch.losses.focal import FocalLoss
 from torch import nn
-from torch.nn import functional as F
 from torch.optim.adamw import AdamW
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
@@ -38,129 +32,9 @@ from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
 from utils.utils import ClassificationType, InverseNormalize
 
-BATCH_SIZE_TRAIN = 4  # Default batch size for training.
+BATCH_SIZE_TRAIN = 4  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 torch.set_float32_matmul_precision("medium")
-
-
-class CineBaselineDataset(CineDataset):
-    def __init__(
-        self,
-        img_dir: str,
-        mask_dir: str,
-        idxs_dir: str,
-        transform_1: Compose,
-        transform_2: Compose,
-        batch_size: int = BATCH_SIZE_TRAIN,
-        mode: Literal["train", "val", "test"] = "train",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
-    ) -> None:
-        """Dataset for the Cine baseline implementation
-
-        Args:
-            img_dir: Path to the directory containing the images.
-            mask_dir: Path to the directory containing the masks.
-            idxs_dir: Path to the directory containing the indices.
-            transform_1: Transform to apply to the images.
-            transform_2: Transform to apply to the masks.
-            batch_size: Batch size for the dataset.
-            mode: Runtime mode.
-            classification_mode: Classification mode for the dataset.
-        """
-        super(CineDataset).__init__()
-
-        self.img_dir = img_dir
-        self.mask_dir = mask_dir
-
-        self.img_list: list[str] = os.listdir(self.img_dir)
-        self.mask_list: list[str] = os.listdir(self.mask_dir)
-
-        self.transform_1 = transform_1
-        self.transform_2 = transform_2
-
-        self.train_idxs: list[int]
-        self.valid_idxs: list[int]
-
-        self.batch_size = batch_size
-        self.classification_mode = classification_mode
-
-        if mode != "test":
-            self.load_train_indices(
-                os.path.join(idxs_dir, "train_indices.pkl"),
-                os.path.join(idxs_dir, "val_indices.pkl"),
-            )
-
-    @override
-    def __getitem__(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor | npt.NDArray[np.floating[Any]], str]:
-        # Define Cine file name
-        img_name: str = self.img_list[index]
-        mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
-
-        img_tuple: tuple[bool, Sequence[cvt.MatLike]] = cv2.imreadmulti(
-            os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
-        )
-
-        img_list = img_tuple[1]
-        first_img = img_list[0]
-        tuned = first_img / [255.0]
-        tuned = cv2.resize(tuned, (224, 224))
-        tuned = tuned.astype(np.float32)
-        if self.transform_1:
-            tuned = self.transform_1(tuned)
-        else:
-            tuned = torch.from_numpy(tuned)
-
-        combined_imgs = tuned.permute(1, 2, 0)
-
-        for i in range(len(img_list) - 1):
-            img = img_list[i + 1]
-            lab_img = img / [255.0]
-            lab_img = cv2.resize(lab_img, (224, 224))
-            lab_img = lab_img.astype(np.float32)
-            if self.transform_1:
-                lab_img = self.transform_1(lab_img)
-            else:
-                lab_img = torch.from_numpy(lab_img)
-
-            combined_imgs = torch.dstack((combined_imgs, lab_img.permute(1, 2, 0)))
-
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
-        lab_mask = mask / [1.0]
-        lab_mask = cv2.resize(lab_mask, (224, 224))
-        lab_mask = lab_mask.astype(np.float32)
-        lab_mask = lab_mask[:, :, 0]  # H x W
-
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
-            # NOTE: This turns the problem into a multilabel segmentation problem.
-            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
-            # bitwise or operations to adhere to those conditions.
-            lab_mask_one_hot = F.one_hot(
-                torch.from_numpy(lab_mask).long(), num_classes=4
-            )  # H x W x C
-            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
-                lab_mask_one_hot[:, :, 3]
-            )
-            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
-                lab_mask_one_hot[:, :, 2]
-            )
-
-            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
-
-            lab_mask = self.transform_2(lab_mask_one_hot)
-
-        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
-            lab_mask = self.transform_2(lab_mask)
-        else:
-            raise NotImplementedError(
-                f"The mode {self.classification_mode.name} is not implemented"
-            )
-
-        combined_imgs = torch.swapaxes(combined_imgs, 0, 2)
-        combined_cines = torch.flip(v2.functional.rotate(combined_imgs, 270), [2])
-
-        return combined_cines, lab_mask, img_name
 
 
 class LightningUnetWrapper(L.LightningModule):
@@ -289,12 +163,14 @@ class LightningUnetWrapper(L.LightningModule):
                     for k, v in ckpt.items():
                         name = k[7:]  # remove 'module.' of dataparallel
                         new_state_dict[name] = v
-                    self.model.load_state_dict(new_state_dict)
+                    self.model.load_state_dict(  # pyright: ignore[reportAttributeAccessIssue]
+                        new_state_dict
+                    )
                 except RuntimeError as e:
                     raise e
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
+        return self.model(x)  # pyright: ignore[reportCallIssue]
 
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
@@ -305,7 +181,9 @@ class LightningUnetWrapper(L.LightningModule):
         masks = masks.to(DEVICE).long()
 
         with torch.autocast(device_type=self.device.type):
-            masks_proba: torch.Tensor = self.model(images)
+            masks_proba: torch.Tensor = self.model(
+                images
+            )  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -368,7 +246,20 @@ class LightningUnetWrapper(L.LightningModule):
             masks_preds: Predicted masks.
             prefix: Prefix for the logger.
             every_interval: Interval to log images
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If the logger is not detected or is not an instance of
+            TensorboardLogger.
+            ValueError: If any of `images`, `masks`, or `masks_preds` are malformed.
         """
+        assert self.logger is not None, "No logger detected!"
+        assert isinstance(
+            self.logger, TensorBoardLogger
+        ), f"Logger is not an instance of TensorboardLogger, but is of type {type(self.logger)}"
+
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
@@ -431,7 +322,9 @@ class LightningUnetWrapper(L.LightningModule):
         images = images.to(DEVICE, dtype=torch.float32)  # BS x TS x C x H x W
         bs = images.shape[0] if len(images.shape) > 3 else 1
         masks = masks.to(DEVICE).long()
-        masks_proba: torch.Tensor = self.model(images)
+        masks_proba: torch.Tensor = self.model(
+            images
+        )  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -465,7 +358,7 @@ class LightningUnetWrapper(L.LightningModule):
             )
 
     @override
-    def configure_optimizers(self):
+    def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
 
 
@@ -507,6 +400,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         transforms_img = Compose(
             [
                 v2.ToImage(),
+                v2.Resize(224, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
@@ -514,10 +408,11 @@ class CineBaselineDataModule(L.LightningDataModule):
         transforms_mask = Compose(
             [
                 v2.ToImage(),
+                v2.Resize(224, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
             ]
         )
-        trainval_dataset = CineBaselineDataset(
+        trainval_dataset = CineDataset(
             trainval_img_dir,
             trainval_mask_dir,
             indices_dir,
@@ -540,7 +435,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         test_img_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
         test_mask_dir = os.path.join(os.getcwd(), self.test_dir, "masks")
 
-        test_dataset = CineBaselineDataset(
+        test_dataset = CineDataset(
             test_img_dir,
             test_mask_dir,
             indices_dir,
@@ -589,10 +484,13 @@ class CineBaselineDataModule(L.LightningDataModule):
 
 class CineCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
-        if (config := self.config.get(self.subcommand)) is not None:
-            if (version := config.get("version")) is not None:
-                name = utils.get_last_checkpoint_filename(version)
-                ModelCheckpoint.CHECKPOINT_NAME_LAST = name
+        if (subcommand := getattr(self, "subcommand")) is not None:
+            if (config := self.config.get(subcommand)) is not None:
+                if (version := config.get("version")) is not None:
+                    name = utils.get_last_checkpoint_filename(version)
+                    ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]
+                        name
+                    )
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)

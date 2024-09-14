@@ -58,6 +58,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         transforms_img = Compose(
             [
                 v2.ToImage(),
+                v2.Resize(224, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
@@ -65,6 +66,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         transforms_mask = Compose(
             [
                 v2.ToImage(),
+                v2.Resize(224, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
             ]
         )
@@ -140,10 +142,13 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
 class LGECLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
-        if (config := self.config.get(self.subcommand)) is not None:
-            if (version := config.get("version")) is not None:
-                name = utils.get_last_checkpoint_filename(version)
-                ModelCheckpoint.CHECKPOINT_NAME_LAST = name
+        if (subcommand := getattr(self, "subcommand")) is not None:
+            if (config := self.config.get(subcommand)) is not None:
+                if (version := config.get("version")) is not None:
+                    name = utils.get_last_checkpoint_filename(version)
+                    ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]
+                        name
+                    )
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_optimizer_args(AdamW)

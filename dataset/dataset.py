@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import pickle
 import random
-from typing import Any, Literal, Sequence, override
+from typing import Literal, Sequence, override
 
 import cv2
 import numpy as np
@@ -19,358 +19,7 @@ from utils.utils import ClassificationType
 SEED_CUS = 1  # RNG seed.
 
 
-class CineDataset(Dataset[Any]):
-    def __init__(
-        self,
-        img_dir: str,
-        mask_dir: str,
-        idxs_dir: str,
-        frames: int,
-        select_frame_method: Literal["consecutive", "specific"],
-        transform_1: Compose,
-        transform_2: Compose,
-        batch_size: int = 2,
-        mode: Literal["train", "val", "test"] = "train",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
-    ) -> None:
-        """Cine dataset for the cardiac cine MRI images.
-
-        Args:
-            img_dir: The directory containing the CINE images.
-            mask_dir: The directory containing the masks for the CINE images.
-            idxs_dir: The directory containing the indices for the training and
-                validation sets.
-            frames: The number of frames to concatenate.
-            select_frame_method: The method of selecting frames to concatenate.
-            transform_1: The transform to apply to the images.
-            transform_2: The transform to apply to the masks.
-            batch_size: The batch size for the dataset.
-            mode: The mode of the dataset.
-            classification_mode: The classification mode for the dataset.
-
-        Raises:
-            RuntimeError: If the indices fail to load.
-        """
-        super().__init__()
-        # Set paths to CINE and mask directories
-        self.img_dir = img_dir
-        self.mask_dir = mask_dir
-
-        # Get a list of all the files in the CINE and mask directories
-        self.img_list = os.listdir(self.img_dir)
-        self.mask_list = os.listdir(self.mask_dir)
-
-        # Init transforms
-        self.transform_1 = transform_1
-        self.transform_2 = transform_2
-
-        # Define number of frames and how those frames are chosen (consecutive or
-        # specific).
-        self.frames = frames
-        self.select_frame_method: Literal["consecutive", "specific"] = (
-            select_frame_method
-        )
-
-        self.train_idxs: list[int]
-        self.valid_idxs: list[int]
-
-        self.batch_size = batch_size
-
-        self.classification_mode = classification_mode
-
-        if mode != "test":
-            self.load_train_indices(
-                os.path.join(idxs_dir, "train_indices.pkl"),
-                os.path.join(idxs_dir, "val_indices.pkl"),
-            )
-
-    def __len__(self) -> int:
-        return len(self.img_list)
-
-    @override
-    def __getitem__(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor | npt.NDArray[np.floating[Any]], str]:
-        img_name = self.img_list[index]
-        mask_name = self.img_list[index].split(".")[0] + ".nii.png"
-
-        # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
-        # loaded as RBG.
-        # XXX: Check if it actually is RBG rather than RGB.
-        img_tuple = cv2.imreadmulti(
-            os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
-        )
-
-        # cv2.imreadmulti returns a tuple of length 2, with the second value of the
-        # tuple being the actual images.
-        img_list = img_tuple[1]
-
-        # Concatenate the images based on specific indices (subject to change).
-        combined_imgs = CineDataset.concatenate_imgs(
-            self.frames, self.select_frame_method, img_list, self.transform_1
-        )
-
-        # Perform necessary operations on the mask
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
-
-        lab_mask = mask / [1.0]
-        lab_mask = cv2.resize(lab_mask, (224, 224)).astype(np.float32)
-        lab_mask = lab_mask[:, :, 0]  # H x W
-
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
-            # NOTE: This turns the problem into a multilabel segmentation problem.
-            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
-            # bitwise or operations to adhere to those conditions.
-            lab_mask_one_hot = F.one_hot(
-                torch.from_numpy(lab_mask).long(), num_classes=4
-            )  # H x W x C
-            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
-                lab_mask_one_hot[:, :, 3]
-            )
-            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
-                lab_mask_one_hot[:, :, 2]
-            )
-
-            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
-
-            lab_mask = self.transform_2(lab_mask_one_hot)
-
-        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
-            lab_mask = self.transform_2(lab_mask)
-        else:
-            raise NotImplementedError(
-                f"The mode {self.classification_mode.name} is not implemented"
-            )
-
-        return combined_imgs, lab_mask, img_name
-
-    @classmethod
-    def concatenate_imgs(
-        cls,
-        frames: int,
-        select_frame_method: Literal["consecutive", "specific"],
-        img_list: Sequence[cvt.MatLike],
-        transform: Compose,
-    ) -> torch.Tensor:
-        """Concatenates the images based on the number of frames and the method of
-        selecting frames.
-
-        Args:
-            frames: The number of frames to concatenate.
-            select_frame_method: The method of selecting frames.
-            img_list: The list of images to concatenate.
-            transform: The transform to apply to the images.
-
-        Returns:
-            torch.Tensor: The concatenated images.
-
-        Raises:
-            ValueError: If the number of frames is not within [5, 10, 15, 20, 30].
-            ValueError: If the method of selecting frames is not valid.
-        """
-        chosen_frames_dict = {
-            5: [0, 6, 12, 18, 24],
-            10: [0, 3, 6, 9, 12, 15, 18, 21, 24, 27],
-            15: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28],
-            20: [
-                0,
-                2,
-                4,
-                6,
-                8,
-                10,
-                11,
-                12,
-                13,
-                14,
-                15,
-                16,
-                17,
-                18,
-                19,
-                20,
-                22,
-                24,
-                26,
-                28,
-            ],
-        }
-        if frames == 30:
-            indices = range(0, 30)
-            return CineDataset.concat(img_list, indices, transform)
-
-        elif frames < 30 and frames > 0:
-            if select_frame_method == "consecutive":
-                indices = range(0, frames)
-                return CineDataset.concat(img_list, indices, transform)
-            elif select_frame_method == "specific":
-                if frames in chosen_frames_dict:
-                    indices = chosen_frames_dict[frames]
-                    return CineDataset.concat(img_list, indices, transform)
-                else:
-                    raise ValueError(
-                        "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"
-                    )
-
-        raise ValueError(
-            "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"
-        )
-
-    @classmethod
-    def concat(
-        cls,
-        img_list: Sequence[cvt.MatLike],
-        indices: Sequence[int],
-        transform: Compose,
-    ) -> torch.Tensor:
-        """Concatenates the images based on the indices provided.
-
-        Args:
-            img_list: The list of images to concatenate.
-            indices: The indices to concatenate.
-            transform: The transform to apply to the images
-        """
-        starting_idx = indices[0]
-        first_img = img_list[starting_idx]
-        tuned = first_img / [255.0]
-        tuned = cv2.resize(tuned, (224, 224)).astype(np.float32)
-        tuned = transform(tuned)
-
-        combined_imgs = tuned.unsqueeze(0)
-
-        for i in indices[1:]:
-            img = img_list[i]
-            lab_img = img / [255.0]
-            lab_img = cv2.resize(lab_img, (224, 224)).astype(np.float32)
-            lab_img = transform(lab_img)
-            combined_imgs = torch.cat((combined_imgs, lab_img.unsqueeze(0)), 0)
-
-        return combined_imgs
-
-    def load_train_indices(
-        self,
-        train_idxs_path: str,
-        valid_idxs_path: str,
-    ) -> tuple[list[int], list[int]]:
-        """Loads the training and validation indices for the dataset.
-
-        If the path to the indices are invalid, it then generates the indices in a
-        possibly deterministic way and dumps the indices into a pickled file. This
-        method also sets the `self.train_idxs` and `self.valid_idxs` properties.
-
-        Args:
-            train_idxs_path: Path to training indices pickle file.
-            valid_idxs_path: Path to validation indices pickle file.
-
-        Returns:
-            tuple[list[int], list[int]]: Training and Validation indices
-
-        Raises:
-            RuntimeError: If there are duplicates in the training and validation
-            indices.
-            RuntimeError: If patients have images in both the training and testing.
-            AssertionError: If the training and validation indices are not disjoint.
-        """
-        if os.path.exists(train_idxs_path) and os.path.exists(valid_idxs_path):
-            with open(train_idxs_path, "rb") as f:
-                train_idxs: list[int] = pickle.load(f)
-            with open(valid_idxs_path, "rb") as f:
-                valid_idxs: list[int] = pickle.load(f)
-            self.train_idxs = train_idxs
-            self.valid_idxs = valid_idxs
-            return train_idxs, valid_idxs
-
-        names = os.listdir(self.img_dir)
-
-        # Group patient files together so that all of a patient's files are in one group.
-        # This is to ensure that all patient files are strictly only in training,
-        # validation, or testing.
-        grouped_names = {}
-        blacklisted = [""]
-
-        for i, name in enumerate(names):
-            base = name.split("_")[0]
-
-            if name not in blacklisted:
-                if len(grouped_names) == 0:
-                    grouped_names[base] = [names[i]]
-                else:
-                    if base in grouped_names:
-                        grouped_names[base] += [names[i]]
-                    else:
-                        grouped_names[base] = [names[i]]
-
-        # Attach an index to each file
-        for i in range(len(names)):
-            tri = self[i]
-            base = tri[2].split("_")[0]
-            for x, name in enumerate(grouped_names[base]):
-                if name == tri[2]:
-                    grouped_names[base][x] = [name, i]
-
-        # Get indices for training, validation, and testing.
-        length = len(self)
-        val_len = length // 4
-
-        train_idxs = []
-        valid_idxs = []
-
-        train_names: list[str] = []
-        valid_names: list[str] = []
-
-        train_len = length - val_len
-        for patient in grouped_names:
-            while len(train_idxs) < train_len:
-                for i in range(len(grouped_names[patient])):
-                    name, idx = grouped_names[patient][i]
-                    train_idxs.append(idx)
-                    train_names.append(name)
-                break
-
-            else:
-                while len(valid_idxs) < val_len:
-                    for i in range(len(grouped_names[patient])):
-                        name, idx = grouped_names[patient][i]
-                        valid_idxs.append(idx)
-                        valid_names.append(name)
-                    break
-
-        # Check to make sure no indices are repeated.
-        for name in train_idxs:
-            if name in valid_idxs:
-                raise RuntimeError(
-                    f"Duplicate in train and valid indices exists: {name}"
-                )
-
-        # Check to make sure no patients have images in both the training and testing.
-        train_bases = set([name.split("_")[0] for name in train_names])
-        valid_bases = set([name.split("_")[0] for name in valid_names])
-
-        assert train_bases.isdisjoint(
-            valid_bases
-        ), "Patients have images in both the training and testing"
-
-        self.train_idxs = train_idxs
-        self.valid_idxs = valid_idxs
-
-        if not os.path.exists(
-            (train_indices_dir := os.path.dirname(os.path.normpath(train_idxs_path)))
-        ):
-            os.makedirs(train_indices_dir)
-        if not os.path.exists(
-            (valid_indices_dir := os.path.dirname(os.path.normpath(valid_idxs_path)))
-        ):
-            os.makedirs(valid_indices_dir)
-
-        with open(train_idxs_path, "wb") as f:
-            pickle.dump(train_idxs, f)
-        with open(valid_idxs_path, "wb") as f:
-            pickle.dump(valid_idxs, f)
-
-        return train_idxs, valid_idxs
-
-
-class LGEDataset(Dataset[Any]):
+class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
     def __init__(
         self,
         img_dir: str,
@@ -414,7 +63,8 @@ class LGEDataset(Dataset[Any]):
 
         self.batch_size = batch_size
         if mode != "test":
-            self.load_train_indices(
+            load_train_indices(
+                self,
                 os.path.join(idxs_dir, "train_indices.pkl"),
                 os.path.join(idxs_dir, "val_indices.pkl"),
             )
@@ -422,9 +72,7 @@ class LGEDataset(Dataset[Any]):
         self.classification_mode = classification_mode
 
     @override
-    def __getitem__(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor | npt.NDArray[np.floating[Any]], str]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
         """Gets a batch of images, masks, and the image names from the dataset.
 
         Args:
@@ -451,13 +99,11 @@ class LGEDataset(Dataset[Any]):
         lab_img = img / [255.0]
         lab_mask = mask / [1.0]
 
-        lab_img = cv2.resize(lab_img, (224, 224))
-        lab_mask = cv2.resize(lab_mask, (224, 224))
-
         lab_img = lab_img.astype(np.float32)
         lab_mask = lab_mask.astype(np.float32)[:, :, 0]
 
-        lab_img = self.transform_1(lab_img)
+        out_img: torch.Tensor = self.transform_1(lab_img)
+        out_mask: torch.Tensor
 
         if self.classification_mode == ClassificationType.MULTILABEL_MODE:
             # NOTE: This turns the problem into a multilabel segmentation problem.
@@ -474,132 +120,233 @@ class LGEDataset(Dataset[Any]):
             )
             lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
 
-            lab_mask = self.transform_2(lab_mask_one_hot)
+            out_mask = self.transform_2(lab_mask_one_hot)
         elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
-            lab_mask = self.transform_2(lab_mask)
+            out_mask = self.transform_2(lab_mask)
         else:
             raise NotImplementedError(
                 f"The mode {self.classification_mode.name} is not implemented."
             )
-        return lab_img, lab_mask, img_name
+        return out_img, out_mask, img_name
 
     def __len__(self) -> int:
         return len(self.img_list)
 
-    def load_train_indices(
-        self,
-        train_idxs_path: str,
-        valid_idxs_path: str,
-    ) -> tuple[list[int], list[int]]:
-        """
-        Loads the training and validation indices for the dataset.
 
-        If the path to the indices are invalid, it then generates the indices in a
-        possibly deterministic way. This method also sets the `self.train_idxs` and
-        `self.valid_idxs` properties.
+class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
+    def __init__(
+        self,
+        img_dir: str,
+        mask_dir: str,
+        idxs_dir: str,
+        transform_1: Compose,
+        transform_2: Compose,
+        batch_size: int = 4,
+        mode: Literal["train", "val", "test"] = "train",
+        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        concat_mode: Literal["old", "new"] = "old",
+    ) -> None:
+        """Dataset for the Cine baseline implementation
 
         Args:
-            train_idxs_path: Path to training indices pickle file.
-            valid_idxs_path: Path to validation indices pickle file.
+            img_dir: Path to the directory containing the images.
+            mask_dir: Path to the directory containing the masks.
+            idxs_dir: Path to the directory containing the indices.
+            transform_1: Transform to apply to the images.
+            transform_2: Transform to apply to the masks.
+            batch_size: Batch size for the dataset.
+            mode: Runtime mode.
+            classification_mode: Classification mode for the dataset.
+        """
+        super().__init__()
 
-        Returns:
-            tuple[list[int], list[int]]: Training and Validation indices
+        self.img_dir = img_dir
+        self.mask_dir = mask_dir
+
+        self.img_list: list[str] = os.listdir(self.img_dir)
+        self.mask_list: list[str] = os.listdir(self.mask_dir)
+
+        self.transform_1 = transform_1
+        self.transform_2 = transform_2
+
+        self.train_idxs: list[int]
+        self.valid_idxs: list[int]
+
+        self.batch_size = batch_size
+        self.mode = mode
+        self.classification_mode = classification_mode
+
+        self.concat_mode = concat_mode
+
+        if mode != "test":
+            load_train_indices(
+                self,
+                os.path.join(idxs_dir, "train_indices.pkl"),
+                os.path.join(idxs_dir, "val_indices.pkl"),
+            )
+
+    @override
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
+        # Define Cine file name
+        img_name: str = self.img_list[index]
+        mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
+
+        img_tuple: tuple[bool, Sequence[cvt.MatLike]] = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
+        )
+
+        img_list = img_tuple[1]
+
+        combined_imgs = concatenate_imgs(
+            frames=30,
+            select_frame_method="consecutive",
+            img_list=img_list,
+            transform=self.transform_1,
+        )
+
+        f, c, h, w = combined_imgs.shape
+        combined_imgs = combined_imgs.reshape(f * c, h, w)
+
+        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
+        lab_mask = mask / [1.0]
+        lab_mask = lab_mask.astype(np.float32)
+        lab_mask = lab_mask[:, :, 0]  # H x W
+        out_mask: torch.Tensor
+
+        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+            # NOTE: This turns the problem into a multilabel segmentation problem.
+            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+            # bitwise or operations to adhere to those conditions.
+            lab_mask_one_hot = F.one_hot(
+                torch.from_numpy(lab_mask).long(), num_classes=4
+            )  # H x W x C
+            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                lab_mask_one_hot[:, :, 3]
+            )
+            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                lab_mask_one_hot[:, :, 2]
+            )
+
+            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
+
+            out_mask = self.transform_2(lab_mask_one_hot)
+
+        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
+            out_mask = self.transform_2(lab_mask)
+        else:
+            raise NotImplementedError(
+                f"The mode {self.classification_mode.name} is not implemented"
+            )
+
+        return combined_imgs, out_mask, img_name
+
+    def __len__(self) -> int:
+        return len(self.img_list)
+
+
+class TwoPlusOneDataset(CineDataset):
+    def __init__(
+        self,
+        img_dir: str,
+        mask_dir: str,
+        idxs_dir: str,
+        frames: int,
+        select_frame_method: Literal["consecutive", "specific"],
+        transform_1: Compose,
+        transform_2: Compose,
+        batch_size: int = 2,
+        mode: Literal["train", "val", "test"] = "train",
+        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+    ) -> None:
+        """Cine dataset for the cardiac cine MRI images.
+
+        Args:
+            img_dir: The directory containing the CINE images.
+            mask_dir: The directory containing the masks for the CINE images.
+            idxs_dir: The directory containing the indices for the training and
+                validation sets.
+            frames: The number of frames to concatenate.
+            select_frame_method: The method of selecting frames to concatenate.
+            transform_1: The transform to apply to the images.
+            transform_2: The transform to apply to the masks.
+            batch_size: The batch size for the dataset.
+            mode: The mode of the dataset.
+            classification_mode: The classification mode for the dataset.
 
         Raises:
-            RuntimeError: If there are duplicates in the training and validation
-            indices.
-            AssertionError: If the training and validation indices are not disjoint.
-
-        Example:
-            lge_dataset = LGEDataset()
-            lge_dataset.load_train_indices(train_idxs_path, valid_idxs_path)
+            RuntimeError: If the indices fail to load.
         """
-        if os.path.exists(train_idxs_path) and os.path.exists(valid_idxs_path):
-            with open(train_idxs_path, "rb") as f:
-                train_idxs: list[int] = pickle.load(f)
-            with open(valid_idxs_path, "rb") as f:
-                valid_idxs: list[int] = pickle.load(f)
-            self.train_idxs = train_idxs
-            self.valid_idxs = valid_idxs
-            return train_idxs, valid_idxs
+        super().__init__(
+            img_dir,
+            mask_dir,
+            idxs_dir,
+            transform_1,
+            transform_2,
+            batch_size,
+            mode,
+            classification_mode,
+        )
+        self.frames = frames
+        self.select_frame_method: Literal["consecutive", "specific"] = (
+            select_frame_method
+        )
 
-        names = os.listdir(self.img_dir)
+    @override
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
+        img_name = self.img_list[index]
+        mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
-        # Group patient files together so that all of a patient's files are in one group.
-        # This is to ensure that all patient files are strictly only in training,
-        # validation, or testing.
-        grouped_names = {}
-        blacklisted = [""]
+        # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
+        # loaded as RBG.
+        # XXX: Check if it actually is RBG rather than RGB.
+        img_tuple = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
+        )
 
-        for i, name in enumerate(names):
-            base = name.split("_")[0]
+        # cv2.imreadmulti returns a tuple of length 2, with the second value of the
+        # tuple being the actual images.
+        img_list = img_tuple[1]
 
-            if name not in blacklisted:
-                if len(grouped_names) == 0:
-                    grouped_names[base] = [names[i]]
-            else:
-                if base in grouped_names:
-                    grouped_names[base] += [names[i]]
-                else:
-                    grouped_names[base] = [names[i]]
+        # Concatenate the images based on specific indices (subject to change).
+        combined_imgs = concatenate_imgs(
+            self.frames, self.select_frame_method, img_list, self.transform_1
+        )
 
-        # Attach an index to each file
-        for i in range(len(names)):
-            tri = self[i]
-            base = tri[2].split("_")[0]
-            for x, name in enumerate(grouped_names[base]):
-                if name == tri[2]:
-                    grouped_names[base][x] = [name, i]
+        # Perform necessary operations on the mask
+        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
 
-        # Get indices for training, validation, and testing.
-        length = len(self)
-        val_len = length // 4
+        lab_mask = mask / [1.0]
+        lab_mask = lab_mask[:, :, 0]  # H x W
 
-        train_idxs = []
-        valid_idxs = []
+        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+            # NOTE: This turns the problem into a multilabel segmentation problem.
+            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+            # bitwise or operations to adhere to those conditions.
+            lab_mask_one_hot = F.one_hot(
+                torch.from_numpy(lab_mask).long(), num_classes=4
+            )  # H x W x C
+            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                lab_mask_one_hot[:, :, 3]
+            )
+            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                lab_mask_one_hot[:, :, 2]
+            )
 
-        train_names: list[str] = []
-        valid_names: list[str] = []
+            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
 
-        train_len = length - val_len
-        for patient in grouped_names:
-            while len(train_idxs) < train_len:
-                for i in range(len(grouped_names[patient])):
-                    name, idx = grouped_names[patient][i]
-                    train_idxs.append(idx)
-                    train_names.append(idx)
-                break
+            lab_mask = self.transform_2(lab_mask_one_hot)
 
-            else:
-                while len(valid_idxs) < val_len:
-                    for i in range(len(grouped_names[patient])):
-                        name, idx = grouped_names[patient][i]
-                        valid_idxs.append(idx)
-                        valid_names.append(name)
-                    break
+        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
+            lab_mask = self.transform_2(lab_mask)
+        else:
+            raise NotImplementedError(
+                f"The mode {self.classification_mode.name} is not implemented"
+            )
 
-        # Check to make sure no indices are repeated.
-        for name in train_idxs:
-            if name in valid_idxs:
-                raise RuntimeError(
-                    f"Duplicate in train and valid indices exists: {name}"
-                )
-
-        # Check to make sure no patients have images in both the training and testing.
-        train_bases = set([name.split("_")[0] for name in train_names])
-        valid_bases = set([name.split("_")[0] for name in valid_names])
-
-        assert train_bases.isdisjoint(
-            valid_bases
-        ), "Patients have images in both the training and testing"
-
-        self.train_idxs = train_idxs
-        self.valid_idxs = valid_idxs
-
-        return train_idxs, valid_idxs
+        return combined_imgs, lab_mask, img_name
 
 
-class TwoStreamDataset(Dataset[Any]):
+class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]):
     def __init__(
         self,
         lge_dir: str,
@@ -643,14 +390,21 @@ class TwoStreamDataset(Dataset[Any]):
         self.transform_2 = transform_2
 
         self.batch_size = batch_size
+        self.train_idxs: list[int]
+        self.valid_idxs: list[int]
 
         if mode != "test":
-            self.load_train_indices(
+            load_train_indices(
+                self,
                 os.path.join(idxs_dir, "train_indices.pkl"),
                 os.path.join(idxs_dir, "val_indices.pkl"),
             )
 
         self.classification_mode = classification_mode
+
+    @property
+    def img_dir(self):
+        return self.cine_dir
 
     def __getitem__(
         self, index: int
@@ -677,7 +431,8 @@ class TwoStreamDataset(Dataset[Any]):
         if not lge_name.endswith(".png"):
             raise ValueError("Invalid image type for file: {lge_name}")
 
-        # TODO: See if these can be turned into PIL operations (to maintain RGB)
+        # PERF: See if these can be turned into PIL operations (to maintain RGB)
+
         lge = cv2.imread(os.path.join(self.lge_dir, lge_name))
         mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
         cine_tuple = cv2.imreadmulti(
@@ -689,8 +444,10 @@ class TwoStreamDataset(Dataset[Any]):
 
         n, h, w, c = in_stack.shape
 
+        # TODO(concat): Use the concat method instead
         # Resize all images to (224, 224)
         in_stack = in_stack.transpose((1, 2, 3, 0)).reshape(h, w, c * n)
+        # TODO(transforms): Move all the resizes out to the transforms.
         out_stack = cv2.resize(in_stack, (224, 224))
         out_images = out_stack.reshape((h, w, c, n)).transpose(3, 0, 1, 2)
         out_images = out_images / [255.0]
@@ -700,6 +457,7 @@ class TwoStreamDataset(Dataset[Any]):
 
         # Perform transformations on mask
         lab_mask = mask / [1.0]
+        # TODO(transforms): Move all the resizes out
         lab_mask = cv2.resize(lab_mask, (224, 224)).astype(np.float32)
         lab_mask = lab_mask[:, :, 0]
         if self.classification_mode == ClassificationType.MULTILABEL_MODE:
@@ -728,10 +486,216 @@ class TwoStreamDataset(Dataset[Any]):
 
         # Perform transformations on LGE
         lge = lge / [255.0]
+        # TODO(transforms): Move all the resizes out
         lge = cv2.resize(lge, (224, 224)).astype(np.float32)
         lge = self.transform_1(lge)
 
         return lge, combined_cines, lab_mask, lge_name
+
+    def __len__(self):
+        return len(self.cine_list)
+
+
+def concat(
+    img_list: Sequence[cvt.MatLike],
+    indices: Sequence[int] | None,
+    transform: Compose,
+) -> torch.Tensor:
+    in_stack = np.stack(img_list, axis=0)
+    out_images = in_stack / [255.0]
+    out_images = out_images.transpose(0, 3, 1, 2)  # F x C x H x W
+
+    combined_imgs = torch.from_numpy(out_images)
+    combined_imgs: torch.Tensor = transform(combined_imgs)
+
+    if indices is not None:
+        combined_imgs = combined_imgs[indices]
+
+    return combined_imgs
+
+
+def concatenate_imgs(
+    frames: int,
+    select_frame_method: Literal["consecutive", "specific"],
+    img_list: Sequence[cvt.MatLike],
+    transform: Compose,
+) -> torch.Tensor:
+    """Concatenates the images based on the number of frames and the method of
+    selecting frames.
+
+    Args:
+        frames: The number of frames to concatenate.
+        select_frame_method: The method of selecting frames.
+        img_list: The list of images to concatenate.
+        transform: The transform to apply to the images.
+
+    Returns:
+        torch.Tensor: The concatenated images.
+
+    Raises:
+        ValueError: If the number of frames is not within [5, 10, 15, 20, 30].
+        ValueError: If the method of selecting frames is not valid.
+    """
+    chosen_frames_dict = {
+        5: [0, 6, 12, 18, 24],
+        10: [0, 3, 6, 9, 12, 15, 18, 21, 24, 27],
+        15: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28],
+        20: [
+            0,
+            2,
+            4,
+            6,
+            8,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            22,
+            24,
+            26,
+            28,
+        ],
+    }
+
+    if frames == 30:
+        indices = range(0, 30)
+        return concat(img_list, indices, transform)
+
+    elif frames < 30 and frames > 0:
+        if select_frame_method == "consecutive":
+            indices = range(0, frames)
+            return concat(img_list, indices, transform)
+        elif select_frame_method == "specific":
+            if frames in chosen_frames_dict:
+                indices = chosen_frames_dict[frames]
+                return concat(img_list, indices, transform)
+            else:
+                raise ValueError(
+                    "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"
+                )
+
+    raise ValueError(
+        "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"
+    )
+
+
+def load_train_indices(
+    dataset: LGEDataset | CineDataset | TwoPlusOneDataset | TwoStreamDataset,
+    train_idxs_path: str,
+    valid_idxs_path: str,
+) -> tuple[list[int], list[int]]:
+    """
+    Loads the training and validation indices for the dataset.
+
+    If the path to the indices are invalid, it then generates the indices in a
+    possibly deterministic way. This method also sets the `dataset.train_idxs` and
+    `dataset.valid_idxs` properties.
+
+    Args:
+        train_idxs_path: Path to training indices pickle file.
+        valid_idxs_path: Path to validation indices pickle file.
+
+    Returns:
+        tuple[list[int], list[int]]: Training and Validation indices
+
+    Raises:
+        RuntimeError: If there are duplicates in the training and validation
+        indices.
+        RuntimeError: If patients have images in both the training and testing.
+        AssertionError: If the training and validation indices are not disjoint.
+
+    Example:
+        lge_dataset = LGEDataset()
+        load_train_indices(lge_dataset, train_idxs_path, valid_idxs_path)
+    """
+    if os.path.exists(train_idxs_path) and os.path.exists(valid_idxs_path):
+        with open(train_idxs_path, "rb") as f:
+            train_idxs: list[int] = pickle.load(f)
+        with open(valid_idxs_path, "rb") as f:
+            valid_idxs: list[int] = pickle.load(f)
+        dataset.train_idxs = train_idxs
+        dataset.valid_idxs = valid_idxs
+        return train_idxs, valid_idxs
+
+    names = os.listdir(dataset.img_dir)
+
+    # Group patient files together so that all of a patient's files are in one group.
+    # This is to ensure that all patient files are strictly only in training,
+    # validation, or testing.
+    grouped_names = {}
+    blacklisted = [""]
+
+    for i, name in enumerate(names):
+        base = name.split("_")[0]
+
+        if name not in blacklisted:
+            if len(grouped_names) == 0:
+                grouped_names[base] = [names[i]]
+        else:
+            if base in grouped_names:
+                grouped_names[base] += [names[i]]
+            else:
+                grouped_names[base] = [names[i]]
+
+    # Attach an index to each file
+    for i in range(len(names)):
+        tri = dataset[i]
+        base = tri[2].split("_")[0]
+        for x, name in enumerate(grouped_names[base]):
+            if name == tri[2]:
+                grouped_names[base][x] = [name, i]
+
+    # Get indices for training, validation, and testing.
+    length = len(dataset)
+    val_len = length // 4
+
+    train_idxs = []
+    valid_idxs = []
+
+    train_names: list[str] = []
+    valid_names: list[str] = []
+
+    train_len = length - val_len
+    for patient in grouped_names:
+        while len(train_idxs) < train_len:
+            for i in range(len(grouped_names[patient])):
+                name, idx = grouped_names[patient][i]
+                train_idxs.append(idx)
+                train_names.append(idx)
+            break
+
+        else:
+            while len(valid_idxs) < val_len:
+                for i in range(len(grouped_names[patient])):
+                    name, idx = grouped_names[patient][i]
+                    valid_idxs.append(idx)
+                    valid_names.append(name)
+                break
+
+    # Check to make sure no indices are repeated.
+    for name in train_idxs:
+        if name in valid_idxs:
+            raise RuntimeError(f"Duplicate in train and valid indices exists: {name}")
+
+    # Check to make sure no patients have images in both the training and testing.
+    train_bases = set([name.split("_")[0] for name in train_names])
+    valid_bases = set([name.split("_")[0] for name in valid_names])
+
+    assert train_bases.isdisjoint(
+        valid_bases
+    ), "Patients have images in both the training and testing"
+
+    dataset.train_idxs = train_idxs
+    dataset.valid_idxs = valid_idxs
+
+    return train_idxs, valid_idxs
 
 
 def seed_worker(worker_id):
@@ -746,7 +710,7 @@ def seed_worker(worker_id):
 
 
 def get_trainval_data_subsets(
-    dataset: LGEDataset | CineDataset,
+    dataset: CineDataset | LGEDataset | TwoPlusOneDataset,
 ) -> tuple[Subset, Subset]:
     """Gets the subsets of the data as train/val splits from a superset consisting of
     both.
@@ -763,7 +727,7 @@ def get_trainval_data_subsets(
 
 
 def get_trainval_dataloaders(
-    dataset: LGEDataset | CineDataset,
+    dataset: LGEDataset | TwoPlusOneDataset,
 ) -> tuple[DataLoader, DataLoader]:
     """Gets the dataloaders of the data as train/val splits from a superset consisting
     of both.
@@ -783,7 +747,6 @@ def get_trainval_dataloaders(
     torch.manual_seed(SEED_CUS)
     torch.cuda.manual_seed(SEED_CUS)
     torch.cuda.manual_seed_all(SEED_CUS)
-    a = list(range(len(dataset)))
     train_sampler = SubsetRandomSampler(dataset.train_idxs)
 
     torch.manual_seed(SEED_CUS)
@@ -816,7 +779,9 @@ def get_trainval_dataloaders(
     return train_loader, valid_loader
 
 
-def get_class_weights(train_set: Subset[Any]) -> npt.NDArray[np.float32]:
+def get_class_weights(
+    train_set: Subset,
+) -> npt.NDArray[np.float32]:
     """Gets the class weights based on the occurrence of the classes in the training
     set.
 
@@ -827,9 +792,17 @@ def get_class_weights(train_set: Subset[Any]) -> npt.NDArray[np.float32]:
         npt.NDArray[np.float32]: The class weights.
 
     Raises:
+        AssertionError: If the subset's dataset object has no `classification_mode`
+        attribute.
         AssertionError: If the classification mode is not multilabel.
     """
-    assert train_set.classification_mode == ClassificationType.MULTILABEL_MODE
+    dataset = train_set.dataset
+
+    assert (
+        getattr(dataset, "classification_mode", None) is not None
+    ), f"Dataset has no attribute `classification_mode`"
+
+    assert dataset.classification_mode == ClassificationType.MULTILABEL_MODE
     counts = np.array([0.0, 0.0, 0.0, 0.0])
     for _, masks, _ in [train_set[i] for i in range(len(train_set))]:
         class_occurrence = masks.sum(dim=(1, 2))

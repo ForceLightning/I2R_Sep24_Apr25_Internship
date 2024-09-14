@@ -24,7 +24,7 @@ from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from torchvision.utils import draw_segmentation_masks
 
-from dataset.dataset import CineDataset, get_trainval_data_subsets
+from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from models.two_plus_one import Unet
 from utils import utils
@@ -181,12 +181,14 @@ class UnetLightning(L.LightningModule):
                     for k, v in ckpt.items():
                         name = k[7:]  # remove 'module.' of dataparallel
                         new_state_dict[name] = v
-                    self.model.load_state_dict(new_state_dict)
+                    self.model.load_state_dict(  # pyright: ignore[reportAttributeAccessIssue]
+                        new_state_dict
+                    )
                 except RuntimeError as e:
                     raise e
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
+        return self.model(x)  # pyright: ignore[reportCallIssue]
 
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
@@ -199,7 +201,9 @@ class UnetLightning(L.LightningModule):
 
         with torch.autocast(device_type=self.device.type):
             # B x C x H x W
-            masks_proba: torch.Tensor = self.model(images_input)
+            masks_proba: torch.Tensor = self.model(
+                images_input
+            )  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -256,7 +260,20 @@ class UnetLightning(L.LightningModule):
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
+
+        Returns:
+            None.
+
+        Raises:
+            AssertionError: If the logger is not detected or is not an instance of
+            TensorboardLogger.
+            ValueError: If any of `images`, `masks`, or `masks_preds` are malformed.
         """
+        assert self.logger is not None, "No logger detected!"
+        assert isinstance(
+            self.logger, TensorBoardLogger
+        ), f"Logger is not an instance of TensorboardLogger, but is of type {type(self.logger)}"
+
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
@@ -319,7 +336,9 @@ class UnetLightning(L.LightningModule):
         images_input = images.permute(1, 0, 2, 3, 4)
         images_input = images_input.to(DEVICE, dtype=torch.float32)
         masks = masks.to(DEVICE).long()
-        masks_proba: torch.Tensor = self.model(images_input)  # BS x C x H x W
+        masks_proba: torch.Tensor = self.model(
+            images_input
+        )  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -360,7 +379,7 @@ class UnetLightning(L.LightningModule):
             )
 
     @override
-    def configure_optimizers(self):
+    def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
 
     def on_exception(self, exception: BaseException):
@@ -413,6 +432,7 @@ class CineDataModule(L.LightningDataModule):
         transforms_img = Compose(
             [
                 v2.ToImage(),
+                v2.Resize(224, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
@@ -420,10 +440,11 @@ class CineDataModule(L.LightningDataModule):
         transforms_mask = Compose(
             [
                 v2.ToImage(),
+                v2.Resize(224, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
             ]
         )
-        trainval_dataset = CineDataset(
+        trainval_dataset = TwoPlusOneDataset(
             trainval_img_dir,
             trainval_mask_dir,
             indices_dir,
@@ -448,7 +469,7 @@ class CineDataModule(L.LightningDataModule):
         test_img_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
         test_mask_dir = os.path.join(os.getcwd(), self.test_dir, "masks")
 
-        test_dataset = CineDataset(
+        test_dataset = TwoPlusOneDataset(
             test_img_dir,
             test_mask_dir,
             indices_dir,
@@ -499,10 +520,13 @@ class CineDataModule(L.LightningDataModule):
 
 class TwoPlusOneCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
-        if (config := self.config.get(self.subcommand)) is not None:
-            if (version := config.get("version")) is not None:
-                name = utils.get_last_checkpoint_filename(version)
-                ModelCheckpoint.CHECKPOINT_NAME_LAST = name
+        if (subcommand := getattr(self, "subcommand")) is not None:
+            if (config := self.config.get(subcommand)) is not None:
+                if (version := config.get("version")) is not None:
+                    name = utils.get_last_checkpoint_filename(version)
+                    ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]
+                        name
+                    )
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         parser.add_optimizer_args(AdamW)
