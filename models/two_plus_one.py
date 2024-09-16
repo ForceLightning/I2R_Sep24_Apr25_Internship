@@ -61,6 +61,17 @@ class OneD(nn.Module):
                     ),
                     nn.ReLU(),
                 )
+            case 25:
+                self.one = nn.Sequential(
+                    nn.Conv1d(
+                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
+                    ),
+                    nn.ReLU(),
+                    nn.Conv1d(
+                        out_channels, out_channels, kernel_size=5, stride=5, padding=0
+                    ),
+                    nn.ReLU(),
+                )
             case 30:
                 self.one = nn.Sequential(
                     nn.Conv1d(
@@ -98,47 +109,20 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     Return:
         torch.Tensor: 4D tensor of shape (batch_size, num_channels, n, n).
     """
-    # -- (1) Swap axes. Output shape: (batch size, n * n, num_frames, num_channels) --
-    _num_frames, batch_size, num_channels, _n1, _n2 = stacked_outputs.shape
-    reshaped_output0 = stacked_outputs.permute(1, 3, 4, 0, 2).flatten(1, 2)
+    # Input shape: (B, F, C, H, W).
+    b, f, c, h, w = stacked_outputs.shape
+    # Reshape to: (B, H, W, C, F).
+    inputs = stacked_outputs.permute(0, 3, 4, 2, 1).contiguous()
+    # Inputs to a Conv1D must be of shape (N, C_in, L_in).
+    inputs = inputs.view(b * h * w * c, 1, f)
+    # Outputs are of shape (B * H * W * C, C_out)
+    out = block(inputs)
+    # Take the mean over the channel dimension -> (B * H * W * C, 1) and squeeze
+    out = out.mean(dim=1).squeeze(dim=1)
+    # Return outputs to shape (B, H, W, C) -> (B, C, H, W)
+    final_out = out.view(b, h, w, c).permute(0, 3, 1, 2)
 
-    # -- (2) Reorder channels so that the first num_frames channels are the first
-    # channel from the num_frames. --
-    n_n = reshaped_output0.shape[1]
-    reordered_output = (
-        reshaped_output0.permute(0, 1, 3, 2).contiguous().view(batch_size, n_n, -1)
-    )
-
-    # -- (3) Flatten with an output shape of (batch_size, 1, n * n * num_channels *
-    # num_frames) --
-    flattened_output = reordered_output.flatten(1, 2).unsqueeze(1)
-
-    # -- (4) Apply the 1d temporal conv block. Output shape is (batch_size, n * n,
-    # n * n * num_channels) --
-    compressed_image: torch.Tensor = block(flattened_output)
-
-    # -- (5) Average layers --
-    channel_dim = 1
-    averaged_img = compressed_image.mean(dim=channel_dim).squeeze(channel_dim)
-
-    # -- (6) Reshape the input shape of (batch_size, 1, n * n * num_channels) to
-    # (batch_size, num_channels, n, n) --
-    n = stacked_outputs.shape[-1]
-    num_channels = stacked_outputs.shape[-3]
-
-    # -- (6.1) Reshape (batch_size, 1, n * n * num_channels) to (batch_size,
-    # num_channels, n, n) using unflatten. --
-    final_output = averaged_img.unflatten(-1, (n * n, num_channels))
-
-    # -- (6.2) Reshape (batch_size, n * n, num_channels) to (batch_size, n, n,
-    # num_channels) using unflatten. --
-    final_output = final_output.unflatten(1, (n, n))
-
-    # -- (6.3) Reshape (batch_size, n, n, channels) to (batch_size, channels, n, n)
-    # using permute.
-    final_output = final_output.permute(0, 3, 1, 2)
-
-    return final_output
+    return final_out
 
 
 class CustomSegmentationModel(SegmentationModel):
