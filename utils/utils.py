@@ -5,6 +5,7 @@ from typing import Sequence
 
 import lightning as L
 import torch
+from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from torch.nn import functional as F
 from torch.optim._multi_tensor import Adam, AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
@@ -250,23 +251,37 @@ def shared_metric_calculation(
     # Calculate the weighted average of the metrics.
     weighted_avg = metric[1:] @ class_distribution[1:]
     module.log(
-        f"{prefix}_dice_(weighted_avg)",
+        f"{prefix}/dice_(weighted_avg)",
         weighted_avg.item(),
         batch_size=bs,
         on_epoch=True,
     )
 
     module.log(
-        f"{prefix}_dice_(macro_avg)",
+        f"{prefix}/dice_(macro_avg)",
         metric.mean().item(),
         batch_size=bs,
     )
+
+    if isinstance(module.logger, TensorBoardLogger):
+        module.log(
+            f"hp/{prefix}/dice_(weighted_avg)",
+            weighted_avg.item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
+
+        module.log(
+            f"hp/{prefix}/dice_(macro_avg)",
+            metric.mean().item(),
+            batch_size=bs,
+        )
 
     for i, class_metric in enumerate(metric.detach().cpu()):
         if i == 0:  # NOTE: Skips background class.
             continue
         module.log(
-            f"{prefix}_dice_class_{i}",
+            f"{prefix}/dice_class_{i}",
             class_metric.item(),
             batch_size=bs,
         )

@@ -181,6 +181,17 @@ class LightningUnetWrapper(L.LightningModule):
 
         self.loading_mode = loading_mode
 
+    def on_train_start(self):
+        if isinstance(self.logger, TensorBoardLogger):
+            self.logger.log_hyperparams(
+                self.hparams,
+                {
+                    "hp/valid_loss": 0,
+                    "hp/valid/dice_(weighted_avg)": 0,
+                    "hp/valid/dice_(macro_avg)": 0,
+                },
+            )
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
 
@@ -213,11 +224,17 @@ class LightningUnetWrapper(L.LightningModule):
 
         loss_all = loss_seg
         self.log(
-            f"train_loss",
+            f"loss/train",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
+        )
+        self.log(
+            f"loss/train/{self.loss.__class__.__name__.lower()}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
@@ -362,14 +379,20 @@ class LightningUnetWrapper(L.LightningModule):
         loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
         self.log(
-            f"{prefix}_loss",
+            f"loss/{prefix}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
         )
         self.log(
-            f"hp_metric",
+            f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
+        self.log(
+            f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
@@ -602,11 +625,11 @@ class CineCLI(LightningCLI):
                 "model.encoder_weights": "imagenet",
                 "model.in_channels": 90,
                 "model.classes": 4,
-                "model_checkpoint.monitor": "val_loss",
+                "model_checkpoint.monitor": "loss/val",
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
-                "model_checkpoint_dice_weighted.monitor": "val_dice_(weighted_avg)",
+                "model_checkpoint_dice_weighted.monitor": "val/dice_(weighted_avg)",
                 "model_checkpoint_dice_weighted.save_top_k": 1,
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,
@@ -614,6 +637,7 @@ class CineCLI(LightningCLI):
                 "tensorboard.save_dir": os.path.join(
                     os.getcwd(), "checkpoints/cine-baseline/lightning_logs"
                 ),
+                "tensorboard.default_hp_metric": False,
             }
         )
 

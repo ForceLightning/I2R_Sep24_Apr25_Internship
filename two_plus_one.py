@@ -37,6 +37,7 @@ from utils.utils import (
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
 
+
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -200,6 +201,17 @@ class UnetLightning(L.LightningModule):
                 except RuntimeError as e:
                     raise e
 
+    def on_train_start(self):
+        if isinstance(self.logger, TensorBoardLogger):
+            self.logger.log_hyperparams(
+                self.hparams,
+                {
+                    "hp/valid_loss": 0,
+                    "hp/valid/dice_(weighted_avg)": 0,
+                    "hp/valid/dice_(macro_avg)": 0,
+                },
+            )
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
 
@@ -231,7 +243,7 @@ class UnetLightning(L.LightningModule):
         else:
             loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
-        self.log(f"train_loss", loss_all.item(), batch_size=bs, on_epoch=True)
+        self.log(f"loss/train", loss_all.item(), batch_size=bs, on_epoch=True)
 
         if isinstance(self.metric, GeneralizedDiceScore):
             masks_preds, masks_one_hot = utils.shared_metric_calculation(
@@ -380,14 +392,20 @@ class UnetLightning(L.LightningModule):
 
         loss_all = loss_seg
         self.log(
-            f"{prefix}_loss",
+            f"loss/{prefix}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
         )
         self.log(
-            f"hp_metric",
+            f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
+        self.log(
+            f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
@@ -639,11 +657,11 @@ class TwoPlusOneCLI(LightningCLI):
                 "model.encoder_weights": "imagenet",
                 "model.in_channels": 3,
                 "model.classes": 4,
-                "model_checkpoint.monitor": "val_loss",
+                "model_checkpoint.monitor": "loss/val",
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
-                "model_checkpoint_dice_weighted.monitor": "val_dice_(weighted_avg)",
+                "model_checkpoint_dice_weighted.monitor": "val/dice_(weighted_avg)",
                 "model_checkpoint_dice_weighted.save_top_k": 1,
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,
@@ -652,6 +670,7 @@ class TwoPlusOneCLI(LightningCLI):
                     os.getcwd(), "checkpoints/two-plus-one/lightning_logs"
                 ),
                 "tensorboard.log_graph": False,
+                "tensorboard.default_hp_metric": False,
             }
         )
 

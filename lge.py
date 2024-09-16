@@ -174,6 +174,9 @@ class LGECLI(LightningCLI):
         parser.add_optimizer_args(AdamW)
         parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
+        parser.add_lightning_class_args(
+            ModelCheckpoint, "model_checkpoint_dice_weighted"
+        )
         parser.add_class_arguments(TensorBoardLogger, "tensorboard")
         parser.add_argument("--version", type=Union[str, None], default=None)
         parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
@@ -183,6 +186,11 @@ class LGECLI(LightningCLI):
             "version",
             "model_checkpoint.filename",
             compute_fn=utils.get_checkpoint_filename,
+        )
+        parser.link_arguments(
+            "version",
+            "model_checkpoint_dice_weighted.filename",
+            compute_fn=utils.get_best_weighted_avg_dice_filename,
         )
         parser.link_arguments("version", "tensorboard.name")
 
@@ -226,16 +234,19 @@ class LGECLI(LightningCLI):
                 "model.encoder_weights": "imagenet",
                 "model.in_channels": 3,  # 1 image, RGB channels.
                 "model.classes": 4,
-                "model_checkpoint.monitor": "val_loss",
-                "model_checkpoint.dirpath": os.path.join(
-                    os.getcwd(), "checkpoints/lge-baseline/"
-                ),
+                "model_checkpoint.monitor": "loss/val",
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
+                "model_checkpoint_dice_weighted.monitor": "val/dice_(weighted_avg)",
+                "model_checkpoint_dice_weighted.save_top_k": 1,
+                "model_checkpoint_dice_weighted.save_weights_only": True,
+                "model_checkpoint_dice_weighted.save_last": False,
+                "model_checkpoint_dice_weighted.mode": "max",
                 "tensorboard.save_dir": os.path.join(
                     os.getcwd(), "checkpoints/lge-baseline/lightning_logs"
                 ),
+                "tensorboard.default_hp_metric": False,
             }
         )
 
