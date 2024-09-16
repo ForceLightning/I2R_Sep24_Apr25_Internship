@@ -21,7 +21,7 @@ from cine import LightningUnetWrapper
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
-from utils.utils import ClassificationMode
+from utils.utils import ClassificationMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -38,7 +38,19 @@ class LGEBaselineDataModule(L.LightningDataModule):
         batch_size: int = BATCH_SIZE_TRAIN,
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ):
+        """LGE MRI image data module.
+
+        Args:
+            data_dir: Path to the training and validation data.
+            test_dir: Path to the test data.
+            indices_dir: Path to the indices directory.
+            batch_size: Batch size for training.
+            classification_mode: Classification mode.
+            num_workers: Number of workers for data loading.
+            loading_mode: Image loading mode for the dataset.
+        """
 
         super().__init__()
         self.save_hyperparameters()
@@ -48,6 +60,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.classification_mode = classification_mode
         self.num_workers = num_workers
+        self.loading_mode = loading_mode
 
     @override
     def setup(self, stage):
@@ -55,14 +68,19 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "LGE")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
-        transforms_img = Compose(
+        _transforms_img_seq = [
+            v2.ToImage(),
+            v2.Resize(224, antialias=True),
+            v2.ToDtype(torch.float32, scale=True),
+        ]
+        _transforms_img_seq += (
             [
-                v2.ToImage(),
-                v2.Resize(224, antialias=True),
-                v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
+            if self.loading_mode == LoadingMode.RGB
+            else [v2.Normalize(mean=[0.449], std=[0.226])]
         )
+        transforms_img = Compose(_transforms_img_seq)
         transforms_mask = Compose(
             [
                 v2.ToImage(),
@@ -77,6 +95,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             transform_1=transforms_img,
             transform_2=transforms_mask,
             classification_mode=self.classification_mode,
+            loading_mode=self.loading_mode,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -101,6 +120,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             transform_2=transforms_mask,
             mode="test",
             classification_mode=self.classification_mode,
+            loading_mode=self.loading_mode,
         )
 
         self.train = train_set
@@ -185,8 +205,20 @@ class LGECLI(LightningCLI):
             compute_fn=utils.get_classification_mode,
         )
 
+        # Sets the image color loading mode
+        parser.add_argument("--image_loading_mode", type=Union[str, None], default=None)
+        parser.link_arguments(
+            "image_loading_mode", "data.loading_mode", compute_fn=utils.get_loading_mode
+        )
+        parser.link_arguments(
+            "image_loading_mode",
+            "model.loading_mode",
+            compute_fn=utils.get_loading_mode,
+        )
+
         parser.set_defaults(
             {
+                "image_loading_mode": "RGB",
                 "dl_classification_mode": "MULTICLASS_MODE",
                 "eval_classification_mode": "MULTILABEL_MODE",
                 "trainer.max_epochs": 50,

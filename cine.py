@@ -30,7 +30,7 @@ from dataset.dataset import CineDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
-from utils.utils import ClassificationMode, InverseNormalize
+from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 4  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -58,6 +58,7 @@ class LightningUnetWrapper(L.LightningModule):
         learning_rate: float = 1e-4,
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTILABEL_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ):
         """Wrapper for the UNet model.
 
@@ -80,6 +81,7 @@ class LightningUnetWrapper(L.LightningModule):
             learning_rate: Learning rate for the optimizer.
             dl_classification_mode: Classification mode for the dataloader.
             eval_classification_mode: Classification mode for evaluation.
+            loading_mode: Image loading mode.
         """
         super().__init__()
         self.save_hyperparameters(ignore=["loss"])
@@ -140,8 +142,16 @@ class LightningUnetWrapper(L.LightningModule):
         self.multiplier = multiplier
         self.total_epochs = total_epochs
         self.alpha = alpha
-        self.de_transform = Compose(
-            [InverseNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
+        self.de_transform = (
+            Compose(
+                [
+                    InverseNormalize(
+                        mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+                    )
+                ]
+            )
+            if loading_mode == LoadingMode.RGB
+            else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
         self.example_input_array = torch.randn(
             (2, in_channels, 224, 224), dtype=torch.float32
@@ -168,6 +178,8 @@ class LightningUnetWrapper(L.LightningModule):
                     )
                 except RuntimeError as e:
                     raise e
+
+        self.loading_mode = loading_mode
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
@@ -213,9 +225,15 @@ class LightningUnetWrapper(L.LightningModule):
                 self, images, masks, masks_proba, "train"
             )
 
-            self._shared_image_logging(
-                batch_idx, images, masks_one_hot, masks_preds, "train", 25
-            )
+            if isinstance(self.logger, TensorBoardLogger):
+                self._shared_image_logging(
+                    batch_idx,
+                    images.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
+                    masks_preds.detach().cpu(),
+                    "train",
+                    25,
+                )
         return loss_all
 
     def validation_step(
@@ -228,11 +246,12 @@ class LightningUnetWrapper(L.LightningModule):
     ) -> None:
         self._shared_eval(batch, batch_idx, "test")
 
+    @torch.no_grad()
     def _shared_image_logging(
         self,
         batch_idx: int,
         images: torch.Tensor,
-        masks: torch.Tensor,
+        masks_one_hot: torch.Tensor,
         masks_preds: torch.Tensor,
         prefix: str,
         every_interval: int = 10,
@@ -242,7 +261,7 @@ class LightningUnetWrapper(L.LightningModule):
         Args:
             batch_idx: Index of the batch.
             images: Images to log.
-            masks: Ground truth masks.
+            masks_one_hot: Ground truth masks.
             masks_preds: Predicted masks.
             prefix: Prefix for the logger.
             every_interval: Interval to log images
@@ -263,7 +282,14 @@ class LightningUnetWrapper(L.LightningModule):
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
-            inv_norm_img = self.de_transform(images[:, :3, :, :]).detach().cpu()
+
+            # NOTE: This will adapt based on the color mode of the images
+            if self.loading_mode == LoadingMode.RGB:
+                inv_norm_img = self.de_transform(images[:, :3, :, :]).detach().cpu()
+            else:
+                image = images[:, 0, :, :].repeat(1, 3, 1, 1).detach().cpu()
+                inv_norm_img = self.de_transform(image).detach().cpu()
+
             pred_images_with_masks = [
                 draw_segmentation_masks(
                     img,
@@ -294,7 +320,7 @@ class LightningUnetWrapper(L.LightningModule):
                 # Get only the first frame of images.
                 for img, mask in zip(
                     inv_norm_img[:, 0:3, :, :].detach().cpu(),
-                    masks.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
                 )
             ]
             tensorboard_logger.add_images(
@@ -305,6 +331,7 @@ class LightningUnetWrapper(L.LightningModule):
                 global_step=batch_idx if prefix == "test" else self.global_step,
             )
 
+    @torch.no_grad()
     def _shared_eval(
         self,
         batch: tuple[torch.Tensor, torch.Tensor, str],
@@ -353,9 +380,15 @@ class LightningUnetWrapper(L.LightningModule):
                 self, images, masks, masks_proba, prefix
             )
 
-            self._shared_image_logging(
-                batch_idx, images, masks_one_hot, masks_preds, prefix, 10
-            )
+            if isinstance(self.logger, TensorBoardLogger):
+                self._shared_image_logging(
+                    batch_idx,
+                    images.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
+                    masks_preds.detach().cpu(),
+                    prefix,
+                    10,
+                )
 
     @override
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -371,6 +404,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         batch_size: int = BATCH_SIZE_TRAIN,
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ):
         """DataModule for the Cine baseline implementation.
 
@@ -381,6 +415,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             batch_size: Batch size for the data loader.
             classification_mode: Classification mode for the data loader.
             num_workers: Number of workers for the data loader.
+            loading_mode: Determines the cv2.imread flags for the images.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -390,6 +425,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.classification_mode = classification_mode
         self.num_workers = num_workers
+        self.loading_mode = loading_mode
 
     @override
     def setup(self, stage):
@@ -397,14 +433,21 @@ class CineBaselineDataModule(L.LightningDataModule):
 
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
-        transforms_img = Compose(
+
+        _transforms_img_seq = [
+            v2.ToImage(),
+            v2.Resize(224, antialias=True),
+            v2.ToDtype(torch.float32, scale=True),
+        ]
+        _transforms_img_seq += (
             [
-                v2.ToImage(),
-                v2.Resize(224, antialias=True),
-                v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
+            if self.loading_mode == LoadingMode.RGB
+            else [v2.Normalize(mean=[0.449], std=[0.226])]
         )
+        transforms_img = Compose(_transforms_img_seq)
+
         transforms_mask = Compose(
             [
                 v2.ToImage(),
@@ -412,6 +455,7 @@ class CineBaselineDataModule(L.LightningDataModule):
                 v2.ToDtype(torch.float32, scale=True),
             ]
         )
+
         trainval_dataset = CineDataset(
             trainval_img_dir,
             trainval_mask_dir,
@@ -419,6 +463,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             transform_1=transforms_img,
             transform_2=transforms_mask,
             classification_mode=self.classification_mode,
+            loading_mode=self.loading_mode,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -443,6 +488,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             transform_2=transforms_mask,
             mode="test",
             classification_mode=self.classification_mode,
+            loading_mode=self.loading_mode,
         )
 
         self.train = train_set
@@ -516,6 +562,17 @@ class CineCLI(LightningCLI):
         )
         parser.link_arguments("version", "tensorboard.name")
 
+        # Sets the image color loading mode
+        parser.add_argument("--image_loading_mode", type=Union[str, None], default=None)
+        parser.link_arguments(
+            "image_loading_mode", "data.loading_mode", compute_fn=utils.get_loading_mode
+        )
+        parser.link_arguments(
+            "image_loading_mode",
+            "model.loading_mode",
+            compute_fn=utils.get_loading_mode,
+        )
+
         # Adds the classification mode argument
         parser.add_argument("--dl_classification_mode", type=str)
         parser.add_argument("--eval_classification_mode", type=str)
@@ -537,6 +594,7 @@ class CineCLI(LightningCLI):
 
         parser.set_defaults(
             {
+                "image_loading_mode": "RGB",
                 "dl_classification_mode": "MULTICLASS_MODE",
                 "eval_classification_mode": "MULTILABEL_MODE",
                 "trainer.max_epochs": 50,

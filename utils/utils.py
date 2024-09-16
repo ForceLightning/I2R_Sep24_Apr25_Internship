@@ -76,11 +76,6 @@ class ClassificationMode(Enum):
     MULTILABEL_MODE = auto()
 
 
-class LoadingMode(Enum):
-    RGB = auto()
-    GREYSCALE = auto()
-
-
 def get_classification_mode(mode: str) -> ClassificationMode:
     """Gets the classification mode from a string input.
 
@@ -91,6 +86,29 @@ def get_classification_mode(mode: str) -> ClassificationMode:
         KeyError: If the mode is not an implemented mode.
     """
     return ClassificationMode[mode]
+
+
+class LoadingMode(Enum):
+    """Determines the image loading mode for the dataset.
+
+    RGB: The images are loaded in RGB mode.
+    GREYSCALE: The images are loaded in greyscale mode.
+    """
+
+    RGB = auto()
+    GREYSCALE = auto()
+
+
+def get_loading_mode(mode: str) -> LoadingMode:
+    """Gets the classification mode from a string input.
+
+    Args:
+        mode: The classification mode
+
+    Raises:
+        KeyError: If the mode is not an implemented mode.
+    """
+    return LoadingMode[mode]
 
 
 def get_checkpoint_filename(version: str | None) -> str | None:

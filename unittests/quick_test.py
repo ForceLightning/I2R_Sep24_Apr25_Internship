@@ -14,8 +14,8 @@ from cine import CineBaselineDataModule, CineCLI
 from cine import LightningUnetWrapper as UnmodifiedUnet
 from dataset.dataset import TwoPlusOneDataset
 from lge import LGECLI, LGEBaselineDataModule
-from two_plus_one import CineDataModule as TwoPlusOneDataModule
 from two_plus_one import TwoPlusOneCLI
+from two_plus_one import TwoPlusOneDataModule as TwoPlusOneDataModule
 from two_plus_one import UnetLightning as TwoPlusOneUnet
 from utils.utils import ClassificationMode
 
@@ -31,6 +31,8 @@ class TestTwoPlusOneCLI(unittest.TestCase):
     default_test_args = ["test", "--version=unittest", "--data.num_workers=0"]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
+    default_colour_mode = ["--image_loading_mode=RGB"]
+    greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=1"]
     fast_dev_run_args = ["--trainer.fast_dev_run=1"]
     filename = "two_plus_one.py"
 
@@ -81,6 +83,33 @@ class TestTwoPlusOneCLI(unittest.TestCase):
         args = self.default_test_args + self.default_frames + self.fast_dev_run_args
         self._run_with_args(args)
 
+    def test_quick_resnet_rgb(self):
+        """
+        Tests whether the ResNet50 (2+1) can train on a single batch with RGB images.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + self.default_frames
+            + self.default_colour_mode
+            + self.fast_dev_run_args
+        )
+        self._run_with_args(args)
+
+    def test_quick_resnet_greyscale(self):
+        """
+        Tests whether the ResNet50 (2+1) can train on a single batch with greyscale
+        images.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + self.default_frames
+            + self.greyscale_colour_mode
+            + self.fast_dev_run_args
+        )
+        self._run_with_args(args)
+
 
 class TestCineCLI(unittest.TestCase):
     default_train_args = [
@@ -93,6 +122,8 @@ class TestCineCLI(unittest.TestCase):
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     fast_dev_run_args = ["--trainer.fast_dev_run=1"]
+    default_colour_mode = ["--image_loading_mode=RGB"]
+    greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=30"]
     filename = "cine.py"
 
     def _run_with_args(self, args: list[str]):
@@ -136,6 +167,31 @@ class TestCineCLI(unittest.TestCase):
         args = self.default_test_args + self.fast_dev_run_args
         self._run_with_args(args)
 
+    def test_quick_resnet_rgb(self):
+        """
+        Tests whether the ResNet50 (Cine) can train on a single batch with RGB images.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + self.default_colour_mode
+            + self.fast_dev_run_args
+        )
+        self._run_with_args(args)
+
+    def test_quick_resnet_greyscale(self):
+        """
+        Tests whether the ResNet50 (Cine) can train on a single batch with greyscale
+        images.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + self.greyscale_colour_mode
+            + self.fast_dev_run_args
+        )
+        self._run_with_args(args)
+
 
 class TestLGECLI(unittest.TestCase):
     default_train_args = [
@@ -147,6 +203,8 @@ class TestLGECLI(unittest.TestCase):
     default_test_args = ["test", "--version=unittest", "--data.num_workers=0"]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
+    default_colour_mode = ["--image_loading_mode=RGB"]
+    greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=1"]
     fast_dev_run_args = ["--trainer.fast_dev_run=1"]
     filename = "lge.py"
 
@@ -189,6 +247,31 @@ class TestLGECLI(unittest.TestCase):
         Tests whether the SENet154 (LGE) can validate on a single batch.
         """
         args = self.default_test_args + self.fast_dev_run_args
+        self._run_with_args(args)
+
+    def test_quick_resnet_rgb(self):
+        """
+        Tests whether the ResNet50 (LGE) can train on a single batch with RGB images.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + self.default_colour_mode
+            + self.fast_dev_run_args
+        )
+        self._run_with_args(args)
+
+    def test_quick_resnet_greyscale(self):
+        """
+        Tests whether the ResNet50 (LGE) can train on a single batch with greyscale
+        images.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + self.greyscale_colour_mode
+            + self.fast_dev_run_args
+        )
         self._run_with_args(args)
 
 

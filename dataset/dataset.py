@@ -103,9 +103,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         assert img_name.endswith(".png"), "Image not in .PNG format"
 
         img = cv2.imread(os.path.join(self.img_dir, img_name), flags=self._imread_mode)
-        mask = cv2.imread(
-            os.path.join(self.mask_dir, mask_name), flags=self._imread_mode
-        )
+        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
 
         lab_img = img / [255.0]
         lab_mask = mask / [1.0]
@@ -219,6 +217,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             select_frame_method="consecutive",
             img_list=img_list,
             transform=self.transform_1,
+            loading_mode=self.loading_mode,
         )
 
         f, c, h, w = combined_imgs.shape
@@ -306,6 +305,7 @@ class TwoPlusOneDataset(CineDataset):
             batch_size,
             mode,
             classification_mode,
+            loading_mode=loading_mode,
         )
         self.frames = frames
         self.select_frame_method: Literal["consecutive", "specific"] = (
@@ -326,7 +326,11 @@ class TwoPlusOneDataset(CineDataset):
 
         # Concatenate the images based on specific indices (subject to change).
         combined_imgs = concatenate_imgs(
-            self.frames, self.select_frame_method, img_list, self.transform_1
+            self.frames,
+            self.select_frame_method,
+            img_list,
+            self.transform_1,
+            self.loading_mode,
         )
 
         # Perform necessary operations on the mask
@@ -457,9 +461,8 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
             raise ValueError("Invalid image type for file: {lge_name}")
 
         # PERF: See if these can be turned into PIL operations (to maintain RGB)
-
         lge = cv2.imread(os.path.join(self.lge_dir, lge_name), self._imread_mode)
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name), self._imread_mode)
+        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
         _, cine_list = cv2.imreadmulti(
             os.path.join(self.cine_dir, cine_name), flags=self._imread_mode
         )
@@ -470,6 +473,7 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
             select_frame_method="consecutive",
             img_list=cine_list,
             transform=self.transform_1,
+            loading_mode=self.loading_mode,
         )
 
         # Perform transformations on mask
@@ -513,8 +517,12 @@ def concat(
     img_list: Sequence[cvt.MatLike],
     indices: Sequence[int] | None,
     transform: Compose,
+    loading_mode: LoadingMode,
 ) -> torch.Tensor:
     in_stack = np.stack(img_list, axis=0)
+    if loading_mode == LoadingMode.GREYSCALE:
+        in_stack = np.expand_dims(in_stack, -1)
+
     out_images = in_stack / [255.0]
     out_images = out_images.transpose(0, 3, 1, 2)  # F x C x H x W
 
@@ -532,6 +540,7 @@ def concatenate_imgs(
     select_frame_method: Literal["consecutive", "specific"],
     img_list: Sequence[cvt.MatLike],
     transform: Compose,
+    loading_mode: LoadingMode,
 ) -> torch.Tensor:
     """Concatenates the images based on the number of frames and the method of
     selecting frames.
@@ -579,16 +588,16 @@ def concatenate_imgs(
 
     if frames == 30:
         indices = range(0, 30)
-        return concat(img_list, indices, transform)
+        return concat(img_list, indices, transform, loading_mode)
 
     elif frames < 30 and frames > 0:
         if select_frame_method == "consecutive":
             indices = range(0, frames)
-            return concat(img_list, indices, transform)
+            return concat(img_list, indices, transform, loading_mode)
         elif select_frame_method == "specific":
             if frames in chosen_frames_dict:
                 indices = chosen_frames_dict[frames]
-                return concat(img_list, indices, transform)
+                return concat(img_list, indices, transform, loading_mode)
             else:
                 raise ValueError(
                     "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"

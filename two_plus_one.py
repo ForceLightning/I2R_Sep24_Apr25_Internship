@@ -32,9 +32,11 @@ from utils.utils import (
     ClassificationMode,
     InverseNormalize,
     LightningGradualWarmupScheduler,
+    LoadingMode,
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
+
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -63,6 +65,7 @@ class UnetLightning(L.LightningModule):
         learning_rate: float = 1e-4,
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ):
         """A LightningModule wrapper for the modified Unet for the two-plus-one
         architecture.
@@ -87,7 +90,8 @@ class UnetLightning(L.LightningModule):
             _beta: The beta value for the loss function (Unused).
             learning_rate: The learning rate.
             dl_classification_mode: The classification mode for the dataloader.
-            eval_classification_mode: The classification mode for evaluation.
+            eval_classifiation_mode: The classification mode for evaluation.
+            loading_mode: Image loading mode.
 
         Raises:
             NotImplementedError: If the loss type is not implemented.
@@ -110,6 +114,7 @@ class UnetLightning(L.LightningModule):
         self.optimizer_kwargs = optimizer_kwargs
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
+        self.loading_mode = loading_mode
 
         # Sets loss if it's a string
         if isinstance(loss, str):
@@ -157,11 +162,19 @@ class UnetLightning(L.LightningModule):
         self.multiplier = multiplier
         self.total_epochs = total_epochs
         self.alpha = alpha
-        self.de_transform = Compose(
-            [InverseNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
+        self.de_transform = (
+            Compose(
+                [
+                    InverseNormalize(
+                        mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+                    )
+                ]
+            )
+            if loading_mode == LoadingMode.RGB
+            else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
         self.example_input_array = torch.randn(
-            (self.num_frames, 2, 3, 224, 224), dtype=torch.float32
+            (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
         ).to(DEVICE)
 
         self.learning_rate = learning_rate
@@ -195,8 +208,7 @@ class UnetLightning(L.LightningModule):
     ) -> torch.Tensor:
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.permute(1, 0, 2, 3, 4)
-        images_input = images_input.to(DEVICE, dtype=torch.float32)
+        images_input = images.to(DEVICE, dtype=torch.float32)
         masks = masks.to(DEVICE).long()
 
         with torch.autocast(device_type=self.device.type):
@@ -226,9 +238,15 @@ class UnetLightning(L.LightningModule):
                 self, images, masks, masks_proba, "train"
             )
 
-            self._shared_image_logging(
-                batch_idx, images, masks_one_hot, masks_preds, "train", 25
-            )
+            if isinstance(self.logger, TensorBoardLogger):
+                self._shared_image_logging(
+                    batch_idx,
+                    images.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
+                    masks_preds.detach().cpu(),
+                    "train",
+                    25,
+                )
             self.train()
 
         return loss_all
@@ -246,7 +264,7 @@ class UnetLightning(L.LightningModule):
         self,
         batch_idx: int,
         images: torch.Tensor,
-        masks: torch.Tensor,
+        masks_one_hot: torch.Tensor,
         masks_preds: torch.Tensor,
         prefix: str,
         every_interval: int = 10,
@@ -256,7 +274,7 @@ class UnetLightning(L.LightningModule):
         Args:
             batch_idx: The batch index.
             images: The input images.
-            masks: The ground truth masks.
+            masks_one_hot: The ground truth masks.
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
@@ -277,7 +295,14 @@ class UnetLightning(L.LightningModule):
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
-            inv_norm_img = self.de_transform(images).detach().cpu()
+
+            # NOTE: This will adapt based on the color mode of the images
+            if self.loading_mode == LoadingMode.RGB:
+                inv_norm_img = self.de_transform(images).detach().cpu()
+            else:
+                image = images[:, :, 0, :, :].repeat(1, 1, 3, 1, 1).detach().cpu()
+                inv_norm_img = self.de_transform(image).detach().cpu()
+
             pred_images_with_masks = [
                 draw_segmentation_masks(
                     img,
@@ -308,7 +333,7 @@ class UnetLightning(L.LightningModule):
                 # Get only the first frame of images.
                 for img, mask in zip(
                     inv_norm_img[:, 0, :, :, :].detach().cpu(),
-                    masks.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
                 )
             ]
             tensorboard_logger.add_images(
@@ -333,8 +358,7 @@ class UnetLightning(L.LightningModule):
         self.eval()
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.permute(1, 0, 2, 3, 4)
-        images_input = images_input.to(DEVICE, dtype=torch.float32)
+        images_input = images.to(DEVICE, dtype=torch.float32)
         masks = masks.to(DEVICE).long()
         masks_proba: torch.Tensor = self.model(
             images_input
@@ -374,9 +398,15 @@ class UnetLightning(L.LightningModule):
                 self, images, masks, masks_proba, prefix
             )
 
-            self._shared_image_logging(
-                batch_idx, images, masks_one_hot, masks_preds, prefix, 10
-            )
+            if isinstance(self.logger, TensorBoardLogger):
+                self._shared_image_logging(
+                    batch_idx,
+                    images.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
+                    masks_preds.detach().cpu(),
+                    prefix,
+                    10,
+                )
 
     @override
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -386,7 +416,7 @@ class UnetLightning(L.LightningModule):
         raise exception
 
 
-class CineDataModule(L.LightningDataModule):
+class TwoPlusOneDataModule(L.LightningDataModule):
     def __init__(
         self,
         data_dir: str = "data/train_val-20240905T025601Z-001/train_val/",
@@ -397,6 +427,7 @@ class CineDataModule(L.LightningDataModule):
         select_frame_method: Literal["consecutive", "specific"] = "specific",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ):
         """Datamodule for the Cine dataset for PyTorch Lightning compatibility.
 
@@ -412,6 +443,7 @@ class CineDataModule(L.LightningDataModule):
             select_frame_method: How frames < 30 are selected for training.
             classification_mode: The classification mode for the dataloader.
             num_workers: The number of workers for the DataLoader.
+            loading_mode: Determines the cv2.imread flags for the images.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -423,20 +455,29 @@ class CineDataModule(L.LightningDataModule):
         self.select_frame_method = select_frame_method
         self.classification_mode = classification_mode
         self.num_workers = num_workers
+        self.loading_mode = loading_mode
 
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
 
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
-        transforms_img = Compose(
+
+        # Handle color v. greyscale transforms.
+        _transforms_img_seq = [
+            v2.ToImage(),
+            v2.Resize(224, antialias=True),
+            v2.ToDtype(torch.float32, scale=True),
+        ]
+        _transforms_img_seq += (
             [
-                v2.ToImage(),
-                v2.Resize(224, antialias=True),
-                v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
+            if self.loading_mode == LoadingMode.RGB
+            else [v2.Normalize(mean=[0.449], std=[0.226])]
         )
+        transforms_img = Compose(_transforms_img_seq)
+
         transforms_mask = Compose(
             [
                 v2.ToImage(),
@@ -444,6 +485,7 @@ class CineDataModule(L.LightningDataModule):
                 v2.ToDtype(torch.float32, scale=True),
             ]
         )
+
         trainval_dataset = TwoPlusOneDataset(
             trainval_img_dir,
             trainval_mask_dir,
@@ -453,6 +495,7 @@ class CineDataModule(L.LightningDataModule):
             transform_1=transforms_img,
             transform_2=transforms_mask,
             classification_mode=self.classification_mode,
+            loading_mode=self.loading_mode,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -479,6 +522,7 @@ class CineDataModule(L.LightningDataModule):
             transform_2=transforms_mask,
             mode="test",
             classification_mode=self.classification_mode,
+            loading_mode=self.loading_mode,
         )
 
         self.train = train_set
@@ -574,8 +618,20 @@ class TwoPlusOneCLI(LightningCLI):
             compute_fn=utils.get_classification_mode,
         )
 
+        # Sets the image color loading mode
+        parser.add_argument("--image_loading_mode", type=Union[str, None], default=None)
+        parser.link_arguments(
+            "image_loading_mode", "data.loading_mode", compute_fn=utils.get_loading_mode
+        )
+        parser.link_arguments(
+            "image_loading_mode",
+            "model.loading_mode",
+            compute_fn=utils.get_loading_mode,
+        )
+
         parser.set_defaults(
             {
+                "image_loading_mode": "RGB",
                 "dl_classification_mode": "MULTICLASS_MODE",
                 "eval_classification_mode": "MULTILABEL_MODE",
                 "trainer.max_epochs": 50,
@@ -603,7 +659,7 @@ class TwoPlusOneCLI(LightningCLI):
 if __name__ == "__main__":
     cli = TwoPlusOneCLI(
         UnetLightning,
-        CineDataModule,
+        TwoPlusOneDataModule,
         save_config_callback=None,
         auto_configure_optimizers=False,
     )
