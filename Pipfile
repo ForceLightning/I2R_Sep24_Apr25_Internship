@@ -35,6 +35,7 @@ basedpyright = "*"
 onnx = "*"
 onnxscript = "*"
 seaborn = "*"
+viztracer = "*"
 
 [requires]
 python_version = "3.12"
