@@ -261,6 +261,7 @@ def shared_metric_calculation(
         f"{prefix}/dice_(macro_avg)",
         metric.mean().item(),
         batch_size=bs,
+        on_epoch=True,
     )
 
     if isinstance(module.logger, TensorBoardLogger):
@@ -275,6 +276,7 @@ def shared_metric_calculation(
             f"hp/{prefix}/dice_(macro_avg)",
             metric.mean().item(),
             batch_size=bs,
+            on_epoch=True,
         )
 
     for i, class_metric in enumerate(metric.detach().cpu()):
@@ -284,6 +286,7 @@ def shared_metric_calculation(
             f"{prefix}/dice_class_{i}",
             class_metric.item(),
             batch_size=bs,
+            on_epoch=True,
         )
 
     return masks_preds, masks_one_hot.bool()

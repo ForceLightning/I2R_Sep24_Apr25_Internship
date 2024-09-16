@@ -243,7 +243,15 @@ class UnetLightning(L.LightningModule):
         else:
             loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
-        self.log(f"loss/train", loss_all.item(), batch_size=bs, on_epoch=True)
+        self.log(
+            f"loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
+        )
+        self.log(
+            f"loss/train/{self.loss.__class__.__name__.lower()}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
 
         if isinstance(self.metric, GeneralizedDiceScore):
             masks_preds, masks_one_hot = utils.shared_metric_calculation(
@@ -312,7 +320,13 @@ class UnetLightning(L.LightningModule):
             if self.loading_mode == LoadingMode.RGB:
                 inv_norm_img = self.de_transform(images).detach().cpu()
             else:
-                image = images[:, :, 0, :, :].repeat(1, 1, 3, 1, 1).detach().cpu()
+                image = (
+                    images[:, :, 0, :, :]
+                    .unsqueeze(2)
+                    .repeat(1, 1, 3, 1, 1)
+                    .detach()
+                    .cpu()
+                )
                 inv_norm_img = self.de_transform(image).detach().cpu()
 
             pred_images_with_masks = [
@@ -329,7 +343,7 @@ class UnetLightning(L.LightningModule):
                 )
             ]
             tensorboard_logger.add_images(
-                tag=f"{prefix}_pred_masks_{batch_idx}",
+                tag=f"{prefix}/pred_masks_{batch_idx}",
                 img_tensor=torch.stack(tensors=pred_images_with_masks, dim=0)
                 .detach()
                 .cpu(),
@@ -349,7 +363,7 @@ class UnetLightning(L.LightningModule):
                 )
             ]
             tensorboard_logger.add_images(
-                tag=f"{prefix}_gt_masks_{batch_idx}",
+                tag=f"{prefix}/gt_masks_{batch_idx}",
                 img_tensor=torch.stack(tensors=gt_images_with_masks, dim=0)
                 .detach()
                 .cpu(),
@@ -597,11 +611,9 @@ class TwoPlusOneCLI(LightningCLI):
         parser.add_lightning_class_args(
             ModelCheckpoint, "model_checkpoint_dice_weighted"
         )
-        parser.add_class_arguments(TensorBoardLogger, "tensorboard")
         parser.add_argument(
             "--version", type=Union[str, None], default=None, help="Experiment name"
         )
-        parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
         parser.link_arguments("model.num_frames", "data.frames")
 
         # Sets the checkpoint filename if version is provided.
@@ -615,7 +627,7 @@ class TwoPlusOneCLI(LightningCLI):
             "model_checkpoint_dice_weighted.filename",
             compute_fn=utils.get_best_weighted_avg_dice_filename,
         )
-        parser.link_arguments("version", "tensorboard.name")
+        parser.link_arguments("version", "trainer.logger.init_args.name")
 
         # Adds the classification mode argument
         parser.add_argument("--dl_classification_mode", type=str)
@@ -666,11 +678,6 @@ class TwoPlusOneCLI(LightningCLI):
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,
                 "model_checkpoint_dice_weighted.mode": "max",
-                "tensorboard.save_dir": os.path.join(
-                    os.getcwd(), "checkpoints/two-plus-one/lightning_logs"
-                ),
-                "tensorboard.log_graph": False,
-                "tensorboard.default_hp_metric": False,
             }
         )
 
@@ -679,6 +686,6 @@ if __name__ == "__main__":
     cli = TwoPlusOneCLI(
         UnetLightning,
         TwoPlusOneDataModule,
-        save_config_callback=None,
+        # save_config_callback=None,
         auto_configure_optimizers=False,
     )

@@ -1,0 +1,4 @@
+# lightning.pytorch==2.4.0
+model:
+  in_channels: 90
+image_loading_mode: RGB

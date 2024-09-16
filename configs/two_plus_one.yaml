@@ -1,0 +1,19 @@
+# lightning.pytorch==2.4.0
+trainer:
+  max_epochs: 50
+  check_val_every_n_epoch: 1
+  logger:
+    class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      save_dir: ./checkpoints/two-plus-one/lightning_logs
+model:
+  classes: 4
+  total_epochs: 50
+data:
+  data_dir: data/train_val-20240905T025601Z-001/train_val/
+  test_dir: data/test-20240905T012341Z-001/test/
+  indices_dir: data/indices/
+  select_frame_method: specific
+dl_classification_mode: MULTICLASS_MODE
+eval_classification_mode: MULTILABEL_MODE
+image_loading_mode: RGB

@@ -11,7 +11,6 @@ import lightning as L
 import torch
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
-from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
@@ -177,9 +176,7 @@ class LGECLI(LightningCLI):
         parser.add_lightning_class_args(
             ModelCheckpoint, "model_checkpoint_dice_weighted"
         )
-        parser.add_class_arguments(TensorBoardLogger, "tensorboard")
         parser.add_argument("--version", type=Union[str, None], default=None)
-        parser.link_arguments("tensorboard", "trainer.logger", apply_on="instantiate")
 
         # Sets the checkpoint filename if version is provided.
         parser.link_arguments(
@@ -192,7 +189,7 @@ class LGECLI(LightningCLI):
             "model_checkpoint_dice_weighted.filename",
             compute_fn=utils.get_best_weighted_avg_dice_filename,
         )
-        parser.link_arguments("version", "tensorboard.name")
+        parser.link_arguments("version", "trainer.logger.init_args.name")
 
         # Adds the classification mode argument
         parser.add_argument("--dl_classification_mode", type=str)
@@ -243,10 +240,6 @@ class LGECLI(LightningCLI):
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,
                 "model_checkpoint_dice_weighted.mode": "max",
-                "tensorboard.save_dir": os.path.join(
-                    os.getcwd(), "checkpoints/lge-baseline/lightning_logs"
-                ),
-                "tensorboard.default_hp_metric": False,
             }
         )
 
@@ -255,6 +248,6 @@ if __name__ == "__main__":
     cli = LGECLI(
         LightningUnetWrapper,
         LGEBaselineDataModule,
-        save_config_callback=None,
+        # save_config_callback=None,
         auto_configure_optimizers=False,
     )

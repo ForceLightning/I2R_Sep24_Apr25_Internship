@@ -1,0 +1,10 @@
+# lightning.pytorch==2.4.0
+trainer:
+  accelerator: auto
+  strategy: auto
+  devices: auto
+  num_nodes: 1
+  precision: null
+  logger: false
+model:
+  classes: 4
