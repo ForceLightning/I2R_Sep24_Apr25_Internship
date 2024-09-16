@@ -17,7 +17,7 @@ from lge import LGECLI, LGEBaselineDataModule
 from two_plus_one import CineDataModule as TwoPlusOneDataModule
 from two_plus_one import TwoPlusOneCLI
 from two_plus_one import UnetLightning as TwoPlusOneUnet
-from utils.utils import ClassificationType
+from utils.utils import ClassificationMode
 
 
 class TestTwoPlusOneCLI(unittest.TestCase):
@@ -198,7 +198,7 @@ class TestImageLoading(unittest.TestCase):
     indices_dir: str = "data/indices/"
     frames: int = 10
     select_frame_method = "specific"
-    classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE
+    classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE
     transforms_img = Compose(
         [
             v2.ToImage(),

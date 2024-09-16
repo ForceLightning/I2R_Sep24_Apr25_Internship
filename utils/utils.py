@@ -65,7 +65,7 @@ class LightningGradualWarmupScheduler(LRScheduler):
         return self.scheduler.step(epoch, metrics)
 
 
-class ClassificationType(Enum):
+class ClassificationMode(Enum):
     """The classification mode for the model.
 
     MULTICLASS_MODE: The model is trained to predict a single class for each pixel.
@@ -76,7 +76,12 @@ class ClassificationType(Enum):
     MULTILABEL_MODE = auto()
 
 
-def get_classification_mode(mode: str) -> ClassificationType:
+class LoadingMode(Enum):
+    RGB = auto()
+    GREYSCALE = auto()
+
+
+def get_classification_mode(mode: str) -> ClassificationMode:
     """Gets the classification mode from a string input.
 
     Args:
@@ -85,7 +90,7 @@ def get_classification_mode(mode: str) -> ClassificationType:
     Raises:
         KeyError: If the mode is not an implemented mode.
     """
-    return ClassificationType[mode]
+    return ClassificationMode[mode]
 
 
 def get_checkpoint_filename(version: str | None) -> str | None:
@@ -208,13 +213,13 @@ def shared_metric_calculation(
 
     # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
     # of the combinations of classification modes and sets the metrics correctly.
-    if module.eval_classification_mode == ClassificationType.MULTILABEL_MODE:
+    if module.eval_classification_mode == ClassificationMode.MULTILABEL_MODE:
         masks_preds = masks_proba > 0.5  # BS x C x H x W
-        if module.dl_classification_mode == ClassificationType.MULTICLASS_MODE:
+        if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
             metric = module.metric(masks_preds, masks_one_hot)
         else:
             metric = module.metric(masks_preds, masks)
-    elif module.eval_classification_mode == ClassificationType.MULTICLASS_MODE:
+    elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
         # Output: BS x C x H x W
         masks_preds = masks_proba.argmax(dim=1)
         masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)

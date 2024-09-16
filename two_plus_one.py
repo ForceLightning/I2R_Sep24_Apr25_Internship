@@ -29,7 +29,7 @@ from metrics.dice import GeneralizedDiceScoreVariant
 from models.two_plus_one import Unet
 from utils import utils
 from utils.utils import (
-    ClassificationType,
+    ClassificationMode,
     InverseNormalize,
     LightningGradualWarmupScheduler,
 )
@@ -61,8 +61,8 @@ class UnetLightning(L.LightningModule):
         alpha: float = 1.0,
         _beta: float = 0.0,
         learning_rate: float = 1e-4,
-        dl_classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
-        eval_classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
     ):
         """A LightningModule wrapper for the modified Unet for the two-plus-one
         architecture.
@@ -137,7 +137,7 @@ class UnetLightning(L.LightningModule):
                 if isinstance(loss, nn.Module)
                 else (
                     DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
-                    if dl_classification_mode == ClassificationType.MULTILABEL_MODE
+                    if dl_classification_mode == ClassificationMode.MULTILABEL_MODE
                     else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
                 )
             )
@@ -205,7 +205,7 @@ class UnetLightning(L.LightningModule):
                 images_input
             )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
@@ -340,7 +340,7 @@ class UnetLightning(L.LightningModule):
             images_input
         )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
@@ -395,7 +395,7 @@ class CineDataModule(L.LightningDataModule):
         batch_size: int = BATCH_SIZE_TRAIN,
         frames: int = NUM_FRAMES,
         select_frame_method: Literal["consecutive", "specific"] = "specific",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
     ):
         """Datamodule for the Cine dataset for PyTorch Lightning compatibility.

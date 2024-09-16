@@ -8,13 +8,14 @@ from typing import Literal, Sequence, override
 import cv2
 import numpy as np
 import torch
+from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from cv2 import typing as cvt
 from numpy import typing as npt
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
 from torchvision.transforms import Compose
 
-from utils.utils import ClassificationType
+from utils.utils import ClassificationMode, LoadingMode
 
 SEED_CUS = 1  # RNG seed.
 
@@ -29,7 +30,8 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         transform_2: Compose,
         batch_size: int = 8,
         mode: Literal["train", "val", "test"] = "train",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ) -> None:
         """LGE dataset for the cardiac LGE MRI images.
 
@@ -43,9 +45,12 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             batch_size: The batch size for the dataset.
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
+            loading_mode: Determines the cv2.imread flags for the images.
 
         Raises:
+            NotImplementedError: If the classification mode is not implemented.
             RuntimeError: If the indices fail to load.
+            AssertionError: If the indices are not disjoint.
         """
         super().__init__()
 
@@ -70,6 +75,10 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             )
 
         self.classification_mode = classification_mode
+        self.loading_mode = loading_mode
+        self._imread_mode = (
+            IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
+        )
 
     @override
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
@@ -93,8 +102,10 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         # loaded as RBG.
         assert img_name.endswith(".png"), "Image not in .PNG format"
 
-        img = cv2.imread(os.path.join(self.img_dir, img_name))
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
+        img = cv2.imread(os.path.join(self.img_dir, img_name), flags=self._imread_mode)
+        mask = cv2.imread(
+            os.path.join(self.mask_dir, mask_name), flags=self._imread_mode
+        )
 
         lab_img = img / [255.0]
         lab_mask = mask / [1.0]
@@ -105,7 +116,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         out_img: torch.Tensor = self.transform_1(lab_img)
         out_mask: torch.Tensor
 
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
             # NOTE: This turns the problem into a multilabel segmentation problem.
             # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
             # bitwise or operations to adhere to those conditions.
@@ -121,7 +132,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
 
             out_mask = self.transform_2(lab_mask_one_hot)
-        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
+        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
             out_mask = self.transform_2(lab_mask)
         else:
             raise NotImplementedError(
@@ -143,8 +154,8 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         transform_2: Compose,
         batch_size: int = 4,
         mode: Literal["train", "val", "test"] = "train",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
-        concat_mode: Literal["old", "new"] = "old",
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ) -> None:
         """Dataset for the Cine baseline implementation
 
@@ -157,6 +168,12 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             batch_size: Batch size for the dataset.
             mode: Runtime mode.
             classification_mode: Classification mode for the dataset.
+            loading_mode: Determines the cv2.imread flags for the images.
+
+        Raises:
+            NotImplementedError: If the classification mode is not implemented.
+            RuntimeError: If the indices fail to load.
+            AssertionError: If the indices are not disjoint.
         """
         super().__init__()
 
@@ -175,8 +192,10 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         self.batch_size = batch_size
         self.mode = mode
         self.classification_mode = classification_mode
-
-        self.concat_mode = concat_mode
+        self.loading_mode = loading_mode
+        self._imread_mode = (
+            IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
+        )
 
         if mode != "test":
             load_train_indices(
@@ -191,11 +210,9 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_name: str = self.img_list[index]
         mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
 
-        img_tuple: tuple[bool, Sequence[cvt.MatLike]] = cv2.imreadmulti(
-            os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
+        _, img_list = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=self._imread_mode
         )
-
-        img_list = img_tuple[1]
 
         combined_imgs = concatenate_imgs(
             frames=30,
@@ -213,7 +230,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         lab_mask = lab_mask[:, :, 0]  # H x W
         out_mask: torch.Tensor
 
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
             # NOTE: This turns the problem into a multilabel segmentation problem.
             # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
             # bitwise or operations to adhere to those conditions.
@@ -231,7 +248,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
 
             out_mask = self.transform_2(lab_mask_one_hot)
 
-        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
+        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
             out_mask = self.transform_2(lab_mask)
         else:
             raise NotImplementedError(
@@ -256,7 +273,8 @@ class TwoPlusOneDataset(CineDataset):
         transform_2: Compose,
         batch_size: int = 2,
         mode: Literal["train", "val", "test"] = "train",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ) -> None:
         """Cine dataset for the cardiac cine MRI images.
 
@@ -272,9 +290,12 @@ class TwoPlusOneDataset(CineDataset):
             batch_size: The batch size for the dataset.
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
+            loading_mode: Determines the cv2.imread flags for the images.
 
         Raises:
+            NotImplementedError: If the classification mode is not implemented.
             RuntimeError: If the indices fail to load.
+            AssertionError: If the indices are not disjoint.
         """
         super().__init__(
             img_dir,
@@ -299,13 +320,9 @@ class TwoPlusOneDataset(CineDataset):
         # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
         # loaded as RBG.
         # XXX: Check if it actually is RBG rather than RGB.
-        img_tuple = cv2.imreadmulti(
-            os.path.join(self.img_dir, img_name), flags=cv2.IMREAD_COLOR
+        _, img_list = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=self._imread_mode
         )
-
-        # cv2.imreadmulti returns a tuple of length 2, with the second value of the
-        # tuple being the actual images.
-        img_list = img_tuple[1]
 
         # Concatenate the images based on specific indices (subject to change).
         combined_imgs = concatenate_imgs(
@@ -318,7 +335,7 @@ class TwoPlusOneDataset(CineDataset):
         lab_mask = mask / [1.0]
         lab_mask = lab_mask[:, :, 0]  # H x W
 
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
             # NOTE: This turns the problem into a multilabel segmentation problem.
             # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
             # bitwise or operations to adhere to those conditions.
@@ -334,16 +351,16 @@ class TwoPlusOneDataset(CineDataset):
 
             lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
 
-            lab_mask = self.transform_2(lab_mask_one_hot)
+            lab_mask_out: torch.Tensor = self.transform_2(lab_mask_one_hot)
 
-        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
-            lab_mask = self.transform_2(lab_mask)
+        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
+            lab_mask_out: torch.Tensor = self.transform_2(lab_mask)
         else:
             raise NotImplementedError(
                 f"The mode {self.classification_mode.name} is not implemented"
             )
 
-        return combined_imgs, lab_mask, img_name
+        return combined_imgs, lab_mask_out, img_name
 
 
 class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]):
@@ -357,9 +374,10 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         transform_2: Compose,
         batch_size: int = 8,
         mode: Literal["train", "val", "test"] = "train",
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
     ):
-        """WIP: Two stream dataset for the cardiac LGE MRI images.
+        """Two stream dataset for the cardiac LGE MRI images.
 
         Args:
             lge_dir: The directory containing the LGE images.
@@ -372,9 +390,12 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
             batch_size: The batch size for the dataset.
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
+            loading_mode: Determines the cv2.imread flags for the images.
 
         Raises:
+            NotImplementedError: If the classification mode is not implemented.
             RuntimeError: If the indices fail to load.
+            AssertionError: If the indices are not disjoint.
         """
         super().__init__()
 
@@ -401,6 +422,10 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
             )
 
         self.classification_mode = classification_mode
+        self.loading_mode = loading_mode
+        self._imread_mode = (
+            IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
+        )
 
     @property
     def img_dir(self):
@@ -433,34 +458,24 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
         # PERF: See if these can be turned into PIL operations (to maintain RGB)
 
-        lge = cv2.imread(os.path.join(self.lge_dir, lge_name))
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
-        cine_tuple = cv2.imreadmulti(
-            os.path.join(self.cine_dir, cine_name), flags=cv2.IMREAD_COLOR
+        lge = cv2.imread(os.path.join(self.lge_dir, lge_name), self._imread_mode)
+        mask = cv2.imread(os.path.join(self.mask_dir, mask_name), self._imread_mode)
+        _, cine_list = cv2.imreadmulti(
+            os.path.join(self.cine_dir, cine_name), flags=self._imread_mode
         )
 
-        cine_list = cine_tuple[1]
-        in_stack = np.dstack(cine_list)
-
-        n, h, w, c = in_stack.shape
-
-        # TODO(concat): Use the concat method instead
-        # Resize all images to (224, 224)
-        in_stack = in_stack.transpose((1, 2, 3, 0)).reshape(h, w, c * n)
-        # TODO(transforms): Move all the resizes out to the transforms.
-        out_stack = cv2.resize(in_stack, (224, 224))
-        out_images = out_stack.reshape((h, w, c, n)).transpose(3, 0, 1, 2)
-        out_images = out_images / [255.0]
-
-        combined_cines = torch.from_numpy(out_images)
-        combined_cines = self.transform_1(combined_cines)
+        # Concatenate the images based on specific indices (subject to change).
+        combined_cines = concatenate_imgs(
+            frames=30,
+            select_frame_method="consecutive",
+            img_list=cine_list,
+            transform=self.transform_1,
+        )
 
         # Perform transformations on mask
         lab_mask = mask / [1.0]
-        # TODO(transforms): Move all the resizes out
-        lab_mask = cv2.resize(lab_mask, (224, 224)).astype(np.float32)
         lab_mask = lab_mask[:, :, 0]
-        if self.classification_mode == ClassificationType.MULTILABEL_MODE:
+        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
             # NOTE: This turns the problem into a multilabel segmentation problem.
             # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
             # bitwise or operations to adhere to those conditions.
@@ -476,9 +491,9 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
             lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
 
-            lab_mask = self.transform_2(lab_mask_one_hot)
-        elif self.classification_mode == ClassificationType.MULTICLASS_MODE:
-            lab_mask = self.transform_2(lab_mask)
+            lab_mask_out: torch.Tensor = self.transform_2(lab_mask_one_hot)
+        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
+            lab_mask_out: torch.Tensor = self.transform_2(lab_mask)
         else:
             raise NotImplementedError(
                 f"The mode {self.classification_mode.name} is not implemented"
@@ -486,11 +501,9 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
         # Perform transformations on LGE
         lge = lge / [255.0]
-        # TODO(transforms): Move all the resizes out
-        lge = cv2.resize(lge, (224, 224)).astype(np.float32)
-        lge = self.transform_1(lge)
+        lge_out: torch.Tensor = self.transform_1(lge)
 
-        return lge, combined_cines, lab_mask, lge_name
+        return lge_out, combined_cines, lab_mask_out, lge_name
 
     def __len__(self):
         return len(self.cine_list)
@@ -802,7 +815,7 @@ def get_class_weights(
         getattr(dataset, "classification_mode", None) is not None
     ), f"Dataset has no attribute `classification_mode`"
 
-    assert dataset.classification_mode == ClassificationType.MULTILABEL_MODE
+    assert dataset.classification_mode == ClassificationMode.MULTILABEL_MODE
     counts = np.array([0.0, 0.0, 0.0, 0.0])
     for _, masks, _ in [train_set[i] for i in range(len(train_set))]:
         class_occurrence = masks.sum(dim=(1, 2))

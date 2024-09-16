@@ -21,7 +21,7 @@ from cine import LightningUnetWrapper
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
-from utils.utils import ClassificationType
+from utils.utils import ClassificationMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -36,7 +36,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         test_dir: str = "data/test-20240905T012341Z-001/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
-        classification_mode: ClassificationType = ClassificationType.MULTICLASS_MODE,
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
     ):
 
