@@ -44,11 +44,15 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         if not self.weighted_average:
             return super().compute()
 
-        class_distribution = self.class_occurrences.div(
-            self.class_occurrences.sum()
-            if self.include_background
-            else self.class_occurrences[1:].sum()
+        class_distribution = _safe_divide(
+            self.class_occurrences,
+            (
+                self.class_occurrences.sum()
+                if self.include_background
+                else self.class_occurrences[1:].sum()
+            ),
         )
+
         if self.include_background:
             return (class_distribution @ self.score_running) / self.samples
         else:
