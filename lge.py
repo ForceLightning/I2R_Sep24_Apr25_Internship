@@ -248,6 +248,6 @@ if __name__ == "__main__":
     cli = LGECLI(
         LightningUnetWrapper,
         LGEBaselineDataModule,
-        # save_config_callback=None,
+        save_config_callback=None,
         auto_configure_optimizers=False,
     )

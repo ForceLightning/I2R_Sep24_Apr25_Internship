@@ -13,6 +13,8 @@ from torch.optim.optimizer import Optimizer
 from torchvision.transforms import Normalize
 from warmup_scheduler import GradualWarmupScheduler
 
+from metrics.dice import GeneralizedDiceScoreVariant
+
 
 class InverseNormalize(Normalize):
     """Inverses the normalization and returns the reconstructed images in the input."""
@@ -224,69 +226,57 @@ def shared_metric_calculation(
         masks_proba: The predicted masks.
         prefix: The runtime mode (train, val, test).
     """
-    bs = images.shape[0]
-    metric: torch.Tensor
     masks_one_hot = F.one_hot(masks.squeeze(dim=1), num_classes=4).permute(0, -1, 1, 2)
-    class_distribution = masks_one_hot.sum(dim=[0, 2, 3])  # 1 x C
-    class_distribution = class_distribution.div(class_distribution[1:].sum()).squeeze()
 
     # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
     # of the combinations of classification modes and sets the metrics correctly.
     if module.eval_classification_mode == ClassificationMode.MULTILABEL_MODE:
         masks_preds = masks_proba > 0.5  # BS x C x H x W
         if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
-            metric = module.metric(masks_preds, masks_one_hot)
+            module.metric.update(masks_preds, masks_one_hot)
         else:
-            metric = module.metric(masks_preds, masks)
+            module.metric.update(masks_preds, masks)
     elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
         # Output: BS x C x H x W
         masks_preds = masks_proba.argmax(dim=1)
         masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
-        metric = module.metric(masks_preds_one_hot, masks_one_hot)
+        module.metric.update(masks_preds_one_hot, masks_one_hot)
     else:
         raise NotImplementedError(
             f"The mode {module.eval_classification_mode.name} is not implemented."
         )
 
-    # Calculate the weighted average of the metrics.
-    weighted_avg = metric[1:] @ class_distribution[1:]
-    module.log(
-        f"{prefix}/dice_(weighted_avg)",
-        weighted_avg.item(),
-        batch_size=bs,
-        on_epoch=True,
-    )
-
-    module.log(
-        f"{prefix}/dice_(macro_avg)",
-        metric.mean().item(),
-        batch_size=bs,
-        on_epoch=True,
-    )
-
-    if isinstance(module.logger, TensorBoardLogger):
-        module.log(
-            f"hp/{prefix}/dice_(weighted_avg)",
-            weighted_avg.item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
-
-        module.log(
-            f"hp/{prefix}/dice_(macro_avg)",
-            metric.mean().item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
-
-    for i, class_metric in enumerate(metric.detach().cpu()):
-        if i == 0:  # NOTE: Skips background class.
-            continue
-        module.log(
-            f"{prefix}/dice_class_{i}",
-            class_metric.item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
-
     return masks_preds, masks_one_hot.bool()
+
+
+def shared_metric_logging_epoch_end(module: L.LightningModule, prefix: str):
+    if isinstance(module.metric, GeneralizedDiceScoreVariant):
+        metric = module.metric.compute()
+        macro_avg = module.metric.compute_macro_avg()
+
+        if isinstance(module.logger, TensorBoardLogger):
+            module.log(
+                f"hp/{prefix}/dice_(weighted_avg)",
+                metric.item(),
+            )
+
+            module.log(
+                f"hp/{prefix}/dice_(macro_avg)",
+                macro_avg.item(),
+            )
+        module.log(
+            f"{prefix}/dice_(macro_avg)",
+            macro_avg.item(),
+        )
+        module.log(
+            f"{prefix}/dice_(weighted_avg)",
+            metric.item(),
+        )
+        for i, class_metric in enumerate(module.metric.compute_per_class()):
+            if i == 0:  # NOTE: Skips background class.
+                continue
+            module.log(
+                f"{prefix}/dice_class_{i}",
+                class_metric.item(),
+            )
+        module.metric.reset()

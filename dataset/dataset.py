@@ -588,7 +588,7 @@ def concatenate_imgs(
 
     if frames == 30:
         indices = range(0, 30)
-        return concat(img_list, indices, transform, loading_mode)
+        return concat(img_list, None, transform, loading_mode)
 
     elif frames < 30 and frames > 0:
         if select_frame_method == "consecutive":

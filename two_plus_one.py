@@ -33,6 +33,7 @@ from utils.utils import (
     InverseNormalize,
     LightningGradualWarmupScheduler,
     LoadingMode,
+    shared_metric_logging_epoch_end,
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
@@ -155,8 +156,9 @@ class UnetLightning(L.LightningModule):
             else GeneralizedDiceScoreVariant(
                 num_classes=classes,
                 per_class=True,
-                include_background=True,
+                include_background=False,
                 weight_type="linear",
+                weighted_average=True,
             )
         )
 
@@ -214,6 +216,15 @@ class UnetLightning(L.LightningModule):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
+
+    def on_train_epoch_end(self) -> None:
+        shared_metric_logging_epoch_end(self, "train")
+
+    def on_validation_epoch_end(self) -> None:
+        shared_metric_logging_epoch_end(self, "val")
+
+    def on_test_epoch_end(self) -> None:
+        shared_metric_logging_epoch_end(self, "test")
 
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
@@ -686,6 +697,6 @@ if __name__ == "__main__":
     cli = TwoPlusOneCLI(
         UnetLightning,
         TwoPlusOneDataModule,
-        # save_config_callback=None,
+        save_config_callback=None,
         auto_configure_optimizers=False,
     )

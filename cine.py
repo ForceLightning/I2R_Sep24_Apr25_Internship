@@ -30,7 +30,12 @@ from dataset.dataset import CineDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
-from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
+from utils.utils import (
+    ClassificationMode,
+    InverseNormalize,
+    LoadingMode,
+    shared_metric_logging_epoch_end,
+)
 
 BATCH_SIZE_TRAIN = 4  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -43,6 +48,7 @@ class LightningUnetWrapper(L.LightningModule):
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
+        encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
         in_channels: int = 90,
         classes: int = 4,
@@ -66,6 +72,7 @@ class LightningUnetWrapper(L.LightningModule):
             metric: Metric to use for evaluation.
             loss: Loss function to use for training.
             encoder_name: Name of the encoder to use.
+            encoder_depth: The depth of the encoder.
             encoder_weights: Weights to use for the encoder.
             in_channels: Number of input channels.
             classes: Number of classes.
@@ -87,6 +94,7 @@ class LightningUnetWrapper(L.LightningModule):
         self.save_hyperparameters(ignore=["loss"])
         self.model = smp.Unet(
             encoder_name=encoder_name,
+            encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
             in_channels=in_channels,
             classes=classes,
@@ -134,8 +142,9 @@ class LightningUnetWrapper(L.LightningModule):
             else GeneralizedDiceScoreVariant(
                 num_classes=classes,
                 per_class=True,
-                include_background=True,
+                include_background=False,
                 weight_type="linear",
+                weighted_average=True,
             )
         )
 
@@ -194,6 +203,15 @@ class LightningUnetWrapper(L.LightningModule):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
+
+    def on_train_epoch_end(self) -> None:
+        shared_metric_logging_epoch_end(self, "train")
+
+    def on_validation_epoch_end(self) -> None:
+        shared_metric_logging_epoch_end(self, "val")
+
+    def on_test_epoch_end(self) -> None:
+        shared_metric_logging_epoch_end(self, "test")
 
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
@@ -642,6 +660,6 @@ if __name__ == "__main__":
     cli = CineCLI(
         LightningUnetWrapper,
         CineBaselineDataModule,
-        # save_config_callback=None,
+        save_config_callback=None,
         auto_configure_optimizers=False,
     )
