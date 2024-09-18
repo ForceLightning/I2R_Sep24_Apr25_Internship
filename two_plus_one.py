@@ -224,9 +224,9 @@ class UnetLightning(L.LightningModule):
             self.logger.log_hyperparams(
                 self.hparams,  # pyright: ignore[reportArgumentType]
                 {
-                    "hp/valid_loss": 0,
-                    "hp/valid/dice_weighted_avg": 0,
-                    "hp/valid/dice_macro_avg": 0,
+                    "hp/val_loss": 0,
+                    "hp/val/dice_weighted_avg": 0,
+                    "hp/val/dice_macro_avg": 0,
                 },
             )
 

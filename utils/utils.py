@@ -5,15 +5,11 @@ from typing import Sequence
 
 import lightning as L
 import torch
-from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
-from torch.nn import functional as F
 from torch.optim._multi_tensor import Adam, AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
 from torch.optim.optimizer import Optimizer
 from torchvision.transforms import Normalize
 from warmup_scheduler import GradualWarmupScheduler
-
-from metrics.dice import GeneralizedDiceScoreVariant
 
 
 class InverseNormalize(Normalize):

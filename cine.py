@@ -20,7 +20,7 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import Metric
 from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
@@ -209,9 +209,9 @@ class LightningUnetWrapper(L.LightningModule):
             self.logger.log_hyperparams(
                 self.hparams,
                 {
-                    "hp/valid_loss": 0,
-                    "hp/valid/dice_weighted_avg": 0,
-                    "hp/valid/dice_macro_avg": 0,
+                    "hp/val_loss": 0,
+                    "hp/val/dice_weighted_avg": 0,
+                    "hp/val/dice_macro_avg": 0,
                 },
             )
 
