@@ -37,6 +37,7 @@ from utils.utils import (
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
+
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -252,20 +253,20 @@ class UnetLightning(L.LightningModule):
                 images_input
             )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # GUARD: Check that the sizes match.
-            assert (
-                masks_proba.size() == masks.size()
-            ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
+            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+                # GUARD: Check that the sizes match.
+                assert (
+                    masks_proba.size() == masks.size()
+                ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-        # HACK: This ensures that the dimensions to the loss function are correct.
-        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-            self.loss, FocalLoss
-        ):
-            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
-        else:
-            loss_seg = self.alpha * self.loss(masks_proba, masks)
-        loss_all = loss_seg
+            # HACK: This ensures that the dimensions to the loss function are correct.
+            if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+                self.loss, FocalLoss
+            ):
+                loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+            else:
+                loss_seg = self.alpha * self.loss(masks_proba, masks)
+            loss_all = loss_seg
         self.log(
             "loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
         )
@@ -474,8 +475,8 @@ class UnetLightning(L.LightningModule):
 class TwoPlusOneDataModule(L.LightningDataModule):
     def __init__(
         self,
-        data_dir: str = "data/train_val-20240905T025601Z-001/train_val/",
-        test_dir: str = "data/test-20240905T012341Z-001/test/",
+        data_dir: str = "data/train_val/",
+        test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
         frames: int = NUM_FRAMES,
@@ -696,7 +697,7 @@ class TwoPlusOneCLI(LightningCLI):
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
-                "model_checkpoint_dice_weighted.monitor": "val/dice_(weighted_avg)",
+                "model_checkpoint_dice_weighted.monitor": "val/dice_weighted_avg",
                 "model_checkpoint_dice_weighted.save_top_k": 1,
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,

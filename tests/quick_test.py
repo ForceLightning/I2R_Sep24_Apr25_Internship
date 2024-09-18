@@ -314,8 +314,8 @@ class TestLGECLI:
 
 
 class TestImageLoading:
-    data_dir: str = "data/train_val-20240905T025601Z-001/train_val/"
-    test_dir: str = "data/test-20240905T012341Z-001/test/"
+    data_dir: str = "data/train_val/"
+    test_dir: str = "data/test/"
     indices_dir: str = "data/indices/"
     frames: int = 10
     select_frame_method = "specific"

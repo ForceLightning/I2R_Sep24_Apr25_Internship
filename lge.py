@@ -31,8 +31,8 @@ ssl._create_default_https_context = ssl._create_unverified_context
 class LGEBaselineDataModule(L.LightningDataModule):
     def __init__(
         self,
-        data_dir: str = "data/train_val-20240905T025601Z-001/train_val/",
-        test_dir: str = "data/test-20240905T012341Z-001/test/",
+        data_dir: str = "data/train_val/",
+        test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
