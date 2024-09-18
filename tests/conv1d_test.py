@@ -1,5 +1,3 @@
-import unittest
-
 import torch
 
 from models.two_plus_one import OneD
@@ -8,7 +6,7 @@ from models.two_plus_one import compress_2 as _compress2_new
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 
-class TestConv1D(unittest.TestCase):
+class TestConv1D:
     batch_size = 2
     num_channels = 128
     height = 112
@@ -25,16 +23,15 @@ class TestConv1D(unittest.TestCase):
             old_compress_out = _compress_wrapper(input_original, oned)
             new_compress_out = _compress2_new(input_original, oned)
         except Exception as e:
-            print(f"Input of shape {input_original.shape}")
-            raise e
+            raise ExceptionGroup(f"Input of shape {input_original.shape}", [e])
 
         try:
             allclose = torch.allclose(old_compress_out, new_compress_out)
         except RuntimeError as e:
-            print(
-                f"Old shape: {old_compress_out.shape}, New shape: {new_compress_out.shape}"
+            raise ExceptionGroup(
+                f"Old shape: {old_compress_out.shape}, New shape: {new_compress_out.shape}",
+                [e],
             )
-            raise e
 
         assert allclose, "Values of the operations are not the same."
 
@@ -97,7 +94,3 @@ def _compress_wrapper(stacked_outputs: torch.Tensor, block: OneD):
     # Input to compress2 must be of shape (F, B, C, H, W)
     reshaped_outputs = stacked_outputs.permute(1, 0, 2, 3, 4)
     return compress_2(reshaped_outputs, block)
-
-
-if __name__ == "__main__":
-    unittest.main()

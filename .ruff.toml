@@ -2,3 +2,4 @@ exclude = [
     "data",
     "checkpoints",
 ]
+target-version = "py312"

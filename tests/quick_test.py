@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Quick testing script for the project."""
 import os
-import unittest
 from unittest import mock
 
 import cv2
@@ -20,15 +19,28 @@ from two_plus_one import UnetLightning as TwoPlusOneUnet
 from utils.utils import ClassificationMode
 
 
-class TestTwoPlusOneCLI(unittest.TestCase):
+class TestTwoPlusOneCLI:
     default_train_args = [
         "fit",
         "--trainer.precision=bf16-mixed",
-        "--version=unittest",
+        "--model.classes=4",
+        "--config",
+        "./configs/two_plus_one.yaml",
+        "--config",
+        "./configs/cine_tpo_resnet50.yaml",
+        "--trainer.logger=False",
         "--data.num_workers=0",
     ]
     default_frames = ["--model.num_frames=5"]
-    default_test_args = ["test", "--version=unittest", "--data.num_workers=0"]
+    default_test_args = [
+        "test",
+        "--config",
+        "./configs/two_plus_one.yaml",
+        "--config",
+        "./configs/cine_tpo_resnet50.yaml",
+        "--config",
+        "./configs/testing.yaml",
+    ]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
@@ -111,14 +123,29 @@ class TestTwoPlusOneCLI(unittest.TestCase):
         self._run_with_args(args)
 
 
-class TestCineCLI(unittest.TestCase):
+class TestCineCLI:
     default_train_args = [
         "fit",
         "--trainer.precision=bf16-mixed",
-        "--version=unittest",
+        "--model.classes=4",
+        "--config",
+        "./configs/cine.yaml",
+        "--config",
+        "./configs/cine_tpo_resnet50.yaml",
+        "--trainer.logger=False",
         "--data.num_workers=0",
     ]
-    default_test_args = ["test", "--version=unittest", "--data.num_workers=0"]
+    default_test_args = [
+        "test",
+        "--config",
+        "./configs/cine.yaml",
+        "--config",
+        "./configs/cine_tpo_resnet50.yaml",
+        "--config",
+        "./configs/testing.yaml",
+        "--trainer.logger=False",
+        "--data.num_workers=0",
+    ]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     fast_dev_run_args = ["--trainer.fast_dev_run=1"]
@@ -193,14 +220,25 @@ class TestCineCLI(unittest.TestCase):
         self._run_with_args(args)
 
 
-class TestLGECLI(unittest.TestCase):
+class TestLGECLI:
     default_train_args = [
         "fit",
         "--trainer.precision=bf16-mixed",
-        "--version=unittest",
+        "--model.classes=4",
+        "--config",
+        "./configs/lge.yaml",
+        "--trainer.logger=False",
         "--data.num_workers=0",
     ]
-    default_test_args = ["test", "--version=unittest", "--data.num_workers=0"]
+    default_test_args = [
+        "test",
+        "--config",
+        "./configs/lge.yaml",
+        "--config",
+        "./configs/testing.yaml",
+        "--trainer.logger=False",
+        "--data.num_workers=0",
+    ]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
@@ -275,7 +313,7 @@ class TestLGECLI(unittest.TestCase):
         self._run_with_args(args)
 
 
-class TestImageLoading(unittest.TestCase):
+class TestImageLoading:
     data_dir: str = "data/train_val-20240905T025601Z-001/train_val/"
     test_dir: str = "data/test-20240905T012341Z-001/test/"
     indices_dir: str = "data/indices/"
@@ -324,14 +362,10 @@ class TestImageLoading(unittest.TestCase):
         try:
             assert torch.allclose(im_a, im_b)
         except AssertionError as e:
-            fig, ax = plt.subplots(1, 2)
+            _, ax = plt.subplots(1, 2)
             ax[0].imshow(im_a.permute(1, 2, 0))
             ax[0].set_title("From Dataset")
             ax[1].imshow(img_list[0])
             ax[1].set_title("From File")
             plt.show(block=True)
             raise e
-
-
-if __name__ == "__main__":
-    unittest.main()
