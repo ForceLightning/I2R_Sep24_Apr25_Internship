@@ -251,3 +251,9 @@ temp/
 
 # Handover code
 I2R_Summer_Internship_Code/
+
+# Profiling tests
+profiling/
+
+# Local debug setup
+.vscode/

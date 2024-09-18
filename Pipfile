@@ -24,7 +24,6 @@ lightning = {  extras = ["pytorch-extra"] }
 tensorboard = "*"
 
 [dev-packages]
-pylint = "*"
 autopep8 = "*"
 ipykernel = "*"
 pynvim = "*"
@@ -36,6 +35,7 @@ onnx = "*"
 onnxscript = "*"
 seaborn = "*"
 viztracer = "*"
+ruff = "*"
 
 [requires]
 python_version = "3.12"
