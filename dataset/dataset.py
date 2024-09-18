@@ -296,6 +296,10 @@ class TwoPlusOneDataset(CineDataset):
             RuntimeError: If the indices fail to load.
             AssertionError: If the indices are not disjoint.
         """
+        self.frames = frames
+        self.select_frame_method: Literal["consecutive", "specific"] = (
+            select_frame_method
+        )
         super().__init__(
             img_dir,
             mask_dir,
@@ -306,10 +310,6 @@ class TwoPlusOneDataset(CineDataset):
             mode,
             classification_mode,
             loading_mode=loading_mode,
-        )
-        self.frames = frames
-        self.select_frame_method: Literal["consecutive", "specific"] = (
-            select_frame_method
         )
 
     @override
@@ -660,11 +660,11 @@ def load_train_indices(
         if name not in blacklisted:
             if len(grouped_names) == 0:
                 grouped_names[base] = [names[i]]
-        else:
-            if base in grouped_names:
-                grouped_names[base] += [names[i]]
             else:
-                grouped_names[base] = [names[i]]
+                if base in grouped_names:
+                    grouped_names[base] += [names[i]]
+                else:
+                    grouped_names[base] = [names[i]]
 
     # Attach an index to each file
     for i in range(len(names)):
@@ -690,7 +690,7 @@ def load_train_indices(
             for i in range(len(grouped_names[patient])):
                 name, idx = grouped_names[patient][i]
                 train_idxs.append(idx)
-                train_names.append(idx)
+                train_names.append(name)
             break
 
         else:
@@ -716,6 +716,11 @@ def load_train_indices(
 
     dataset.train_idxs = train_idxs
     dataset.valid_idxs = valid_idxs
+
+    with open(train_idxs_path, "wb") as f:
+        pickle.dump(train_idxs, f)
+    with open(valid_idxs_path, "wb") as f:
+        pickle.dump(valid_idxs, f)
 
     return train_idxs, valid_idxs
 

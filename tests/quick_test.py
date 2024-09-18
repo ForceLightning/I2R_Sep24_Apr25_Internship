@@ -333,9 +333,9 @@ class TestImageLoading:
         ]
     )
     dataset: TwoPlusOneDataset = TwoPlusOneDataset(
-        os.path.join(os.getcwd(), data_dir, "Cine"),
-        os.path.join(os.getcwd(), data_dir, "masks"),
-        os.path.join(os.getcwd(), indices_dir),
+        img_dir=os.path.join(os.getcwd(), data_dir, "Cine"),
+        mask_dir=os.path.join(os.getcwd(), data_dir, "masks"),
+        idxs_dir=os.path.join(os.getcwd(), indices_dir),
         frames=frames,
         select_frame_method=select_frame_method,
         transform_1=transforms_img,
