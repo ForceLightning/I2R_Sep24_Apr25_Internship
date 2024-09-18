@@ -657,7 +657,7 @@ class CineCLI(LightningCLI):
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
-                "model_checkpoint_dice_weighted.monitor": "val/dice_(weighted_avg)",
+                "model_checkpoint_dice_weighted.monitor": "val/dice_weighted_avg",
                 "model_checkpoint_dice_weighted.save_top_k": 1,
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,

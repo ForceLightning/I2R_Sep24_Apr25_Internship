@@ -37,7 +37,7 @@ model_checkpoint:
   enable_version_counter: true
 model_checkpoint_dice_weighted:
   dirpath: null
-  monitor: val/dice_(weighted_avg)
+  monitor: val/dice_weighted_avg
   verbose: false
   save_last: false
   save_top_k: 1

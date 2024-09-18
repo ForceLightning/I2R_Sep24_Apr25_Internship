@@ -271,7 +271,7 @@ class UnetLightning(L.LightningModule):
             "loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
         )
         self.log(
-            "loss/train/{self.loss.__class__.__name__.lower()}",
+            f"loss/train/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,

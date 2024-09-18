@@ -18,7 +18,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         per_class: bool = False,
         weight_type: Literal["square", "simple", "linear"] = "square",
         weighted_average: bool = False,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__(
             num_classes, include_background, per_class, weight_type, **kwargs
@@ -82,10 +82,13 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             self.score_running += dice
             class_occurrences = preds.sum(dim=[0, 2, 3])
             self.class_occurrences += class_occurrences
-            class_distribution = self.class_occurrences.div(
-                self.class_occurrences.sum()
-                if self.include_background
-                else self.class_occurrences[1:].sum()
+            class_distribution = _safe_divide(
+                self.class_occurrences,
+                (
+                    self.class_occurrences.sum()
+                    if self.include_background
+                    else self.class_occurrences[1:].sum()
+                ),
             )
             if self.include_background:
                 self.score = dice @ class_distribution
