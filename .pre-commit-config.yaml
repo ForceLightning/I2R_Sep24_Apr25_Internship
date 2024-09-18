@@ -16,7 +16,7 @@ repos:
       - id: destroyed-symlinks
       - id: mixed-line-ending
       - id: name-tests-test
-        args: ['--unittest']
+        args: ['--pytest']
 
 default_language_version:
   python: python3.12
