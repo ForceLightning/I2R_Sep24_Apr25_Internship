@@ -37,7 +37,6 @@ from utils.utils import (
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
-
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -158,8 +157,8 @@ class UnetLightning(L.LightningModule):
                 )
             )
 
-        # Set metric if none
-        self.metric = (
+        # Sets metric if None.
+        metric = (
             metric
             if metric
             else GeneralizedDiceScoreVariant(
@@ -170,6 +169,14 @@ class UnetLightning(L.LightningModule):
                 weighted_average=True,
             )
         )
+        self.train_metric = metric
+        self.valid_metric = metric.clone()
+        self.test_metric = metric.clone()
+        self.metrics = {
+            "train": self.train_metric,
+            "val": self.valid_metric,
+            "test": self.test_metric,
+        }
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
@@ -277,9 +284,9 @@ class UnetLightning(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metric, GeneralizedDiceScore):
+        if isinstance(self.metrics["train"], GeneralizedDiceScore):
             masks_preds, masks_one_hot = shared_metric_calculation(
-                self, masks, masks_proba
+                self, masks, masks_proba, "train"
             )
 
             if isinstance(self.logger, TensorBoardLogger):
@@ -449,9 +456,9 @@ class UnetLightning(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metric, GeneralizedDiceScore):
+        if isinstance(self.metrics[prefix], GeneralizedDiceScore):
             masks_preds, masks_one_hot = shared_metric_calculation(
-                self, masks, masks_proba
+                self, masks, masks_proba, prefix
             )
 
             if isinstance(self.logger, TensorBoardLogger):

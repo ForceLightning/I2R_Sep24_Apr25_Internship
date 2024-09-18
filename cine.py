@@ -20,7 +20,7 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from torchmetrics import Metric
+from torchmetrics import Metric, MetricCollection
 from torchmetrics.segmentation import GeneralizedDiceScore
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
@@ -142,7 +142,7 @@ class LightningUnetWrapper(L.LightningModule):
             )
 
         # Sets metric if None.
-        self.metric = (
+        metric = (
             metric
             if metric
             else GeneralizedDiceScoreVariant(
@@ -153,6 +153,14 @@ class LightningUnetWrapper(L.LightningModule):
                 weighted_average=True,
             )
         )
+        self.train_metric = metric
+        self.valid_metric = metric.clone()
+        self.test_metric = metric.clone()
+        self.metrics = {
+            "train": self.train_metric,
+            "val": self.valid_metric,
+            "test": self.test_metric,
+        }
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
@@ -251,8 +259,9 @@ class LightningUnetWrapper(L.LightningModule):
                 loss_seg = self.alpha * self.loss(masks_proba, masks)
 
             loss_all = loss_seg
+
         self.log(
-            f"loss/train",
+            "loss/train",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
@@ -265,9 +274,9 @@ class LightningUnetWrapper(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metric, GeneralizedDiceScore):
+        if isinstance(self.metrics["train"], GeneralizedDiceScore):
             masks_preds, masks_one_hot = shared_metric_calculation(
-                self, masks, masks_proba
+                self, masks, masks_proba, "train"
             )
 
             if isinstance(self.logger, TensorBoardLogger):
@@ -428,9 +437,9 @@ class LightningUnetWrapper(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metric, GeneralizedDiceScore):
+        if isinstance(self.metrics[prefix], GeneralizedDiceScore):
             masks_preds, masks_one_hot = shared_metric_calculation(
-                self, masks, masks_proba
+                self, masks, masks_proba, prefix
             )
 
             if isinstance(self.logger, TensorBoardLogger):
