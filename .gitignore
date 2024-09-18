@@ -238,6 +238,7 @@ $RECYCLE.BIN/
 ### Project Specifics ###
 # Models
 checkpoints/
+.old_checkpoints/
 lightning_logs/
 
 # Data
