@@ -61,6 +61,7 @@ class LightningUnetWrapper(L.LightningModule):
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTILABEL_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        dump_memory_snapshot: bool = False,
     ):
         """Wrapper for the UNet model.
 
@@ -85,9 +86,18 @@ class LightningUnetWrapper(L.LightningModule):
             dl_classification_mode: Classification mode for the dataloader.
             eval_classification_mode: Classification mode for evaluation.
             loading_mode: Image loading mode.
+            dump_memory_snapshot: Whether to dump a memory snapshot after training.
         """
         super().__init__()
         self.save_hyperparameters(ignore=["loss"])
+        self.dump_memory_snapshot = dump_memory_snapshot
+
+        # Trace memory usage
+        if self.dump_memory_snapshot:
+            torch.cuda.memory._record_memory_history(
+                enabled="all", context="all", stacks="python"
+            )
+
         self.model = smp.Unet(
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
@@ -197,6 +207,10 @@ class LightningUnetWrapper(L.LightningModule):
                 },
             )
 
+    def on_train_end(self) -> None:
+        if self.dump_memory_snapshot:
+            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
 
@@ -222,21 +236,21 @@ class LightningUnetWrapper(L.LightningModule):
                 images
             )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # GUARD: Check that the sizes match.
-            assert (
-                masks_proba.size() == masks.size()
-            ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
+            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+                # GUARD: Check that the sizes match.
+                assert (
+                    masks_proba.size() == masks.size()
+                ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-        # HACK: This ensures that the dimensions to the loss function are correct.
-        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-            self.loss, FocalLoss
-        ):
-            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
-        else:
-            loss_seg = self.alpha * self.loss(masks_proba, masks)
+            # HACK: This ensures that the dimensions to the loss function are correct.
+            if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+                self.loss, FocalLoss
+            ):
+                loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+            else:
+                loss_seg = self.alpha * self.loss(masks_proba, masks)
 
-        loss_all = loss_seg
+            loss_all = loss_seg
         self.log(
             f"loss/train",
             loss_all.detach().cpu().item(),

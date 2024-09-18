@@ -66,6 +66,7 @@ class UnetLightning(L.LightningModule):
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        dump_memory_snapshot: bool = False,
     ):
         """A LightningModule wrapper for the modified Unet for the two-plus-one
         architecture.
@@ -92,6 +93,7 @@ class UnetLightning(L.LightningModule):
             dl_classification_mode: The classification mode for the dataloader.
             eval_classifiation_mode: The classification mode for evaluation.
             loading_mode: Image loading mode.
+            dump_memory_snapshot: Whether to dump a memory snapshot after training.
 
         Raises:
             NotImplementedError: If the loss type is not implemented.
@@ -102,6 +104,14 @@ class UnetLightning(L.LightningModule):
         self.in_channels = in_channels
         self.classes = classes
         self.num_frames = num_frames
+        self.dump_memory_snapshot = dump_memory_snapshot
+
+        # Trace memory usage
+        if self.dump_memory_snapshot:
+            torch.cuda.memory._record_memory_history(
+                enabled="all", context="all", stacks="python"
+            )
+
         self.model = Unet(
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
@@ -211,6 +221,10 @@ class UnetLightning(L.LightningModule):
                     "hp/valid/dice_macro_avg": 0,
                 },
             )
+
+    def on_train_end(self) -> None:
+        if self.dump_memory_snapshot:
+            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
