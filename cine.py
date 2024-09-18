@@ -28,14 +28,10 @@ from torchvision.utils import draw_segmentation_masks
 
 from dataset.dataset import CineDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
+from metrics.logging import shared_metric_calculation, shared_metric_logging_epoch_end
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
-from utils.utils import (
-    ClassificationMode,
-    InverseNormalize,
-    LoadingMode,
-    shared_metric_logging_epoch_end,
-)
+from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 4  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -196,8 +192,8 @@ class LightningUnetWrapper(L.LightningModule):
                 self.hparams,
                 {
                     "hp/valid_loss": 0,
-                    "hp/valid/dice_(weighted_avg)": 0,
-                    "hp/valid/dice_(macro_avg)": 0,
+                    "hp/valid/dice_weighted_avg": 0,
+                    "hp/valid/dice_macro_avg": 0,
                 },
             )
 
@@ -256,8 +252,8 @@ class LightningUnetWrapper(L.LightningModule):
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds, masks_one_hot = utils.shared_metric_calculation(
-                self, images, masks, masks_proba, "train"
+            masks_preds, masks_one_hot = shared_metric_calculation(
+                self, masks, masks_proba
             )
 
             if isinstance(self.logger, TensorBoardLogger):
@@ -419,8 +415,8 @@ class LightningUnetWrapper(L.LightningModule):
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds, masks_one_hot = utils.shared_metric_calculation(
-                self, images, masks, masks_proba, prefix
+            masks_preds, masks_one_hot = shared_metric_calculation(
+                self, masks, masks_proba
             )
 
             if isinstance(self.logger, TensorBoardLogger):

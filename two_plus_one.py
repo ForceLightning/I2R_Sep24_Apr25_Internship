@@ -26,6 +26,7 @@ from torchvision.utils import draw_segmentation_masks
 
 from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
+from metrics.logging import shared_metric_calculation, shared_metric_logging_epoch_end
 from models.two_plus_one import Unet
 from utils import utils
 from utils.utils import (
@@ -33,12 +34,9 @@ from utils.utils import (
     InverseNormalize,
     LightningGradualWarmupScheduler,
     LoadingMode,
-    shared_metric_logging_epoch_end,
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
-
-
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -206,11 +204,11 @@ class UnetLightning(L.LightningModule):
     def on_train_start(self):
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
-                self.hparams,
+                self.hparams,  # pyright: ignore[reportArgumentType]
                 {
                     "hp/valid_loss": 0,
-                    "hp/valid/dice_(weighted_avg)": 0,
-                    "hp/valid/dice_(macro_avg)": 0,
+                    "hp/valid/dice_weighted_avg": 0,
+                    "hp/valid/dice_macro_avg": 0,
                 },
             )
 
@@ -255,18 +253,18 @@ class UnetLightning(L.LightningModule):
             loss_seg = self.alpha * self.loss(masks_proba, masks)
         loss_all = loss_seg
         self.log(
-            f"loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
+            "loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
         )
         self.log(
-            f"loss/train/{self.loss.__class__.__name__.lower()}",
+            "loss/train/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds, masks_one_hot = utils.shared_metric_calculation(
-                self, images, masks, masks_proba, "train"
+            masks_preds, masks_one_hot = shared_metric_calculation(
+                self, masks, masks_proba
             )
 
             if isinstance(self.logger, TensorBoardLogger):
@@ -437,8 +435,8 @@ class UnetLightning(L.LightningModule):
         )
 
         if isinstance(self.metric, GeneralizedDiceScore):
-            masks_preds, masks_one_hot = utils.shared_metric_calculation(
-                self, images, masks, masks_proba, prefix
+            masks_preds, masks_one_hot = shared_metric_calculation(
+                self, masks, masks_proba
             )
 
             if isinstance(self.logger, TensorBoardLogger):
