@@ -19,6 +19,7 @@ trainer:
     init_args:
       log_graph: false
       default_hp_metric: false
+  log_every_n_steps: 5
 model:
   classes: 4
 model_checkpoint:

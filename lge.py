@@ -237,11 +237,13 @@ class LGECLI(LightningCLI):
                 "model_checkpoint.save_last": True,
                 "model_checkpoint.save_weights_only": True,
                 "model_checkpoint.save_top_k": 1,
+                "model_checkpoint.auto_insert_metric_name": False,
                 "model_checkpoint_dice_weighted.monitor": "val/dice_weighted_avg",
                 "model_checkpoint_dice_weighted.save_top_k": 1,
                 "model_checkpoint_dice_weighted.save_weights_only": True,
                 "model_checkpoint_dice_weighted.save_last": False,
                 "model_checkpoint_dice_weighted.mode": "max",
+                "model_checkpoint_dice_weighted.auto_insert_metric_name": False,
             }
         )
 
@@ -252,4 +254,5 @@ if __name__ == "__main__":
         LGEBaselineDataModule,
         save_config_callback=None,
         auto_configure_optimizers=False,
+        parser_kwargs={"fit": {"default_config_files": ["./configs/lge.yaml"]}},
     )

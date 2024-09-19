@@ -118,7 +118,7 @@ def get_checkpoint_filename(version: str | None) -> str | None:
     """
     if version is None:
         return None
-    return version + "-{epoch}-{step}"
+    return version + "-epoch={epoch}-step={step}"
 
 
 def get_best_weighted_avg_dice_filename(version: str | None) -> str:
@@ -127,7 +127,7 @@ def get_best_weighted_avg_dice_filename(version: str | None) -> str:
     Args:
         version: The version name of the model.
     """
-    suffix = "-{epoch}-{step}-{val/dice_weighted_avg:.4f}"
+    suffix = "-epoch={epoch}-step={step}-dice_w_avg={val/dice_weighted_avg:.4f}"
     if version is None:
         return suffix
     return version + suffix
