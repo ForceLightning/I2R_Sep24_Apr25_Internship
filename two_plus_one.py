@@ -13,7 +13,6 @@ from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
-from torch.optim.adamw import AdamW
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
@@ -32,12 +31,7 @@ from metrics.logging import (
 )
 from models.two_plus_one import Unet
 from utils import utils
-from utils.utils import (
-    ClassificationMode,
-    InverseNormalize,
-    LightningGradualWarmupScheduler,
-    LoadingMode,
-)
+from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -218,8 +212,10 @@ class UnetLightning(L.LightningModule):
                 self.hparams,  # pyright: ignore[reportArgumentType]
                 {
                     "hp/val_loss": 0,
-                    "hp/val/dice_weighted_avg": 0,
                     "hp/val/dice_macro_avg": 0,
+                    "hp/val/dice_macro_class_2_3": 0,
+                    "hp/val/dice_weighted_avg": 0,
+                    "hp/val/dice_weighted_class_2_3": 0,
                 },
             )
 
@@ -491,6 +487,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
     ):
         """Datamodule for the Cine dataset for PyTorch Lightning compatibility.
 
@@ -507,6 +504,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             classification_mode: The classification mode for the dataloader.
             num_workers: The number of workers for the DataLoader.
             loading_mode: Determines the cv2.imread flags for the images.
+            combine_train_val: Whether to combine train/val sets
         """
         super().__init__()
         self.save_hyperparameters()
@@ -515,10 +513,13 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         self.indices_dir = indices_dir
         self.batch_size = batch_size
         self.frames = frames
-        self.select_frame_method = select_frame_method
+        self.select_frame_method: Literal["consecutive", "specific"] = (
+            select_frame_method
+        )
         self.classification_mode = classification_mode
         self.num_workers = num_workers
         self.loading_mode = loading_mode
+        self.combine_train_val = combine_train_val
 
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
@@ -559,18 +560,9 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             transform_2=transforms_mask,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
+            combine_train_val=self.combine_train_val,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
-
-        assert (idx := max(trainval_dataset.train_idxs)) < len(
-            trainval_dataset
-        ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
-
-        assert (idx := max(trainval_dataset.valid_idxs)) < len(
-            trainval_dataset
-        ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
-
-        train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
 
         test_img_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
         test_mask_dir = os.path.join(os.getcwd(), self.test_dir, "masks")
@@ -588,9 +580,24 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             loading_mode=self.loading_mode,
         )
 
-        self.train = train_set
-        self.val = valid_set
-        self.test = test_dataset
+        if self.combine_train_val:
+            self.train = trainval_dataset
+            self.val = test_dataset
+            self.test = test_dataset
+        else:
+            assert (idx := max(trainval_dataset.train_idxs)) < len(
+                trainval_dataset
+            ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
+
+            assert (idx := max(trainval_dataset.valid_idxs)) < len(
+                trainval_dataset
+            ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
+
+            train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
+
+            self.train = train_set
+            self.val = valid_set
+            self.test = test_dataset
 
     def on_exception(self, exception):
         raise exception
@@ -636,8 +643,6 @@ class TwoPlusOneCLI(LightningCLI):
                     )
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
-        parser.add_optimizer_args(AdamW)
-        parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
         parser.add_lightning_class_args(
             ModelCheckpoint, "model_checkpoint_dice_weighted"

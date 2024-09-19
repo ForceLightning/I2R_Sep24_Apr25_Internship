@@ -32,6 +32,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
     ) -> None:
         """LGE dataset for the cardiac LGE MRI images.
 
@@ -46,6 +47,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
+            combine_train_val: Whether to combine the train/val sets.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -67,7 +69,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         self.valid_idxs: list[int]
 
         self.batch_size = batch_size
-        if mode != "test":
+        if mode != "test" and not combine_train_val:
             load_train_indices(
                 self,
                 os.path.join(idxs_dir, "train_indices.pkl"),
@@ -154,6 +156,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
     ) -> None:
         """Dataset for the Cine baseline implementation
 
@@ -167,6 +170,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             mode: Runtime mode.
             classification_mode: Classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
+            combine_train_val: Whether to combine the train/val sets.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -195,7 +199,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
         )
 
-        if mode != "test":
+        if mode != "test" and not combine_train_val:
             load_train_indices(
                 self,
                 os.path.join(idxs_dir, "train_indices.pkl"),
@@ -274,6 +278,7 @@ class TwoPlusOneDataset(CineDataset):
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
     ) -> None:
         """Cine dataset for the cardiac cine MRI images.
 
@@ -290,6 +295,7 @@ class TwoPlusOneDataset(CineDataset):
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
+            combine_train_val: Whether to combine the train/val sets.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -310,6 +316,7 @@ class TwoPlusOneDataset(CineDataset):
             mode,
             classification_mode,
             loading_mode=loading_mode,
+            combine_train_val=combine_train_val,
         )
 
     @override

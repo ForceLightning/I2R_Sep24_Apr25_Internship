@@ -15,7 +15,6 @@ from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from segmentation_models_pytorch.losses.focal import FocalLoss
 from torch import nn
-from torch.optim.adamw import AdamW
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
@@ -32,7 +31,6 @@ from metrics.logging import (
     shared_metric_calculation,
     shared_metric_logging_epoch_end,
 )
-from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
@@ -196,14 +194,16 @@ class LightningUnetWrapper(L.LightningModule):
                 self.hparams,  # pyright: ignore[reportArgumentType]
                 {
                     "hp/val_loss": 0,
-                    "hp/val/dice_weighted_avg": 0,
                     "hp/val/dice_macro_avg": 0,
+                    "hp/val/dice_macro_class_2_3": 0,
+                    "hp/val/dice_weighted_avg": 0,
+                    "hp/val/dice_weighted_class_2_3": 0,
                 },
             )
 
     def on_train_end(self) -> None:
         if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
+            torch.cuda.memory._dump_snapshot("unet_snapshot.pickle")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)  # pyright: ignore[reportCallIssue]
@@ -457,6 +457,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
     ):
         """DataModule for the Cine baseline implementation.
 
@@ -468,6 +469,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             classification_mode: Classification mode for the data loader.
             num_workers: Number of workers for the data loader.
             loading_mode: Determines the cv2.imread flags for the images.
+            combine_train_val: Whether to combine train/val sets.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -478,6 +480,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         self.classification_mode = classification_mode
         self.num_workers = num_workers
         self.loading_mode = loading_mode
+        self.combine_train_val = combine_train_val
 
     @override
     def setup(self, stage):
@@ -507,7 +510,6 @@ class CineBaselineDataModule(L.LightningDataModule):
                 v2.ToDtype(torch.float32, scale=True),
             ]
         )
-
         trainval_dataset = CineDataset(
             trainval_img_dir,
             trainval_mask_dir,
@@ -516,18 +518,9 @@ class CineBaselineDataModule(L.LightningDataModule):
             transform_2=transforms_mask,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
+            combine_train_val=self.combine_train_val,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
-
-        assert (idx := max(trainval_dataset.train_idxs)) < len(
-            trainval_dataset
-        ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
-
-        assert (idx := max(trainval_dataset.valid_idxs)) < len(
-            trainval_dataset
-        ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
-
-        train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
 
         test_img_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
         test_mask_dir = os.path.join(os.getcwd(), self.test_dir, "masks")
@@ -543,9 +536,24 @@ class CineBaselineDataModule(L.LightningDataModule):
             loading_mode=self.loading_mode,
         )
 
-        self.train = train_set
-        self.val = valid_set
-        self.test = test_dataset
+        if self.combine_train_val:
+            self.train = trainval_dataset
+            self.val = test_dataset
+            self.test = test_dataset
+        else:
+            assert (idx := max(trainval_dataset.train_idxs)) < len(
+                trainval_dataset
+            ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
+
+            assert (idx := max(trainval_dataset.valid_idxs)) < len(
+                trainval_dataset
+            ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
+
+            train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
+
+            self.train = train_set
+            self.val = valid_set
+            self.test = test_dataset
 
     def on_exception(self, exception):
         raise exception
@@ -591,8 +599,6 @@ class CineCLI(LightningCLI):
                     )
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
-        parser.add_optimizer_args(AdamW)
-        parser.add_lr_scheduler_args(LightningGradualWarmupScheduler)
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
         parser.add_lightning_class_args(
             ModelCheckpoint, "model_checkpoint_dice_weighted"

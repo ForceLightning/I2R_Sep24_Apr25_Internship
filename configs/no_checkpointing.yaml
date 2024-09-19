@@ -1,4 +1,6 @@
 # lightning.pytorch==2.4.0
+trainer:
+  logger: false
 model_checkpoint:
   save_last: false
   save_top_k: 0
