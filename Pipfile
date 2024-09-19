@@ -22,6 +22,7 @@ seaborn = "*"
 opencv-contrib-python = "*"
 lightning = {  extras = ["pytorch-extra"] }
 tensorboard = "*"
+rich = "*"
 
 [dev-packages]
 autopep8 = "*"

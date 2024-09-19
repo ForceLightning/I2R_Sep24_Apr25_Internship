@@ -1,0 +1,4 @@
+# lightning.pytorch==2.4.0
+trainer:
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.RichProgressBar

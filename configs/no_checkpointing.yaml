@@ -1,0 +1,7 @@
+# lightning.pytorch==2.4.0
+model_checkpoint:
+  save_last: false
+  save_top_k: 0
+model_checkpoint_dice_weighted:
+  save_last: false
+  save_top_k: 0
