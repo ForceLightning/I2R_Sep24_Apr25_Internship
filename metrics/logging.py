@@ -203,21 +203,30 @@ def _grouped_generalized_dice_logging(
         isinstance(metric, GeneralizedDiceScoreVariant)
         for _, metric in metric_obj.items()
     ):
-        results: dict[str, float | list[float]] = metric_obj.compute()
+        results: dict[str, torch.Tensor] = metric_obj.compute()
+        results_new: dict[str, torch.Tensor] = {}
+        for k, v in results.items():
+            if k in [
+                "val/dice_macro_avg",
+                "val/dice_macro_class_2_3",
+                "val/dice_weighted_avg",
+                "val/dice_weighted_class_2_3",
+            ]:
+                results_new[f"hp/{k}"] = v
+
+        results.update(results_new)
 
         # HACK: This is a bit of a hack to turn the per_class metric into individual
         # metrics for each class. This is done to make it easier to log the metrics.
         if (per_class := results.get(f"{prefix}/dice_per_class", None)) is not None:
-            assert (
-                isinstance(per_class, list)
-                or isinstance(per_class, tuple)
-                or isinstance(per_class, torch.Tensor)
+            assert isinstance(
+                per_class, torch.Tensor
             ), f"Metric `per_class` is of an invalid type: {type(per_class)}"
 
             for i, class_metric in enumerate(per_class):
                 if i == 0:
                     continue  # NOTE: Skips background class.
-                results[f"{prefix}/dice_class_{i}"] = class_metric.item()
+                results[f"{prefix}/dice_class_{i}"] = class_metric
 
             # Remove the per_class metric from the results.
             del results[f"{prefix}/dice_per_class"]
