@@ -210,6 +210,8 @@ class LGECLI(LightningCLI):
             compute_fn=utils.get_classification_mode,
         )
 
+        parser.link_arguments("trainer.max_epochs", "model.total_epochs")
+
         # Sets the image color loading mode
         parser.add_argument("--image_loading_mode", type=Union[str, None], default=None)
         parser.link_arguments(

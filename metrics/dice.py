@@ -13,6 +13,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
     macro_avg_metric: torch.Tensor
     per_class_metric: torch.Tensor
     weighted_avg_metric: torch.Tensor
+    class_weights: torch.Tensor
 
     def __init__(
         self,
@@ -21,6 +22,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         per_class: bool = False,
         weight_type: Literal["square", "simple", "linear"] = "square",
         weighted_average: bool = False,
+        only_for_classes: list[bool] | list[int] | None = None,
         return_type: Literal["weighted_avg", "macro_avg", "per_class"] = "weighted_avg",
         **kwargs: Any,
     ) -> None:
@@ -29,6 +31,12 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         )
 
         self.num_classes = num_classes if include_background else num_classes - 1
+        if only_for_classes:
+            assert len(only_for_classes) == num_classes
+            self.class_weights = torch.as_tensor(only_for_classes, dtype=torch.float32)
+        else:
+            self.class_weights = torch.ones((num_classes), dtype=torch.float32)
+
         self.return_type: Literal["weighted_avg", "macro_avg", "per_class"] = (
             return_type
         )
@@ -46,12 +54,12 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 dist_reduce_fx="sum",
             )
             self.add_state(
-                "weighted_avg_metric", default=torch.zeros(1), dist_reduce_fx="mean"
+                "weighted_avg_metric", default=torch.zeros(1), dist_reduce_fx="sum"
             )
             self.add_state(
                 "per_class_metric",
                 default=torch.zeros(num_classes, dtype=torch.int32),
-                dist_reduce_fx="mean",
+                dist_reduce_fx="sum",
             )
 
     @override
@@ -59,17 +67,19 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         if not self.weighted_average:
             return super().compute()
 
+        class_occurrences = self.class_occurrences.to(
+            torch.float32
+        ) * self.class_weights.to(self.class_occurrences.device)
+
         class_distribution = _safe_divide(
-            self.class_occurrences,
+            class_occurrences,
             (
-                self.class_occurrences.sum()
+                class_occurrences.sum()
                 if self.include_background
-                else self.class_occurrences[1:].sum()
+                else class_occurrences[1:].sum()
             ),
         )
 
-        self.macro_avg_metric = self._compute_macro_avg()
-        self.per_class_metric = self._compute_per_class()
         self.weighted_avg_metric = (
             _safe_divide(class_distribution @ self.score_running, self.samples)
             if self.include_background
@@ -77,6 +87,11 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 class_distribution[1:] @ self.score_running[1:], self.samples
             )
         )
+
+        # Set params
+        self.macro_avg_metric = self._compute_macro_avg()
+        self.per_class_metric = self._compute_per_class()
+
         match self.return_type:
             case "weighted_avg":
                 return self.weighted_avg_metric
@@ -86,23 +101,25 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 return self.per_class_metric
 
     def _compute_macro_avg(self) -> torch.Tensor:
-        score = (
-            _safe_divide(self.score_running, self.samples).mean()
-            if self.include_background
-            else _safe_divide(self.score_running[1:], self.samples).mean()
-        )
+        score = self.score_running * self.class_weights.to(self.score_running.device)
+        score = _safe_divide(score[self.class_weights == 1.0], self.samples).mean()
 
         return score
 
     def _compute_per_class(self) -> torch.Tensor:
-        score = _safe_divide(self.score_running, self.samples)
+        score = self.score_running * self.class_weights.to(self.score_running.device)
+        score = _safe_divide(score, self.samples)
 
         return score
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
         numerator, denominator = _generalized_dice_update(
-            preds, target, self.num_classes, True, self.weight_type
+            preds,
+            target,
+            self.num_classes,
+            True,
+            self.weight_type,  # pyright: ignore[reportArgumentType]
         )
         dice = _generalized_dice_compute(numerator, denominator, self.per_class).sum(
             dim=0

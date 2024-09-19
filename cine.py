@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
-from typing import Any, Union, override
+from typing import Any, Literal, Union, override
 
 import lightning as L
 import segmentation_models_pytorch as smp
@@ -20,15 +20,18 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from torchmetrics import Metric
-from torchmetrics.segmentation import GeneralizedDiceScore
+from torchmetrics import Metric, MetricCollection
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from torchvision.utils import draw_segmentation_masks
 
 from dataset.dataset import CineDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
-from metrics.logging import shared_metric_calculation, shared_metric_logging_epoch_end
+from metrics.logging import (
+    setup_metrics,
+    shared_metric_calculation,
+    shared_metric_logging_epoch_end,
+)
 from two_plus_one import LightningGradualWarmupScheduler
 from utils import utils
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
@@ -142,25 +145,8 @@ class LightningUnetWrapper(L.LightningModule):
             )
 
         # Sets metric if None.
-        metric = (
-            metric
-            if metric
-            else GeneralizedDiceScoreVariant(
-                num_classes=classes,
-                per_class=True,
-                include_background=False,
-                weight_type="linear",
-                weighted_average=True,
-            )
-        )
-        self.train_metric = metric
-        self.valid_metric = metric.clone()
-        self.test_metric = metric.clone()
-        self.metrics = {
-            "train": self.train_metric,
-            "val": self.valid_metric,
-            "test": self.test_metric,
-        }
+        self.metrics = {}
+        setup_metrics(self, metric, classes)
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
@@ -207,7 +193,7 @@ class LightningUnetWrapper(L.LightningModule):
     def on_train_start(self):
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
-                self.hparams,
+                self.hparams,  # pyright: ignore[reportArgumentType]
                 {
                     "hp/val_loss": 0,
                     "hp/val/dice_weighted_avg": 0,
@@ -274,7 +260,9 @@ class LightningUnetWrapper(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metrics["train"], GeneralizedDiceScore):
+        if isinstance(self.metrics["train"], GeneralizedDiceScoreVariant) or isinstance(
+            self.metrics["train"], MetricCollection
+        ):
             masks_preds, masks_one_hot = shared_metric_calculation(
                 self, masks, masks_proba, "train"
             )
@@ -392,7 +380,7 @@ class LightningUnetWrapper(L.LightningModule):
         self,
         batch: tuple[torch.Tensor, torch.Tensor, str],
         batch_idx: int,
-        prefix: str,
+        prefix: Literal["val", "test"],
     ):
         """Shared evaluation step for validation and test.
 
@@ -437,7 +425,9 @@ class LightningUnetWrapper(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metrics[prefix], GeneralizedDiceScore):
+        if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
+            self.metrics[prefix], MetricCollection
+        ):
             masks_preds, masks_one_hot = shared_metric_calculation(
                 self, masks, masks_proba, prefix
             )
@@ -632,6 +622,8 @@ class CineCLI(LightningCLI):
             "model.loading_mode",
             compute_fn=utils.get_loading_mode,
         )
+
+        parser.link_arguments("trainer.max_epochs", "model.total_epochs")
 
         # Adds the classification mode argument
         parser.add_argument("--dl_classification_mode", type=str)

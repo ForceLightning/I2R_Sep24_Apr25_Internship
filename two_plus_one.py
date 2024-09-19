@@ -18,15 +18,18 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from torchmetrics import Metric
-from torchmetrics.segmentation import GeneralizedDiceScore
+from torchmetrics import Metric, MetricCollection
 from torchvision.transforms import v2
 from torchvision.transforms.transforms import Compose
 from torchvision.utils import draw_segmentation_masks
 
 from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
-from metrics.logging import shared_metric_calculation, shared_metric_logging_epoch_end
+from metrics.logging import (
+    setup_metrics,
+    shared_metric_calculation,
+    shared_metric_logging_epoch_end,
+)
 from models.two_plus_one import Unet
 from utils import utils
 from utils.utils import (
@@ -43,6 +46,13 @@ torch.set_float32_matmul_precision("medium")
 
 
 class UnetLightning(L.LightningModule):
+    train_metric: Metric
+    train_class_2_3_metric: Metric
+    val_metric: Metric
+    val_class_2_3_metric: Metric
+    test_metric: Metric
+    test_class_2_3_metric: Metric
+
     def __init__(
         self,
         metric: Metric | None = None,
@@ -158,25 +168,8 @@ class UnetLightning(L.LightningModule):
             )
 
         # Sets metric if None.
-        metric = (
-            metric
-            if metric
-            else GeneralizedDiceScoreVariant(
-                num_classes=classes,
-                per_class=True,
-                include_background=False,
-                weight_type="linear",
-                weighted_average=True,
-            )
-        )
-        self.train_metric = metric
-        self.valid_metric = metric.clone()
-        self.test_metric = metric.clone()
-        self.metrics = {
-            "train": self.train_metric,
-            "val": self.valid_metric,
-            "test": self.test_metric,
-        }
+        self.metrics = {}
+        setup_metrics(self, metric, classes)
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
@@ -284,7 +277,9 @@ class UnetLightning(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metrics["train"], GeneralizedDiceScore):
+        if isinstance(self.metrics["train"], GeneralizedDiceScoreVariant) or isinstance(
+            self.metrics["train"], MetricCollection
+        ):
             masks_preds, masks_one_hot = shared_metric_calculation(
                 self, masks, masks_proba, "train"
             )
@@ -403,7 +398,10 @@ class UnetLightning(L.LightningModule):
 
     @torch.no_grad()
     def _shared_eval(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int, prefix: str
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
+        prefix: Literal["val", "test"],
     ):
         """Shared evaluation step for validation and test steps.
 
@@ -456,7 +454,9 @@ class UnetLightning(L.LightningModule):
             on_epoch=True,
         )
 
-        if isinstance(self.metrics[prefix], GeneralizedDiceScore):
+        if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
+            self.metrics[prefix], MetricCollection
+        ):
             masks_preds, masks_one_hot = shared_metric_calculation(
                 self, masks, masks_proba, prefix
             )
