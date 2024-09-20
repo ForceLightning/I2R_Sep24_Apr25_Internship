@@ -12,8 +12,6 @@ import torch
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from torch.utils.data import DataLoader
-from torchvision.transforms import v2
-from torchvision.transforms.transforms import Compose
 
 from cine import LightningUnetWrapper
 from dataset.dataset import LGEDataset, get_trainval_data_subsets

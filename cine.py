@@ -20,7 +20,6 @@ from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Metric, MetricCollection
-from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 

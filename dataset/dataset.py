@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+"""Module for the dataset classes and functions for the cardiac MRI images."""
 from __future__ import annotations
 
 import os
@@ -10,7 +12,7 @@ import torch
 from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from cv2 import typing as cvt
 from numpy import typing as npt
-from PIL import Image, ImageSequence
+from PIL import Image, ImageSequence  # pyright: ignore[reportAttributeAccessIssue]
 from torch.nn import functional as F
 from torch.utils.data import (
     DataLoader,
@@ -874,9 +876,12 @@ def get_class_weights(
 
     assert (
         getattr(dataset, "classification_mode", None) is not None
-    ), f"Dataset has no attribute `classification_mode`"
+    ), "Dataset has no attribute `classification_mode`"
 
-    assert dataset.classification_mode == ClassificationMode.MULTILABEL_MODE
+    assert (
+        dataset.classification_mode  # pyright: ignore[reportAttributeAccessIssue]
+        == ClassificationMode.MULTILABEL_MODE
+    )
     counts = np.array([0.0, 0.0, 0.0, 0.0])
     for _, masks, _ in [train_set[i] for i in range(len(train_set))]:
         class_occurrence = masks.sum(dim=(1, 2))

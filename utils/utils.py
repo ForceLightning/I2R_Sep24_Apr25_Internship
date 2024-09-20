@@ -239,7 +239,10 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
     # Randomly rotates +/- 180 deg and warps the image.
     transforms_together = Compose(
         [
-            v2.RandomRotation(180.0, v2.InterpolationMode.BILINEAR),
+            v2.RandomRotation(
+                180.0,  # pyright: ignore[reportArgumentType]
+                v2.InterpolationMode.BILINEAR,
+            ),
             v2.ElasticTransform(alpha=33.0),
             v2.Resize(224, antialias=True),
         ]
