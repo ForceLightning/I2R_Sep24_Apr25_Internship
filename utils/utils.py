@@ -8,11 +8,12 @@ import torch
 from torch.optim._multi_tensor import Adam, AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
 from torch.optim.optimizer import Optimizer
-from torchvision.transforms import Normalize
+from torchvision.transforms import v2
+from torchvision.transforms.v2 import Compose
 from warmup_scheduler import GradualWarmupScheduler
 
 
-class InverseNormalize(Normalize):
+class InverseNormalize(v2.Normalize):
     """Inverses the normalization and returns the reconstructed images in the input."""
 
     def __init__(
@@ -24,7 +25,7 @@ class InverseNormalize(Normalize):
         std_tensor = torch.as_tensor(std)
         std_inv = 1 / (std_tensor + 1e-7)
         mean_inv = -mean_tensor * std_inv
-        super().__init__(mean=mean_inv, std=std_inv)
+        super().__init__(mean=mean_inv.tolist(), std=std_inv.tolist())
 
     def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
         return super().__call__(tensor.clone())
@@ -203,3 +204,45 @@ def configure_optimizers(module: L.LightningModule):
     else:
         scheduler = module.scheduler(optimizer, **module.scheduler_kwargs)
     return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+
+def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose]:
+    """Gets default transformations for all datasets.
+
+    The default implementation resizes the images to (224, 224), casts them to float32,
+    normalises them, and sets them to greyscale if the loading mode is not RGB.
+
+    Args:
+        loading_mode: The loading mode for the images.
+
+    Returns:
+        tuple: The image, mask, and combined transformations
+    """
+    # Sets the image transforms
+    transforms_img = Compose(
+        [
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
+        ]
+    )
+
+    # Sets the mask transforms
+    transforms_mask = Compose(
+        [
+            v2.ToImage(),
+            v2.ToDtype(torch.long, scale=True),
+        ]
+    )
+
+    # Randomly rotates +/- 180 deg and warps the image.
+    transforms_together = Compose(
+        [
+            v2.RandomRotation(180.0, v2.InterpolationMode.BILINEAR),
+            v2.ElasticTransform(alpha=33.0),
+            v2.Resize(224, antialias=True),
+        ]
+    )
+
+    return transforms_img, transforms_mask, transforms_together

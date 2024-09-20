@@ -1,22 +1,23 @@
 # -*- coding: utf-8 -*-
 """Quick testing script for the project."""
 import os
+from typing import Literal
 from unittest import mock
 
 import cv2
 import matplotlib.pyplot as plt
 import torch
 from torchvision.transforms import v2
-from torchvision.transforms.transforms import Compose
+from torchvision.transforms.v2 import Compose
 
 from cine import CineBaselineDataModule, CineCLI
 from cine import LightningUnetWrapper as UnmodifiedUnet
-from dataset.dataset import TwoPlusOneDataset
+from dataset.dataset import CineDataset, LGEDataset, TwoPlusOneDataset
 from lge import LGECLI, LGEBaselineDataModule
 from two_plus_one import TwoPlusOneCLI
 from two_plus_one import TwoPlusOneDataModule as TwoPlusOneDataModule
 from two_plus_one import UnetLightning as TwoPlusOneUnet
-from utils.utils import ClassificationMode
+from utils.utils import ClassificationMode, LoadingMode, get_transforms
 
 
 class TestTwoPlusOneCLI:
@@ -28,8 +29,9 @@ class TestTwoPlusOneCLI:
         "./configs/two_plus_one.yaml",
         "--config",
         "./configs/cine_tpo_resnet50.yaml",
-        "--trainer.logger=False",
         "--data.num_workers=0",
+        "--config",
+        "./configs/no_checkpointing.yaml",
     ]
     default_frames = ["--model.num_frames=5"]
     default_test_args = [
@@ -40,6 +42,8 @@ class TestTwoPlusOneCLI:
         "./configs/cine_tpo_resnet50.yaml",
         "--config",
         "./configs/testing.yaml",
+        "--config",
+        "./configs/no_checkpointing.yaml",
     ]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
@@ -134,6 +138,8 @@ class TestCineCLI:
         "./configs/cine_tpo_resnet50.yaml",
         "--trainer.logger=False",
         "--data.num_workers=0",
+        "--config",
+        "./configs/no_checkpointing.yaml",
     ]
     default_test_args = [
         "test",
@@ -145,6 +151,8 @@ class TestCineCLI:
         "./configs/testing.yaml",
         "--trainer.logger=False",
         "--data.num_workers=0",
+        "--config",
+        "./configs/no_checkpointing.yaml",
     ]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
@@ -229,6 +237,8 @@ class TestLGECLI:
         "./configs/lge.yaml",
         "--trainer.logger=False",
         "--data.num_workers=0",
+        "--config",
+        "./configs/no_checkpointing.yaml",
     ]
     default_test_args = [
         "test",
@@ -238,6 +248,8 @@ class TestLGECLI:
         "./configs/testing.yaml",
         "--trainer.logger=False",
         "--data.num_workers=0",
+        "--config",
+        "./configs/no_checkpointing.yaml",
     ]
     default_senet_args = ["--model.encoder_name=senet154"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
@@ -318,32 +330,53 @@ class TestImageLoading:
     test_dir: str = "data/test/"
     indices_dir: str = "data/indices/"
     frames: int = 10
-    select_frame_method = "specific"
+    select_frame_method: Literal["specific", "consecutive"] = "specific"
     classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE
+    _, transforms_mask, _ = get_transforms(LoadingMode.RGB)
     transforms_img = Compose(
         [
             v2.ToImage(),
+            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.float32, scale=True),
         ]
     )
-    transforms_mask = Compose(
-        [
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-        ]
+    transforms_together = Compose([v2.Identity()])
+    lge_dataset = LGEDataset(
+        img_dir=os.path.join(os.getcwd(), data_dir, "LGE"),
+        mask_dir=os.path.join(os.getcwd(), data_dir, "masks"),
+        idxs_dir=os.path.join(os.getcwd(), indices_dir),
+        transform_img=transforms_img,
+        transform_mask=transforms_mask,
+        transform_together=transforms_together,
+        classification_mode=classification_mode,
+        combine_train_val=True,
     )
-    dataset: TwoPlusOneDataset = TwoPlusOneDataset(
+    cine_dataset = CineDataset(
+        img_dir=os.path.join(os.getcwd(), data_dir, "Cine"),
+        mask_dir=os.path.join(os.getcwd(), data_dir, "masks"),
+        idxs_dir=os.path.join(os.getcwd(), indices_dir),
+        transform_img=transforms_img,
+        transform_mask=transforms_mask,
+        transform_together=transforms_together,
+        classification_mode=classification_mode,
+        combine_train_val=True,
+    )
+    tpo_dataset: TwoPlusOneDataset = TwoPlusOneDataset(
         img_dir=os.path.join(os.getcwd(), data_dir, "Cine"),
         mask_dir=os.path.join(os.getcwd(), data_dir, "masks"),
         idxs_dir=os.path.join(os.getcwd(), indices_dir),
         frames=frames,
         select_frame_method=select_frame_method,
-        transform_1=transforms_img,
-        transform_2=transforms_mask,
+        transform_img=transforms_img,
+        transform_mask=transforms_mask,
+        transform_together=transforms_together,
         classification_mode=classification_mode,
+        combine_train_val=True,
     )
 
-    def test_batched_image_loading(self):
+    def _test_batched_image_loading(
+        self, dataset: LGEDataset | CineDataset | TwoPlusOneDataset
+    ):
         """
         Checks if batched image loading differs from directly loading with cv2.
 
@@ -351,17 +384,20 @@ class TestImageLoading:
         rotation applied from numpy's transpose and torch's permute. If there is a
         difference, a plot of both images are shown.
         """
-        im_tensor, _, name = self.dataset[0]
+        im_tensor, _, name = dataset[0]
         im_a = im_tensor[0]
         im_tuple = cv2.imreadmulti(
-            os.path.join(self.dataset.img_dir, name), flags=cv2.IMREAD_COLOR
+            os.path.join(dataset.img_dir, name), flags=cv2.IMREAD_COLOR
         )
         img_list = im_tuple[1]
-        im_b = self.transforms_img(img_list[0])
+        im_b = self.transforms_together(self.transforms_img(img_list[0]))
 
         try:
-            assert torch.allclose(im_a, im_b)
+            assert torch.allclose(
+                im_a, im_b
+            ), f"max difference of {(im_a - im_b).max()} detected"
         except AssertionError as e:
+            print(im_a.shape, im_b.shape)
             _, ax = plt.subplots(1, 2)
             ax[0].imshow(im_a.permute(1, 2, 0))
             ax[0].set_title("From Dataset")
@@ -369,3 +405,27 @@ class TestImageLoading:
             ax[1].set_title("From File")
             plt.show(block=True)
             raise e
+
+    def test_batched_image_lge(self):
+        """
+        Checks if the batched image loading differs from directly loading with cv2.
+
+        This test checks for the LGE dataset.
+        """
+        self._test_batched_image_loading(self.lge_dataset)
+
+    def test_batched_image_cine(self):
+        """
+        Checks if the batched image loading differs from directly loading with cv2.
+
+        This test checks for the Cine dataset.
+        """
+        self._test_batched_image_loading(self.cine_dataset)
+
+    def test_batched_image_two_plus_one(self):
+        """
+        Checks if the batched image loading differs from directly loading with cv2.
+
+        This test checks for the TwoPlusOne dataset.
+        """
+        self._test_batched_image_loading(self.tpo_dataset)

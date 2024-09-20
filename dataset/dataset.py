@@ -5,15 +5,23 @@ import pickle
 import random
 from typing import Literal, Sequence, override
 
-import cv2
 import numpy as np
 import torch
 from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from cv2 import typing as cvt
 from numpy import typing as npt
+from PIL import Image, ImageSequence
 from torch.nn import functional as F
-from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
-from torchvision.transforms import Compose
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    Subset,
+    SubsetRandomSampler,
+    default_collate,
+)
+from torchvision import tv_tensors
+from torchvision.transforms import v2
+from torchvision.transforms.v2 import Compose
 
 from utils.utils import ClassificationMode, LoadingMode
 
@@ -26,8 +34,9 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_dir: str,
         mask_dir: str,
         idxs_dir: str,
-        transform_1: Compose,
-        transform_2: Compose,
+        transform_img: Compose,
+        transform_mask: Compose,
+        transform_together: Compose | None = None,
         batch_size: int = 8,
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
@@ -41,8 +50,9 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             mask_dir: The directory containing the masks for the LGE images.
             idxs_dir: The directory containing the indices for the training and
             validation sets.
-            transform_1: The transform to apply to the images.
-            transform_2: The transform to apply to the masks.
+            transform_img: The transform to apply to the images.
+            transform_mask: The transform to apply to the masks.
+            transform_together: The transform to apply to both the images and masks.
             batch_size: The batch size for the dataset.
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
@@ -62,8 +72,11 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         self.img_list = os.listdir(self.img_dir)
         self.mask_list = os.listdir(self.mask_dir)
 
-        self.transform_1 = transform_1
-        self.transform_2 = transform_2
+        self.transform_img = transform_img
+        self.transform_mask = transform_mask
+        self.transform_together = (
+            transform_together if transform_together else Compose([v2.Identity()])
+        )
 
         self.train_idxs: list[int]
         self.valid_idxs: list[int]
@@ -104,40 +117,44 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         # loaded as RBG.
         assert img_name.endswith(".png"), "Image not in .PNG format"
 
-        img = cv2.imread(os.path.join(self.img_dir, img_name), flags=self._imread_mode)
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
+        # PERF(PIL): This reduces the loading and transform time by 60% when compared
+        # to OpenCV.
 
-        lab_img = img / [255.0]
-        lab_mask = mask / [1.0]
+        # Convert LGE to RGB or Greyscale
+        img = Image.open(os.path.join(self.img_dir, img_name))
+        img = (
+            img.convert("RGB")
+            if self.loading_mode == LoadingMode.RGB
+            else img.convert("L")
+        )
+        out_img: torch.Tensor = self.transform_img(img)
 
-        lab_img = lab_img.astype(np.float32)
-        lab_mask = lab_mask.astype(np.float32)[:, :, 0]
+        mask = Image.open(os.path.join(self.mask_dir, mask_name))
+        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
-        out_img: torch.Tensor = self.transform_1(lab_img)
-        out_mask: torch.Tensor
+        match self.classification_mode:
+            case ClassificationMode.MULTILABEL_MODE:
+                # NOTE: This turns the problem into a multilabel segmentation problem.
+                # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+                # bitwise or operations to adhere to those conditions.
+                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                    lab_mask_one_hot[:, :, 3]
+                )
+                lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                    lab_mask_one_hot[:, :, 2]
+                )
+                out_mask = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
 
-        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # NOTE: This turns the problem into a multilabel segmentation problem.
-            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
-            # bitwise or operations to adhere to those conditions.
-            lab_mask_one_hot = F.one_hot(
-                torch.from_numpy(lab_mask).long(), num_classes=4
-            )  # H x W x C
-            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
-                lab_mask_one_hot[:, :, 3]
-            )
-            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
-                lab_mask_one_hot[:, :, 2]
-            )
-            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
+            case ClassificationMode.MULTICLASS_MODE:
+                pass
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
 
-            out_mask = self.transform_2(lab_mask_one_hot)
-        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
-            out_mask = self.transform_2(lab_mask)
-        else:
-            raise NotImplementedError(
-                f"The mode {self.classification_mode.name} is not implemented."
-            )
+        out_img, out_mask = self.transform_together(out_img, out_mask)
+
         return out_img, out_mask, img_name
 
     def __len__(self) -> int:
@@ -150,8 +167,9 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_dir: str,
         mask_dir: str,
         idxs_dir: str,
-        transform_1: Compose,
-        transform_2: Compose,
+        transform_img: Compose,
+        transform_mask: Compose,
+        transform_together: Compose | None = None,
         batch_size: int = 4,
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
@@ -164,8 +182,9 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             img_dir: Path to the directory containing the images.
             mask_dir: Path to the directory containing the masks.
             idxs_dir: Path to the directory containing the indices.
-            transform_1: Transform to apply to the images.
-            transform_2: Transform to apply to the masks.
+            transform_img: Transform to apply to the images.
+            transform_mask: Transform to apply to the masks.
+            transform_together: The transform to apply to both the images and masks.
             batch_size: Batch size for the dataset.
             mode: Runtime mode.
             classification_mode: Classification mode for the dataset.
@@ -185,8 +204,11 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         self.img_list: list[str] = os.listdir(self.img_dir)
         self.mask_list: list[str] = os.listdir(self.mask_dir)
 
-        self.transform_1 = transform_1
-        self.transform_2 = transform_2
+        self.transform_img = transform_img
+        self.transform_mask = transform_mask
+        self.transform_together = (
+            transform_together if transform_together else Compose([v2.Identity()])
+        )
 
         self.train_idxs: list[int]
         self.valid_idxs: list[int]
@@ -212,52 +234,44 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_name: str = self.img_list[index]
         mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
 
-        # PERF(PIL): Replace with PIL functions
-        _, img_list = cv2.imreadmulti(
-            os.path.join(self.img_dir, img_name), flags=self._imread_mode
-        )
-
-        combined_imgs = concatenate_imgs(
-            frames=30,
-            select_frame_method="consecutive",
-            img_list=img_list,
-            transform=self.transform_1,
-            loading_mode=self.loading_mode,
-        )
-
+        # PERF(PIL): This reduces the loading and transform time by 60% when compared
+        # to OpenCV.
+        img_pil = Image.open(os.path.join(self.img_dir, img_name))
+        img_list = [
+            (
+                img.convert("RGB")
+                if self.loading_mode == LoadingMode.RGB
+                else img.getchannel("L")
+            )
+            for img in ImageSequence.Iterator(img_pil)
+        ]
+        combined_imgs = default_collate(self.transform_img(img_list))
         f, c, h, w = combined_imgs.shape
         combined_imgs = combined_imgs.reshape(f * c, h, w)
 
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
-        lab_mask = mask / [1.0]
-        lab_mask = lab_mask.astype(np.float32)
-        lab_mask = lab_mask[:, :, 0]  # H x W
-        out_mask: torch.Tensor
+        mask = Image.open(os.path.join(self.mask_dir, mask_name))
+        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
-        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # NOTE: This turns the problem into a multilabel segmentation problem.
-            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
-            # bitwise or operations to adhere to those conditions.
-            lab_mask_one_hot = F.one_hot(
-                torch.from_numpy(lab_mask).long(), num_classes=4
-            )  # H x W x C
-            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
-                lab_mask_one_hot[:, :, 3]
-            )
-            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
-                lab_mask_one_hot[:, :, 2]
-            )
+        match self.classification_mode:
+            case ClassificationMode.MULTILABEL_MODE:
+                # NOTE: This turns the problem into a multilabel segmentation problem.
+                # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+                # bitwise or operations to adhere to those conditions.
+                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                    lab_mask_one_hot[:, :, 3]
+                )
+                lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                    lab_mask_one_hot[:, :, 2]
+                )
+                out_mask = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
 
-            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
-
-            out_mask = self.transform_2(lab_mask_one_hot)
-
-        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
-            out_mask = self.transform_2(lab_mask)
-        else:
-            raise NotImplementedError(
-                f"The mode {self.classification_mode.name} is not implemented"
-            )
+            case ClassificationMode.MULTICLASS_MODE:
+                pass
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
 
         return combined_imgs, out_mask, img_name
 
@@ -273,8 +287,9 @@ class TwoPlusOneDataset(CineDataset):
         idxs_dir: str,
         frames: int,
         select_frame_method: Literal["consecutive", "specific"],
-        transform_1: Compose,
-        transform_2: Compose,
+        transform_img: Compose,
+        transform_mask: Compose,
+        transform_together: Compose | None = None,
         batch_size: int = 2,
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
@@ -290,8 +305,9 @@ class TwoPlusOneDataset(CineDataset):
                 validation sets.
             frames: The number of frames to concatenate.
             select_frame_method: The method of selecting frames to concatenate.
-            transform_1: The transform to apply to the images.
-            transform_2: The transform to apply to the masks.
+            transform_img: The transform to apply to the images.
+            transform_mask: The transform to apply to the masks.
+            transform_together: The transform to apply to both the images and masks.
             batch_size: The batch size for the dataset.
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
@@ -311,8 +327,9 @@ class TwoPlusOneDataset(CineDataset):
             img_dir,
             mask_dir,
             idxs_dir,
-            transform_1,
-            transform_2,
+            transform_img,
+            transform_mask,
+            transform_together,
             batch_size,
             mode,
             classification_mode,
@@ -325,55 +342,54 @@ class TwoPlusOneDataset(CineDataset):
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
-        # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
-        # loaded as RBG.
-        # PERF(PIL): Replace with PIL functions
-        # XXX: Check if it actually is RBG rather than RGB.
-        _, img_list = cv2.imreadmulti(
-            os.path.join(self.img_dir, img_name), flags=self._imread_mode
-        )
-
-        # Concatenate the images based on specific indices (subject to change).
+        # PERF(PIL): This reduces the loading and transform time by 60% when compared
+        # to OpenCV.
+        img_pil = Image.open(os.path.join(self.img_dir, img_name), formats=["tiff"])
+        img_list = [
+            (
+                img.convert("RGB")
+                if self.loading_mode == LoadingMode.RGB
+                else img.getchannel("L")
+            )
+            for img in ImageSequence.Iterator(img_pil)
+        ]
+        combined_imgs = default_collate(self.transform_img(img_list))
+        assert (
+            len(combined_imgs.shape) == 4
+        ), f"Combined images must be of shape: (F, C, H, W) but is {combined_imgs.shape} instead."
         combined_imgs = concatenate_imgs(
-            self.frames,
-            self.select_frame_method,
-            img_list,
-            self.transform_1,
-            self.loading_mode,
+            self.frames, self.select_frame_method, combined_imgs
         )
+        out_video = tv_tensors.Video(combined_imgs)
 
         # Perform necessary operations on the mask
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
+        mask = Image.open(os.path.join(self.mask_dir, mask_name))
+        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
-        lab_mask = mask / [1.0]
-        lab_mask = lab_mask[:, :, 0]  # H x W
+        match self.classification_mode:
+            case ClassificationMode.MULTILABEL_MODE:
+                # NOTE: This turns the problem into a multilabel segmentation problem.
+                # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+                # bitwise or operations to adhere to those conditions.
+                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                    lab_mask_one_hot[:, :, 3]
+                )
+                lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                    lab_mask_one_hot[:, :, 2]
+                )
+                out_mask = lab_mask_one_hot.bool().permute(-1, 0, 1)
 
-        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # NOTE: This turns the problem into a multilabel segmentation problem.
-            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
-            # bitwise or operations to adhere to those conditions.
-            lab_mask_one_hot = F.one_hot(
-                torch.from_numpy(lab_mask).long(), num_classes=4
-            )  # H x W x C
-            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
-                lab_mask_one_hot[:, :, 3]
-            )
-            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
-                lab_mask_one_hot[:, :, 2]
-            )
+            case ClassificationMode.MULTICLASS_MODE:
+                pass
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
 
-            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
+        out_video, out_mask = self.transform_together(out_video, out_mask)
 
-            lab_mask_out: torch.Tensor = self.transform_2(lab_mask_one_hot)
-
-        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
-            lab_mask_out: torch.Tensor = self.transform_2(lab_mask)
-        else:
-            raise NotImplementedError(
-                f"The mode {self.classification_mode.name} is not implemented"
-            )
-
-        return combined_imgs, lab_mask_out, img_name
+        return out_video, out_mask, img_name
 
 
 class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]):
@@ -383,12 +399,14 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         cine_dir: str,
         mask_dir: str,
         idxs_dir: str,
-        transform_1: Compose,
-        transform_2: Compose,
+        transform_img: Compose,
+        transform_mask: Compose,
+        transform_together: Compose | None = None,
         batch_size: int = 8,
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
     ):
         """Two stream dataset for the cardiac LGE MRI images.
 
@@ -398,12 +416,14 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
             mask_dir: The directory containing the masks for the LGE images.
             idxs_dir: The directory containing the indices for the training and
             validation sets.
-            transform_1: The transform to apply to the images.
-            transform_2: The transform to apply to the masks.
+            transform_img: The transform to apply to the images.
+            transform_mask: The transform to apply to the masks.
+            transform_together: The transform to apply to both the images and masks.
             batch_size: The batch size for the dataset.
             mode: The mode of the dataset.
             classification_mode: The classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
+            combine_train_val: Whether to combine the train/val sets.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -420,14 +440,17 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         self.cine_list = os.listdir(self.cine_dir)
         self.mask_list = os.listdir(self.mask_dir)
 
-        self.transform_1 = transform_1
-        self.transform_2 = transform_2
+        self.transform_img = transform_img
+        self.transform_mask = transform_mask
+        self.transform_together = (
+            transform_together if transform_together else Compose([v2.Identity()])
+        )
 
         self.batch_size = batch_size
         self.train_idxs: list[int]
         self.valid_idxs: list[int]
 
-        if mode != "test":
+        if mode != "test" and not combine_train_val:
             load_train_indices(
                 self,
                 os.path.join(idxs_dir, "train_indices.pkl"),
@@ -469,54 +492,66 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         if not lge_name.endswith(".png"):
             raise ValueError("Invalid image type for file: {lge_name}")
 
-        # PERF: See if these can be turned into PIL operations (to maintain RGB)
-        lge = cv2.imread(os.path.join(self.lge_dir, lge_name), self._imread_mode)
-        mask = cv2.imread(os.path.join(self.mask_dir, mask_name))
-        _, cine_list = cv2.imreadmulti(
-            os.path.join(self.cine_dir, cine_name), flags=self._imread_mode
+        # PERF(PIL): This reduces the loading and transform time by 60% when compared
+        # to OpenCV.
+
+        # Convert LGE to RGB or Greyscale
+        lge = Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"])
+        lge = (
+            lge.convert("RGB")
+            if self.loading_mode == LoadingMode.RGB
+            else lge.convert("L")
         )
 
-        # Concatenate the images based on specific indices (subject to change).
-        combined_cines = concatenate_imgs(
-            frames=30,
-            select_frame_method="consecutive",
-            img_list=cine_list,
-            transform=self.transform_1,
-            loading_mode=self.loading_mode,
+        cine_pil = Image.open(os.path.join(self.cine_dir, cine_name), formats=["tiff"])
+        cine_list = [
+            (
+                img.convert("RGB")
+                if self.loading_mode == LoadingMode.RGB
+                else img.getchannel("L")
+            )
+            for img in ImageSequence.Iterator(cine_pil)
+        ]
+
+        # Transform LGE and Cine together
+        out_lge, cine_list = self.transform_img(lge, cine_list)
+
+        # Combine the Cine channels.
+        combined_cines = default_collate(cine_list)
+        out_lge.squeeze()
+        f, c, h, w = combined_cines.shape
+        combined_cines = combined_cines.reshape(f * c, h, w)
+
+        mask = Image.open(os.path.join(self.mask_dir, mask_name), formats=["png"])
+        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+
+        match self.classification_mode:
+            case ClassificationMode.MULTILABEL_MODE:
+                # NOTE: This turns the problem into a multilabel segmentation problem.
+                # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+                # bitwise or operations to adhere to those conditions.
+                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                    lab_mask_one_hot[:, :, 3]
+                )
+                lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                    lab_mask_one_hot[:, :, 2]
+                )
+                out_mask = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
+
+            case ClassificationMode.MULTICLASS_MODE:
+                pass
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
+
+        # Perform transforms which must occur on all inputs together.
+        out_lge, out_cine, out_mask = self.transform_together(
+            out_lge, combined_cines, out_mask
         )
 
-        # Perform transformations on mask
-        lab_mask = mask / [1.0]
-        lab_mask = lab_mask[:, :, 0]
-        if self.classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # NOTE: This turns the problem into a multilabel segmentation problem.
-            # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
-            # bitwise or operations to adhere to those conditions.
-            lab_mask_one_hot = F.one_hot(
-                torch.from_numpy(lab_mask).long(), num_classes=4
-            )  # H x W x C
-            lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
-                lab_mask_one_hot[:, :, 3]
-            )
-            lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
-                lab_mask_one_hot[:, :, 2]
-            )
-
-            lab_mask_one_hot = lab_mask_one_hot.bool().permute(-1, 0, 1)
-
-            lab_mask_out: torch.Tensor = self.transform_2(lab_mask_one_hot)
-        elif self.classification_mode == ClassificationMode.MULTICLASS_MODE:
-            lab_mask_out: torch.Tensor = self.transform_2(lab_mask)
-        else:
-            raise NotImplementedError(
-                f"The mode {self.classification_mode.name} is not implemented"
-            )
-
-        # Perform transformations on LGE
-        lge = lge / [255.0]
-        lge_out: torch.Tensor = self.transform_1(lge)
-
-        return lge_out, combined_cines, lab_mask_out, lge_name
+        return out_lge, out_cine, out_mask, lge_name
 
     def __len__(self):
         return len(self.cine_list)
@@ -547,9 +582,7 @@ def concat(
 def concatenate_imgs(
     frames: int,
     select_frame_method: Literal["consecutive", "specific"],
-    img_list: Sequence[cvt.MatLike],
-    transform: Compose,
-    loading_mode: LoadingMode,
+    imgs: torch.Tensor,
 ) -> torch.Tensor:
     """Concatenates the images based on the number of frames and the method of
     selecting frames.
@@ -567,7 +600,10 @@ def concatenate_imgs(
         ValueError: If the number of frames is not within [5, 10, 15, 20, 30].
         ValueError: If the method of selecting frames is not valid.
     """
-    chosen_frames_dict = {
+    if frames == 30:
+        return imgs
+
+    CHOSEN_FRAMES_DICT = {
         5: [0, 6, 12, 18, 24],
         10: [0, 3, 6, 9, 12, 15, 18, 21, 24, 27],
         15: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28],
@@ -595,25 +631,20 @@ def concatenate_imgs(
         ],
     }
 
-    if frames == 30:
-        indices = range(0, 30)
-        return concat(img_list, None, transform, loading_mode)
-
-    elif frames < 30 and frames > 0:
-        if select_frame_method == "consecutive":
-            indices = range(0, frames)
-            return concat(img_list, indices, transform, loading_mode)
-        elif select_frame_method == "specific":
-            if frames in chosen_frames_dict:
-                indices = chosen_frames_dict[frames]
-                return concat(img_list, indices, transform, loading_mode)
-            else:
-                raise ValueError(
-                    "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"
-                )
+    if frames < 30 and frames > 0:
+        match select_frame_method:
+            case "consecutive":
+                indices = range(frames)
+                return imgs[indices]
+            case "specific":
+                if frames not in CHOSEN_FRAMES_DICT:
+                    raise ValueError(
+                        f"Invalid number of frames ({frames}) for the specific frame selection method. Ensure that it is within {list(sorted(CHOSEN_FRAMES_DICT.keys()))}"
+                    )
+                return imgs[CHOSEN_FRAMES_DICT[frames]]
 
     raise ValueError(
-        "Invalid number of frames for the specific frame selection method. Ensure that it is within [5, 10, 15, 20, 30]"
+        f"Invalid number of frames ({frames}), ensure that 0 < frames <= 30"
     )
 
 
@@ -833,6 +864,13 @@ def get_class_weights(
         AssertionError: If the classification mode is not multilabel.
     """
     dataset = train_set.dataset
+
+    assert any(
+        isinstance(dataset, dataset_class)
+        for dataset_class in [
+            LGEDataset | CineDataset | TwoPlusOneDataset | TwoStreamDataset
+        ]
+    )
 
     assert (
         getattr(dataset, "classification_mode", None) is not None

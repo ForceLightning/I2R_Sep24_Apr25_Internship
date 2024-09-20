@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Metric, MetricCollection
 from torchvision.transforms import v2
-from torchvision.transforms.transforms import Compose
+from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
 from dataset.dataset import CineDataset, get_trainval_data_subsets
@@ -32,7 +32,12 @@ from metrics.logging import (
     shared_metric_logging_epoch_end,
 )
 from utils import utils
-from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
+from utils.utils import (
+    ClassificationMode,
+    InverseNormalize,
+    LoadingMode,
+    get_transforms,
+)
 
 BATCH_SIZE_TRAIN = 4  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -489,33 +494,17 @@ class CineBaselineDataModule(L.LightningDataModule):
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
-        _transforms_img_seq = [
-            v2.ToImage(),
-            v2.Resize(224, antialias=True),
-            v2.ToDtype(torch.float32, scale=True),
-        ]
-        _transforms_img_seq += (
-            [
-                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
-            if self.loading_mode == LoadingMode.RGB
-            else [v2.Normalize(mean=[0.449], std=[0.226])]
+        transforms_img, transforms_mask, transforms_togther = get_transforms(
+            self.loading_mode
         )
-        transforms_img = Compose(_transforms_img_seq)
 
-        transforms_mask = Compose(
-            [
-                v2.ToImage(),
-                v2.Resize(224, antialias=True),
-                v2.ToDtype(torch.float32, scale=True),
-            ]
-        )
         trainval_dataset = CineDataset(
             trainval_img_dir,
             trainval_mask_dir,
             indices_dir,
-            transform_1=transforms_img,
-            transform_2=transforms_mask,
+            transform_img=transforms_img,
+            transform_mask=transforms_mask,
+            transform_together=transforms_togther,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
@@ -529,8 +518,8 @@ class CineBaselineDataModule(L.LightningDataModule):
             test_img_dir,
             test_mask_dir,
             indices_dir,
-            transform_1=transforms_img,
-            transform_2=transforms_mask,
+            transform_img=transforms_img,
+            transform_mask=transforms_mask,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,

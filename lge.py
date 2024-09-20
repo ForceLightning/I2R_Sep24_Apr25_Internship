@@ -18,7 +18,7 @@ from torchvision.transforms.transforms import Compose
 from cine import LightningUnetWrapper
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from utils import utils
-from utils.utils import ClassificationMode, LoadingMode
+from utils.utils import ClassificationMode, LoadingMode, get_transforms
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -68,32 +68,18 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "LGE")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
-        _transforms_img_seq = [
-            v2.ToImage(),
-            v2.Resize(224, antialias=True),
-            v2.ToDtype(torch.float32, scale=True),
-        ]
-        _transforms_img_seq += (
-            [
-                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
-            if self.loading_mode == LoadingMode.RGB
-            else [v2.Normalize(mean=[0.449], std=[0.226])]
+
+        transforms_img, transforms_mask, transforms_togther = get_transforms(
+            self.loading_mode
         )
-        transforms_img = Compose(_transforms_img_seq)
-        transforms_mask = Compose(
-            [
-                v2.ToImage(),
-                v2.Resize(224, antialias=True),
-                v2.ToDtype(torch.float32, scale=True),
-            ]
-        )
+
         trainval_dataset = LGEDataset(
             trainval_img_dir,
             trainval_mask_dir,
             indices_dir,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
+            transform_together=transforms_togther,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
