@@ -258,3 +258,6 @@ profiling/
 
 # Local debug setup
 .vscode/
+
+# Prototyping
+*.ipynb

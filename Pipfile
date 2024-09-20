@@ -41,3 +41,6 @@ pytest = "*"
 
 [requires]
 python_version = "3.12"
+
+[prototyping]
+jupyter = "*"

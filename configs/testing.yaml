@@ -6,5 +6,7 @@ trainer:
   num_nodes: 1
   precision: null
   logger: false
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.RichProgressBar
 model:
   classes: 4

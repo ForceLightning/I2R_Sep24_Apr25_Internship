@@ -92,8 +92,8 @@ class LGEBaselineDataModule(L.LightningDataModule):
             trainval_img_dir,
             trainval_mask_dir,
             indices_dir,
-            transform_1=transforms_img,
-            transform_2=transforms_mask,
+            transform_img=transforms_img,
+            transform_mask=transforms_mask,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
@@ -107,8 +107,8 @@ class LGEBaselineDataModule(L.LightningDataModule):
             test_img_dir,
             test_mask_dir,
             indices_dir,
-            transform_1=transforms_img,
-            transform_2=transforms_mask,
+            transform_img=transforms_img,
+            transform_mask=transforms_mask,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
@@ -144,6 +144,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             num_workers=self.num_workers,
             drop_last=True,
             persistent_workers=True if self.num_workers > 0 else False,
+            shuffle=True,
         )
 
     def val_dataloader(self):
@@ -152,7 +153,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
             persistent_workers=True if self.num_workers > 0 else False,
         )
 

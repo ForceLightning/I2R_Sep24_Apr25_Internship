@@ -566,6 +566,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             num_workers=self.num_workers,
             drop_last=True,
             persistent_workers=True if self.num_workers > 0 else False,
+            shuffle=True,
         )
 
     def val_dataloader(self):
@@ -574,7 +575,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
             persistent_workers=True if self.num_workers > 0 else False,
         )
 

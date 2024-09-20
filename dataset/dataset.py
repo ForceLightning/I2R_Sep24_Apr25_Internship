@@ -212,6 +212,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_name: str = self.img_list[index]
         mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
 
+        # PERF(PIL): Replace with PIL functions
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=self._imread_mode
         )
@@ -326,6 +327,7 @@ class TwoPlusOneDataset(CineDataset):
 
         # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
         # loaded as RBG.
+        # PERF(PIL): Replace with PIL functions
         # XXX: Check if it actually is RBG rather than RGB.
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=self._imread_mode
