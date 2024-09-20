@@ -67,7 +67,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "LGE")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
-        transforms_img, transforms_mask, transforms_togther = get_transforms(
+        transforms_img, transforms_mask, transforms_together = get_transforms(
             self.loading_mode
         )
 
@@ -77,7 +77,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             indices_dir,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_together=transforms_togther,
+            transform_together=transforms_together,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,

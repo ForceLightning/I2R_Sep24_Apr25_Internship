@@ -3,16 +3,19 @@ from __future__ import annotations
 from typing import Any, Callable, Literal, Sequence, override
 
 import torch
-from segmentation_models_pytorch.base import modules as md
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
+from segmentation_models_pytorch.base.initialization import (
+    initialize_decoder,
+    initialize_head,
+)
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
-from torch.nn import functional as F
+
+from models.common import CentreBlock, DecoderBlock, UnetDecoder
 
 
 class OneD(nn.Module):
-
     def __init__(
         self,
         in_channels: int,
@@ -125,7 +128,7 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     return final_out
 
 
-class CustomSegmentationModel(SegmentationModel):
+class TwoPlusOneSegmentationModel(SegmentationModel):
     @override
     def __init__(self, *args, num_frames: Literal[5, 10, 15, 20, 30], **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -155,27 +158,8 @@ class CustomSegmentationModel(SegmentationModel):
 
         self.onedlayers = [self.oned1, self.oned2, self.oned3, self.oned4, self.oned5]
 
-    def check_input_shape(self, x: torch.Tensor) -> None:
-        h, w = x.shape[-2:]
-        output_stride = self.encoder.output_stride
-        if h % output_stride != 0 or w % output_stride != 0:
-            new_h = (
-                (h // output_stride + 1) * output_stride
-                if h & output_stride != 0
-                else h
-            )
-            new_w = (
-                (w // output_stride + 1) * output_stride
-                if w % output_stride != 0
-                else w
-            )
-            raise RuntimeError(
-                f"Wrong input shape height={h}, width={w}. Expected image height and width "
-                f"divisible by {output_stride}. Consider pad your images to shape ({new_h}, {new_w})."
-            )
-
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | None:
         compressed_features = []
 
         # The first layer of the skip connection gets ignored, but in order for the
@@ -233,137 +217,7 @@ class CustomSegmentationModel(SegmentationModel):
         return x
 
 
-class DecoderBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        skip_channels: int,
-        out_channels: int,
-        use_batchnorm: bool = True,
-        attention_type: Literal["scse"] | None = None,
-    ) -> None:
-        super().__init__()
-        self.conv1 = md.Conv2dReLU(
-            in_channels=in_channels + skip_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1,
-            use_batchnorm=use_batchnorm,
-        )
-        self.attention1 = md.Attention(
-            attention_type, in_channels=in_channels + skip_channels
-        )
-        self.conv2 = md.Conv2dReLU(
-            in_channels=out_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1,
-            use_batchnorm=use_batchnorm,
-        )
-        self.attention2 = md.Attention(attention_type, in_channels=out_channels)
-
-    @override
-    def forward(
-        self, x: torch.Tensor, skip: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        x = F.interpolate(x, scale_factor=2, mode="nearest")
-        if skip is not None:
-            x = torch.cat([x, skip], dim=1)
-            x = self.attention1(x)
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.attention2(x)
-        return x
-
-
-class CentreBlock(nn.Sequential):
-    def __init__(
-        self, in_channels: int, out_channels: int, use_batchnorm: bool = True
-    ) -> None:
-        conv1 = md.Conv2dReLU(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1,
-            use_batchnorm=use_batchnorm,
-        )
-        conv2 = md.Conv2dReLU(
-            in_channels=out_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1,
-            use_batchnorm=use_batchnorm,
-        )
-        super().__init__(conv1, conv2)
-
-
-class UnetDecoder(nn.Module):
-    def __init__(
-        self,
-        encoder_channels: list[int],
-        decoder_channels: list[int],
-        n_blocks: int = 5,
-        use_batchnorm: bool = True,
-        attention_type: Literal["scse"] | None = None,
-        centre: bool = False,
-    ) -> None:
-        super().__init__()
-
-        if n_blocks != len(decoder_channels):
-            raise ValueError(
-                f"Model depth is {n_blocks}, but decoder_channels is provided for {len(decoder_channels)} blocks."
-            )
-
-        # Remove first skip with same spatial resolution.
-        encoder_channels = encoder_channels[1:]
-        # Reverse channels to start from head of encoder.
-        encoder_channels = encoder_channels[::-1]
-
-        # Computing blocks input and output channels.
-        head_channels = encoder_channels[0]
-        in_channels = [head_channels] + list(decoder_channels[:-1])
-        skip_channels = list(encoder_channels[1:]) + [0]
-        out_channels = decoder_channels
-
-        if centre:
-            self.centre = CentreBlock(
-                in_channels=head_channels,
-                out_channels=head_channels,
-                use_batchnorm=use_batchnorm,
-            )
-        else:
-            self.centre = nn.Identity()
-
-        # Combine decoder keyword arguments.
-        blocks = [
-            DecoderBlock(
-                in_channels=in_ch,
-                skip_channels=skip_ch,
-                out_channels=out_ch,
-                use_batchnorm=use_batchnorm,
-                attention_type=attention_type,
-            )
-            for in_ch, skip_ch, out_ch in zip(in_channels, skip_channels, out_channels)
-        ]
-        self.blocks = nn.ModuleList(blocks)
-
-    @override
-    def forward(self, *features: Sequence[torch.Tensor]) -> torch.Tensor:
-        features = features[1:]  # Remove the first skip with the same spatial res.
-        features = features[::-1]  # Reverse channels to start with the head of the enc.
-
-        head = features[0]
-        skips = features[1:]
-
-        x = self.centre(head)
-        for i, decoder_block in enumerate(self.blocks):
-            skip = skips[i] if i < len(skips) else None
-            x = decoder_block(x, skip)
-
-        return x
-
-
-class Unet(CustomSegmentationModel):
+class TwoPlusOneUnet(TwoPlusOneSegmentationModel):
     def __init__(
         self,
         encoder_name: str = "resnet34",
@@ -412,26 +266,3 @@ class Unet(CustomSegmentationModel):
 
         self.name = f"u-{encoder_name}"
         self.initialize()
-
-
-def initialize_decoder(module: nn.Module) -> None:
-    for m in module.modules():
-        if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm2d):
-            nn.init.constant_(m.weight, 1)
-            nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.Linear):
-            nn.init.xavier_uniform_(m.weight)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-
-
-def initialize_head(module: nn.Module) -> None:
-    for m in module.modules():
-        if isinstance(m, (nn.Linear, nn.Conv2d)):
-            nn.init.xavier_uniform_(m.weight)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)

@@ -28,7 +28,7 @@ from metrics.logging import (
     shared_metric_calculation,
     shared_metric_logging_epoch_end,
 )
-from models.two_plus_one import Unet
+from models.two_plus_one import TwoPlusOneUnet
 from utils import utils
 from utils.utils import (
     ClassificationMode,
@@ -306,6 +306,81 @@ class UnetLightning(L.LightningModule):
         self._shared_eval(batch, batch_idx, "test")
 
     @torch.no_grad()
+    def _shared_eval(
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
+        prefix: Literal["val", "test"],
+    ):
+        """Shared evaluation step for validation and test steps.
+
+        Args:
+            batch: The batch of images and masks.
+            batch_idx: The batch index.
+            prefix: The runtime mode (val, test).
+        """
+        self.eval()
+        images, masks, _ = batch
+        bs = images.shape[0] if len(images.shape) > 3 else 1
+        images_input = images.to(DEVICE, dtype=torch.float32)
+        masks = masks.to(DEVICE).long()
+        masks_proba: torch.Tensor = self.model(
+            images_input
+        )  # pyright: ignore[reportCallIssue]
+
+        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            # GUARD: Check that the sizes match.
+            assert (
+                masks_proba.size() == masks.size()
+            ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
+
+        # HACK: This ensures that the dimensions to the loss function are correct.
+        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+            self.loss, FocalLoss
+        ):
+            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+        else:
+            loss_seg = self.alpha * self.loss(masks_proba, masks)
+
+        loss_all = loss_seg
+        self.log(
+            f"loss/{prefix}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
+        self.log(
+            f"hp/{prefix}_loss",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
+
+        if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
+            self.metrics[prefix], MetricCollection
+        ):
+            masks_preds, masks_one_hot = shared_metric_calculation(
+                self, masks, masks_proba, prefix
+            )
+
+            if isinstance(self.logger, TensorBoardLogger):
+                self._shared_image_logging(
+                    batch_idx,
+                    images.detach().cpu(),
+                    masks_one_hot.detach().cpu(),
+                    masks_preds.detach().cpu(),
+                    prefix,
+                    10,
+                )
+
+    @torch.no_grad()
     def _shared_image_logging(
         self,
         batch_idx: int,
@@ -396,81 +471,6 @@ class UnetLightning(L.LightningModule):
                 global_step=batch_idx if prefix == "test" else self.global_step,
             )
 
-    @torch.no_grad()
-    def _shared_eval(
-        self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
-        batch_idx: int,
-        prefix: Literal["val", "test"],
-    ):
-        """Shared evaluation step for validation and test steps.
-
-        Args:
-            batch: The batch of images and masks.
-            batch_idx: The batch index.
-            prefix: The runtime mode (val, test).
-        """
-        self.eval()
-        images, masks, _ = batch
-        bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
-        masks_proba: torch.Tensor = self.model(
-            images_input
-        )  # pyright: ignore[reportCallIssue]
-
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
-            # GUARD: Check that the sizes match.
-            assert (
-                masks_proba.size() == masks.size()
-            ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
-
-        # HACK: This ensures that the dimensions to the loss function are correct.
-        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-            self.loss, FocalLoss
-        ):
-            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
-        else:
-            loss_seg = self.alpha * self.loss(masks_proba, masks)
-
-        loss_all = loss_seg
-        self.log(
-            f"loss/{prefix}",
-            loss_all.detach().cpu().item(),
-            batch_size=bs,
-            on_epoch=True,
-            prog_bar=True,
-        )
-        self.log(
-            f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
-            loss_all.detach().cpu().item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
-        self.log(
-            f"hp/{prefix}_loss",
-            loss_all.detach().cpu().item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
-
-        if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
-            self.metrics[prefix], MetricCollection
-        ):
-            masks_preds, masks_one_hot = shared_metric_calculation(
-                self, masks, masks_proba, prefix
-            )
-
-            if isinstance(self.logger, TensorBoardLogger):
-                self._shared_image_logging(
-                    batch_idx,
-                    images.detach().cpu(),
-                    masks_one_hot.detach().cpu(),
-                    masks_preds.detach().cpu(),
-                    prefix,
-                    10,
-                )
-
     @override
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
@@ -533,7 +533,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
 
         # Handle color v. greyscale transforms.
 
-        transforms_img, transforms_mask, transforms_togther = get_transforms(
+        transforms_img, transforms_mask, transforms_together = get_transforms(
             self.loading_mode
         )
 
@@ -545,7 +545,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_together=transforms_togther,
+            transform_together=transforms_together,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
@@ -563,7 +563,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_together=transforms_togther,
+            transform_together=transforms_together,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
