@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-"""Two-plus-one architecture training script."""
 from __future__ import annotations
 
 import os
@@ -21,14 +20,14 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
-from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
+from dataset.dataset import TwoStreamDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,
     shared_metric_calculation,
     shared_metric_logging_epoch_end,
 )
-from models.two_plus_one import TwoPlusOneUnet
+from models.two_stream import TwoStreamUnet
 from utils import utils
 from utils.utils import (
     ClassificationMode,
@@ -37,13 +36,13 @@ from utils.utils import (
     get_transforms,
 )
 
-BATCH_SIZE_TRAIN = 4  # Default batch size for training.
+BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-NUM_FRAMES = 5  # Default number of frames.
+NUM_FRAMES = 30  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
 
 
-class TwoPlusOneUnetLightning(L.LightningModule):
+class TwoStreamUnetLightning(L.LightningModule):
     train_metric: Metric
     train_class_2_3_metric: Metric
     val_metric: Metric
@@ -60,7 +59,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         encoder_weights: str | None = "imagenet",
         in_channels: int = 3,
         classes: int = 1,
-        num_frames: int = 5,
+        num_frames: int = 30,
         weights_from_ckpt_path: str | None = None,
         optimizer: Optimizer | str = "adamw",
         optimizer_kwargs: dict[str, Any] = {},
@@ -75,38 +74,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
-    ):
-        """A LightningModule wrapper for the modified Unet for the two-plus-one
-        architecture.
-
-        Args:
-            metric: The metric to use for evaluation.
-            loss: The loss function to use for training.
-            encoder_name: The encoder name to use for the Unet.
-            encoder_depth: The depth of the encoder.
-            encoder_weights: The weights to use for the encoder.
-            in_channels: The number of input channels.
-            classes: The number of classes.
-            num_frames: The number of frames to use.
-            weights_from_ckpt_path: The path to the checkpoint to load weights from.
-            optimizer: The optimizer to use.
-            optimizer_kwargs: The optimizer keyword arguments.
-            scheduler: The learning rate scheduler to use.
-            scheduler_kwargs: The scheduler keyword arguments.
-            multiplier: The multiplier for the learning rate.
-            total_epochs: The total number of epochs.
-            alpha: The alpha value for the loss function.
-            _beta: The beta value for the loss function (Unused).
-            learning_rate: The learning rate.
-            dl_classification_mode: The classification mode for the dataloader.
-            eval_classifiation_mode: The classification mode for evaluation.
-            loading_mode: Image loading mode.
-            dump_memory_snapshot: Whether to dump a memory snapshot after training.
-
-        Raises:
-            NotImplementedError: If the loss type is not implemented.
-            RuntimeError: If the checkpoint is not loaded correctly.
-        """
+    ) -> None:
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
         self.in_channels = in_channels
@@ -114,13 +82,12 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
 
-        # Trace memory usage
         if self.dump_memory_snapshot:
             torch.cuda.memory._record_memory_history(
                 enabled="all", context="all", stacks="python"
             )
 
-        self.model = TwoPlusOneUnet(
+        self.model = TwoStreamUnet(
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
@@ -165,7 +132,6 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                 )
             )
 
-        # Sets metric if None.
         self.metrics = {}
         setup_metrics(self, metric, classes)
 
@@ -183,9 +149,14 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             if loading_mode == LoadingMode.RGB
             else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
-        self.example_input_array = torch.randn(
-            (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
-        ).to(DEVICE)
+        self.example_input_array = (
+            torch.randn((8, self.in_channels, 224, 224), dtype=torch.float32).to(
+                DEVICE
+            ),
+            torch.randn(
+                (8, self.num_frames * self.in_channels, 224, 224), dtype=torch.float32
+            ).to(DEVICE),
+        )
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
@@ -227,8 +198,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         if self.dump_memory_snapshot:
             torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)  # pyright: ignore[reportCallIssue]
+    def forward(self, lge: torch.Tensor, cine: torch.Tensor) -> torch.Tensor:
+        return self.model(lge, cine)  # pyright: ignore[reportCallIssue]
 
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
@@ -240,17 +211,20 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         shared_metric_logging_epoch_end(self, "test")
 
     def training_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
     ) -> torch.Tensor:
-        images, masks, _ = batch
-        bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
+        lges, cines, masks, _names = batch
+        bs = lges.shape[0] if len(lges.shape) > 3 else 1
+        lges = lges.to(device=self.device, dtype=torch.float32)
+        cines = cines.to(device=self.device, dtype=torch.float32)
+        masks = masks.to(device=self.device).long()
 
         with torch.autocast(device_type=self.device.type):
             # B x C x H x W
             masks_proba: torch.Tensor = self.model(
-                images_input
+                lges, cines
             )  # pyright: ignore[reportCallIssue]
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
@@ -288,7 +262,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             if isinstance(self.logger, TensorBoardLogger):
                 self._shared_image_logging(
                     batch_idx,
-                    images.detach().cpu(),
+                    lges.detach().cpu(),
                     masks_one_hot.detach().cpu(),
                     masks_preds.detach().cpu(),
                     "train",
@@ -299,34 +273,35 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         return loss_all
 
     def validation_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
     ):
         self._shared_eval(batch, batch_idx, "val")
 
-    def test_step(self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int):
+    def test_step(
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
+    ):
         self._shared_eval(batch, batch_idx, "test")
 
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
         batch_idx: int,
-        prefix: Literal["val", "test"],
+        prefix: Literal["train", "val", "test"],
     ):
-        """Shared evaluation step for validation and test steps.
+        lges, cines, masks, _names = batch
+        bs = lges.shape[0] if len(lges.shape) > 3 else 1
+        lges = lges.to(device=self.device, dtype=torch.float32)
+        cines = cines.to(device=self.device, dtype=torch.float32)
+        masks = masks.to(device=self.device).long()
 
-        Args:
-            batch: The batch of images and masks.
-            batch_idx: The batch index.
-            prefix: The runtime mode (val, test).
-        """
-        self.eval()
-        images, masks, _ = batch
-        bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
+        # B x C x H x W
         masks_proba: torch.Tensor = self.model(
-            images_input
+            lges, cines
         )  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
@@ -342,23 +317,17 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
         else:
             loss_seg = self.alpha * self.loss(masks_proba, masks)
-
         loss_all = loss_seg
+
         self.log(
             f"loss/{prefix}",
-            loss_all.detach().cpu().item(),
+            loss_all.item(),
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
-            loss_all.detach().cpu().item(),
-            batch_size=bs,
-            on_epoch=True,
-        )
-        self.log(
-            f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
@@ -374,7 +343,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             if isinstance(self.logger, TensorBoardLogger):
                 self._shared_image_logging(
                     batch_idx,
-                    images.detach().cpu(),
+                    lges.detach().cpu(),
                     masks_one_hot.detach().cpu(),
                     masks_preds.detach().cpu(),
                     prefix,
@@ -480,7 +449,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         raise exception
 
 
-class TwoPlusOneDataModule(L.LightningDataModule):
+class TwoStreamDataModule(L.LightningDataModule):
     def __init__(
         self,
         data_dir: str = "data/train_val/",
@@ -488,29 +457,11 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
         frames: int = NUM_FRAMES,
-        select_frame_method: Literal["consecutive", "specific"] = "specific",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
-    ):
-        """Datamodule for the Cine dataset for PyTorch Lightning compatibility.
-
-        Args:
-            data_dir: Path to train data directory containing Cine and masks
-            subdirectories.
-            test_dir: Path to test data directory containing Cine and masks
-            subdirectories.
-            indices_dir: Path to directory containing `train_indices.pkl` and
-            `val_indices.pkl`.
-            batch_size: Minibatch sizes for the DataLoader.
-            frames: Number of frames from the original dataset to use.
-            select_frame_method: How frames < 30 are selected for training.
-            classification_mode: The classification mode for the dataloader.
-            num_workers: The number of workers for the DataLoader.
-            loading_mode: Determines the cv2.imread flags for the images.
-            combine_train_val: Whether to combine train/val sets
-        """
+    ) -> None:
         super().__init__()
         self.save_hyperparameters()
         self.data_dir = data_dir
@@ -518,9 +469,6 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         self.indices_dir = indices_dir
         self.batch_size = batch_size
         self.frames = frames
-        self.select_frame_method: Literal["consecutive", "specific"] = (
-            select_frame_method
-        )
         self.classification_mode = classification_mode
         self.num_workers = num_workers
         self.loading_mode = loading_mode
@@ -529,45 +477,45 @@ class TwoPlusOneDataModule(L.LightningDataModule):
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
 
-        trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
+        trainval_lge_dir = os.path.join(os.getcwd(), self.data_dir, "LGE")
+        trainval_cine_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
-
-        # Handle color v. greyscale transforms.
 
         transforms_img, transforms_mask, transforms_together = get_transforms(
             self.loading_mode
         )
 
-        trainval_dataset = TwoPlusOneDataset(
-            trainval_img_dir,
+        trainval_dataset = TwoStreamDataset(
+            trainval_lge_dir,
+            trainval_cine_dir,
             trainval_mask_dir,
             indices_dir,
-            frames=self.frames,
-            select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
             transform_together=transforms_together,
+            batch_size=self.batch_size,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
-        test_img_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
+        test_lge_dir = os.path.join(os.getcwd(), self.test_dir, "LGE")
+        test_cine_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
         test_mask_dir = os.path.join(os.getcwd(), self.test_dir, "masks")
 
-        test_dataset = TwoPlusOneDataset(
-            test_img_dir,
+        test_dataset = TwoStreamDataset(
+            test_lge_dir,
+            test_cine_dir,
             test_mask_dir,
             indices_dir,
-            frames=self.frames,
-            select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_together=transforms_together,
+            batch_size=self.batch_size,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
+            combine_train_val=self.combine_train_val,
         )
 
         if self.combine_train_val:
@@ -623,7 +571,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         )
 
 
-class TwoPlusOneCLI(LightningCLI):
+class TwoStreamCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
         if (subcommand := getattr(self, "subcommand")) is not None:
             if (config := self.config.get(subcommand)) is not None:
@@ -712,12 +660,10 @@ class TwoPlusOneCLI(LightningCLI):
 
 
 if __name__ == "__main__":
-    cli = TwoPlusOneCLI(
-        TwoPlusOneUnetLightning,
-        TwoPlusOneDataModule,
+    cli = TwoStreamCLI(
+        TwoStreamUnetLightning,
+        TwoStreamDataModule,
         save_config_callback=None,
         auto_configure_optimizers=False,
-        parser_kwargs={
-            "fit": {"default_config_files": ["./configs/two_plus_one.yaml"]}
-        },
+        parser_kwargs={"fit": {"default_config_files": ["./configs/two_stream.yaml"]}},
     )

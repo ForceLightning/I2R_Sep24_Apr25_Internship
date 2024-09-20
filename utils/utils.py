@@ -222,6 +222,7 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
     transforms_img = Compose(
         [
             v2.ToImage(),
+            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
@@ -232,6 +233,7 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
     transforms_mask = Compose(
         [
             v2.ToImage(),
+            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.long, scale=True),
         ]
     )
@@ -244,7 +246,6 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
                 v2.InterpolationMode.BILINEAR,
             ),
             v2.ElasticTransform(alpha=33.0),
-            v2.Resize(224, antialias=True),
         ]
     )
 

@@ -488,8 +488,8 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         """
         # Define names for all files using the same LGE base
         lge_name = self.lge_list[index]
-        mask_name = self.mask_list[index].split(".")[0] + "_0000.nii.png"
-        cine_name = self.cine_list[index].split(".")[0] + "_0000.nii.tiff"
+        cine_name = self.lge_list[index].split(".")[0] + "_0000.nii.tiff"
+        mask_name = self.lge_list[index].split(".")[0] + "_0000.nii.png"
 
         if not lge_name.endswith(".png"):
             raise ValueError("Invalid image type for file: {lge_name}")
@@ -520,9 +520,10 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
         # Combine the Cine channels.
         combined_cines = default_collate(cine_list)
-        out_lge.squeeze()
         f, c, h, w = combined_cines.shape
         combined_cines = combined_cines.reshape(f * c, h, w)
+
+        out_lge.squeeze()
 
         mask = Image.open(os.path.join(self.mask_dir, mask_name), formats=["png"])
         out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
@@ -779,7 +780,7 @@ def seed_worker(worker_id):
 
 
 def get_trainval_data_subsets(
-    dataset: CineDataset | LGEDataset | TwoPlusOneDataset,
+    dataset: CineDataset | LGEDataset | TwoPlusOneDataset | TwoStreamDataset,
 ) -> tuple[Subset, Subset]:
     """Gets the subsets of the data as train/val splits from a superset consisting of
     both.
