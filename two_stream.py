@@ -37,6 +37,7 @@ from utils.utils import (
 )
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
+
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 30  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -310,6 +311,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 masks_proba.size() == masks.size()
             ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
+        loss_seg: torch.Tensor
         # HACK: This ensures that the dimensions to the loss function are correct.
         if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
             self.loss, FocalLoss
@@ -328,6 +330,12 @@ class TwoStreamUnetLightning(L.LightningModule):
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+        )
+        self.log(
+            f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
@@ -392,11 +400,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 inv_norm_img = self.de_transform(images).detach().cpu()
             else:
                 image = (
-                    images[:, :, 0, :, :]
-                    .unsqueeze(2)
-                    .repeat(1, 1, 3, 1, 1)
-                    .detach()
-                    .cpu()
+                    images[:, 0, :, :].unsqueeze(1).repeat(1, 3, 1, 1).detach().cpu()
                 )
                 inv_norm_img = self.de_transform(image).detach().cpu()
 
@@ -409,7 +413,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 )
                 # Get only the first frame of images.
                 for img, mask in zip(
-                    inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                    inv_norm_img[:, :3, :, :].detach().cpu(),
                     masks_preds.detach().cpu(),
                 )
             ]
@@ -429,7 +433,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 )
                 # Get only the first frame of images.
                 for img, mask in zip(
-                    inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                    inv_norm_img[:, :3, :, :].detach().cpu(),
                     masks_one_hot.detach().cpu(),
                 )
             ]

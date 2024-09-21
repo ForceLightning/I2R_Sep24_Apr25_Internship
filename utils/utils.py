@@ -234,7 +234,7 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
         [
             v2.ToImage(),
             v2.Resize(224, antialias=True),
-            v2.ToDtype(torch.long, scale=True),
+            v2.ToDtype(torch.long, scale=False),
         ]
     )
 

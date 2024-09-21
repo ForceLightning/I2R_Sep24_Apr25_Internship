@@ -8,11 +8,12 @@ import random
 from typing import Literal, Sequence, override
 
 import numpy as np
+import PIL.ImageSequence as ImageSequence
 import torch
 from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from cv2 import typing as cvt
 from numpy import typing as npt
-from PIL import Image, ImageSequence  # pyright: ignore[reportAttributeAccessIssue]
+from PIL import Image
 from torch.nn import functional as F
 from torch.utils.data import (
     DataLoader,
@@ -130,14 +131,16 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
         ) as mask:
-            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+            out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
                 # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
                 # bitwise or operations to adhere to those conditions.
-                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
                 lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
                     lab_mask_one_hot[:, :, 3]
                 )
@@ -155,7 +158,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
 
         out_img, out_mask = self.transform_together(out_img, out_mask)
 
-        return out_img, out_mask, img_name
+        return out_img, out_mask.squeeze().long(), img_name
 
     def __len__(self) -> int:
         return len(self.img_list)
@@ -239,29 +242,23 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         with Image.open(
             os.path.join(self.img_dir, img_name), formats=["tiff"]
         ) as img_pil:
-            img_list = [
-                (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.getchannel("L")
-                )
-                for img in ImageSequence.Iterator(img_pil)
-            ]
-        combined_imgs = default_collate(self.transform_img(img_list))
-        f, c, h, w = combined_imgs.shape
-        combined_imgs = combined_imgs.reshape(f * c, h, w)
+            img_list = list(ImageSequence.Iterator(img_pil))
+            img_list = self.transform_img(img_list)
+            combined_imgs = tv_tensors.Video(default_collate(img_list))
 
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
         ) as mask:
-            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+            out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
                 # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
                 # bitwise or operations to adhere to those conditions.
-                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
                 lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
                     lab_mask_one_hot[:, :, 3]
                 )
@@ -277,7 +274,12 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        return combined_imgs, out_mask, img_name
+        out_video, out_mask = self.transform_together(combined_imgs, out_mask)
+
+        f, c, h, w = out_video.shape
+        out_video = out_video.reshape(f * c, h, w)
+
+        return out_video, out_mask.squeeze().long(), img_name
 
     def __len__(self) -> int:
         return len(self.img_list)
@@ -351,35 +353,25 @@ class TwoPlusOneDataset(CineDataset):
         with Image.open(
             os.path.join(self.img_dir, img_name), formats=["tiff"]
         ) as img_pil:
-            img_list = [
-                (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.getchannel("L")
-                )
-                for img in ImageSequence.Iterator(img_pil)
-            ]
-        combined_imgs = default_collate(self.transform_img(img_list))
-        assert (
-            len(combined_imgs.shape) == 4
-        ), f"Combined images must be of shape: (F, C, H, W) but is {combined_imgs.shape} instead."
-        combined_imgs = concatenate_imgs(
-            self.frames, self.select_frame_method, combined_imgs
-        )
-        out_video = tv_tensors.Video(combined_imgs)
+            img_list = list(ImageSequence.Iterator(img_pil))
+            img_list = self.transform_img(img_list)
+
+            combined_video = tv_tensors.Video(default_collate(img_list))
 
         # Perform necessary operations on the mask
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
         ) as mask:
-            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+            out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
                 # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
                 # bitwise or operations to adhere to those conditions.
-                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
                 lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
                     lab_mask_one_hot[:, :, 3]
                 )
@@ -395,9 +387,16 @@ class TwoPlusOneDataset(CineDataset):
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        out_video, out_mask = self.transform_together(out_video, out_mask)
+        combined_video, out_mask = self.transform_together(combined_video, out_mask)
+        assert (
+            len(combined_video.shape) == 4
+        ), f"Combined images must be of shape: (F, C, H, W) but is {combined_video.shape} instead."
 
-        return out_video, out_mask, img_name
+        out_video = concatenate_imgs(
+            self.frames, self.select_frame_method, combined_video
+        )
+
+        return out_video, out_mask.squeeze().long(), img_name
 
 
 class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]):
@@ -514,43 +513,35 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         with Image.open(
             os.path.join(self.cine_dir, cine_name), formats=["tiff"]
         ) as cine:
-            cine_list = [
-                (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.getchannel("L")
-                )
-                for img in ImageSequence.Iterator(cine)
-            ]
+            cine_list = list(ImageSequence.Iterator(cine))
 
-        # Transform LGE and Cine together
-        out_lge, cine_list = self.transform_img(lge_pil, cine_list)
+            # Transform LGE and Cine together
+            out_lge, cine_list = self.transform_img(lge_pil, cine_list)
 
-        # Combine the Cine channels.
         combined_cines = default_collate(cine_list)
-        f, c, h, w = combined_cines.shape
-        combined_cines = combined_cines.reshape(f * c, h, w)
 
         out_lge.squeeze()
 
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
         ) as mask:
-            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+            mask_t = tv_tensors.Mask(self.transform_mask(mask))
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
                 # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
                 # bitwise or operations to adhere to those conditions.
-                lab_mask_one_hot = F.one_hot(out_mask, num_classes=4)  # H x W x C
+                lab_mask_one_hot = F.one_hot(
+                    mask_t.squeeze(), num_classes=4
+                )  # H x W x C
                 lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
                     lab_mask_one_hot[:, :, 3]
                 )
                 lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
                     lab_mask_one_hot[:, :, 2]
                 )
-                out_mask = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
+                mask_t = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
@@ -560,11 +551,15 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
                 )
 
         # Perform transforms which must occur on all inputs together.
-        out_lge, out_cine, out_mask = self.transform_together(
-            out_lge, combined_cines, out_mask
+        out_lge, combined_cines, out_mask = self.transform_together(
+            out_lge, combined_cines, mask_t
         )
 
-        return out_lge, out_cine, out_mask, lge_name
+        f, c, h, w = combined_cines.shape
+        out_cine = combined_cines.reshape(f * c, h, w)
+
+        # Combine the Cine channels.
+        return out_lge, out_cine, out_mask.squeeze().long(), lge_name
 
     def __len__(self):
         return len(self.cine_list)
