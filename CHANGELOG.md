@@ -1,3 +1,15 @@
+# 2024-09-20 - Replaced OpenCV dataloading with Pillow methods
+[52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/52b468b243652c8ec7884b7a687cdf2ab746a4f3)
+
+The original script used OpenCV methods to load the data, which takes a significant amount of time when loading multi-frame .TIFF files in the Cine task. Instead, we may use Pillow's lazily loaded Image objects which tie-in nicely with `torchvision`'s transform methods. The speedup for the Cine task is as shown below:
+
+| Implementation | `__getitem__` time | Time saved             |
+| -------------- | ---------------- | ---------------------- |
+| Original       | 171 ms ± 786 μs  | 00.00%                 |
+| Pillow         | 67.9 ms ± 600 μs | -39.70%                |
+
+This includes image transformations, where the Pillow implementation includes an additional transform on the combined Cine images and mask, so that transformations like rotations and elastic transform can be applied together.
+
 # 2024-09-16 - Loading images as greyscale
 [318b1fe](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/318b1fea00f42bb918bb91580f440868ed2c4789)
 
