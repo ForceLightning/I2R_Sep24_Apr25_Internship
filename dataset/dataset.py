@@ -115,24 +115,22 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + "_0000.nii.png"
 
-        # Read the .tiff with 30 pages using cv2.imreadmulti instead of cv2.imread,
-        # loaded as RBG.
-        assert img_name.endswith(".png"), "Image not in .PNG format"
-
         # PERF(PIL): This reduces the loading and transform time by 60% when compared
         # to OpenCV.
 
         # Convert LGE to RGB or Greyscale
-        img = Image.open(os.path.join(self.img_dir, img_name))
-        img = (
-            img.convert("RGB")
-            if self.loading_mode == LoadingMode.RGB
-            else img.convert("L")
-        )
-        out_img: torch.Tensor = self.transform_img(img)
+        with Image.open(os.path.join(self.img_dir, img_name), formats=["png"]) as img:
+            img_list = (
+                img.convert("RGB")
+                if self.loading_mode == LoadingMode.RGB
+                else img.convert("L")
+            )
+        out_img: torch.Tensor = self.transform_img(img_list)
 
-        mask = Image.open(os.path.join(self.mask_dir, mask_name))
-        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+        with Image.open(
+            os.path.join(self.mask_dir, mask_name), formats=["png"]
+        ) as mask:
+            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
@@ -238,21 +236,25 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
 
         # PERF(PIL): This reduces the loading and transform time by 60% when compared
         # to OpenCV.
-        img_pil = Image.open(os.path.join(self.img_dir, img_name))
-        img_list = [
-            (
-                img.convert("RGB")
-                if self.loading_mode == LoadingMode.RGB
-                else img.getchannel("L")
-            )
-            for img in ImageSequence.Iterator(img_pil)
-        ]
+        with Image.open(
+            os.path.join(self.img_dir, img_name), formats=["tiff"]
+        ) as img_pil:
+            img_list = [
+                (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.getchannel("L")
+                )
+                for img in ImageSequence.Iterator(img_pil)
+            ]
         combined_imgs = default_collate(self.transform_img(img_list))
         f, c, h, w = combined_imgs.shape
         combined_imgs = combined_imgs.reshape(f * c, h, w)
 
-        mask = Image.open(os.path.join(self.mask_dir, mask_name))
-        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+        with Image.open(
+            os.path.join(self.mask_dir, mask_name), formats=["png"]
+        ) as mask:
+            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
@@ -346,15 +348,17 @@ class TwoPlusOneDataset(CineDataset):
 
         # PERF(PIL): This reduces the loading and transform time by 60% when compared
         # to OpenCV.
-        img_pil = Image.open(os.path.join(self.img_dir, img_name), formats=["tiff"])
-        img_list = [
-            (
-                img.convert("RGB")
-                if self.loading_mode == LoadingMode.RGB
-                else img.getchannel("L")
-            )
-            for img in ImageSequence.Iterator(img_pil)
-        ]
+        with Image.open(
+            os.path.join(self.img_dir, img_name), formats=["tiff"]
+        ) as img_pil:
+            img_list = [
+                (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.getchannel("L")
+                )
+                for img in ImageSequence.Iterator(img_pil)
+            ]
         combined_imgs = default_collate(self.transform_img(img_list))
         assert (
             len(combined_imgs.shape) == 4
@@ -365,8 +369,10 @@ class TwoPlusOneDataset(CineDataset):
         out_video = tv_tensors.Video(combined_imgs)
 
         # Perform necessary operations on the mask
-        mask = Image.open(os.path.join(self.mask_dir, mask_name))
-        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+        with Image.open(
+            os.path.join(self.mask_dir, mask_name), formats=["png"]
+        ) as mask:
+            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
@@ -467,7 +473,7 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
     @property
     def img_dir(self):
-        return self.cine_dir
+        return self.lge_dir
 
     def __getitem__(
         self, index: int
@@ -498,25 +504,27 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         # to OpenCV.
 
         # Convert LGE to RGB or Greyscale
-        lge = Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"])
-        lge = (
-            lge.convert("RGB")
-            if self.loading_mode == LoadingMode.RGB
-            else lge.convert("L")
-        )
-
-        cine_pil = Image.open(os.path.join(self.cine_dir, cine_name), formats=["tiff"])
-        cine_list = [
-            (
-                img.convert("RGB")
+        with Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"]) as lge:
+            lge_pil = (
+                lge.convert("RGB")
                 if self.loading_mode == LoadingMode.RGB
-                else img.getchannel("L")
+                else lge.convert("L")
             )
-            for img in ImageSequence.Iterator(cine_pil)
-        ]
+
+        with Image.open(
+            os.path.join(self.cine_dir, cine_name), formats=["tiff"]
+        ) as cine:
+            cine_list = [
+                (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.getchannel("L")
+                )
+                for img in ImageSequence.Iterator(cine)
+            ]
 
         # Transform LGE and Cine together
-        out_lge, cine_list = self.transform_img(lge, cine_list)
+        out_lge, cine_list = self.transform_img(lge_pil, cine_list)
 
         # Combine the Cine channels.
         combined_cines = default_collate(cine_list)
@@ -525,8 +533,10 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
         out_lge.squeeze()
 
-        mask = Image.open(os.path.join(self.mask_dir, mask_name), formats=["png"])
-        out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
+        with Image.open(
+            os.path.join(self.mask_dir, mask_name), formats=["png"]
+        ) as mask:
+            out_mask = self.transform_mask(tv_tensors.Mask(mask)).squeeze()
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:

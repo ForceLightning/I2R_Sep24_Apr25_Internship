@@ -17,6 +17,15 @@ repos:
       - id: mixed-line-ending
       - id: name-tests-test
         args: ['--pytest']
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
 
 default_language_version:
   python: python3.12
