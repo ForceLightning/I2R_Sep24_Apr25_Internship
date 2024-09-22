@@ -801,6 +801,7 @@ def get_trainval_data_subsets(
     """
     if not valid_dataset:
         valid_dataset = train_dataset
+
     train_set = Subset(train_dataset, train_dataset.train_idxs)
     valid_set = Subset(valid_dataset, valid_dataset.valid_idxs)
     return train_set, valid_set

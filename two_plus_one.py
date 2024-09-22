@@ -38,6 +38,7 @@ from utils.utils import (
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
+
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -567,10 +568,10 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_together=transforms_together,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
+            combine_train_val=self.combine_train_val,
         )
 
         if self.combine_train_val:
@@ -594,7 +595,6 @@ class TwoPlusOneDataModule(L.LightningDataModule):
                 select_frame_method=self.select_frame_method,
                 transform_img=transforms_img,
                 transform_mask=transforms_mask,
-                transform_together=transforms_together,
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,

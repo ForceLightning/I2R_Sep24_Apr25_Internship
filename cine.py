@@ -524,6 +524,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
+            combine_train_val=self.combine_train_val,
         )
 
         if self.combine_train_val:
@@ -547,6 +548,7 @@ class CineBaselineDataModule(L.LightningDataModule):
                 transform_mask=transforms_mask,
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
+                combine_train_val=self.combine_train_val,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
