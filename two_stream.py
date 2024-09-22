@@ -535,7 +535,21 @@ class TwoStreamDataModule(L.LightningDataModule):
                 trainval_dataset
             ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
 
-            train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
+            valid_dataset = TwoStreamDataset(
+                trainval_lge_dir,
+                trainval_cine_dir,
+                trainval_mask_dir,
+                indices_dir,
+                transform_img=transforms_img,
+                transform_mask=transforms_mask,
+                batch_size=self.batch_size,
+                classification_mode=self.classification_mode,
+                loading_mode=self.loading_mode,
+            )
+
+            train_set, valid_set = get_trainval_data_subsets(
+                trainval_dataset, valid_dataset
+            )
 
             self.train = train_set
             self.val = valid_set

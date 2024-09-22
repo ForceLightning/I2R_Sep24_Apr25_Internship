@@ -785,7 +785,10 @@ def seed_worker(worker_id):
 
 
 def get_trainval_data_subsets(
-    dataset: CineDataset | LGEDataset | TwoPlusOneDataset | TwoStreamDataset,
+    train_dataset: CineDataset | LGEDataset | TwoPlusOneDataset | TwoStreamDataset,
+    valid_dataset: (
+        CineDataset | LGEDataset | TwoPlusOneDataset | TwoStreamDataset | None
+    ) = None,
 ) -> tuple[Subset, Subset]:
     """Gets the subsets of the data as train/val splits from a superset consisting of
     both.
@@ -796,8 +799,10 @@ def get_trainval_data_subsets(
     Returns:
         tuple[Subset, Subset]: Training and validation subsets.
     """
-    train_set = Subset(dataset, dataset.train_idxs)
-    valid_set = Subset(dataset, dataset.valid_idxs)
+    if not valid_dataset:
+        valid_dataset = train_dataset
+    train_set = Subset(train_dataset, train_dataset.train_idxs)
+    valid_set = Subset(valid_dataset, valid_dataset.valid_idxs)
     return train_set, valid_set
 
 

@@ -583,7 +583,23 @@ class TwoPlusOneDataModule(L.LightningDataModule):
                 trainval_dataset
             ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
 
-            train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
+            valid_dataset = TwoPlusOneDataset(
+                trainval_img_dir,
+                trainval_mask_dir,
+                indices_dir,
+                frames=self.frames,
+                select_frame_method=self.select_frame_method,
+                transform_img=transforms_img,
+                transform_mask=transforms_mask,
+                transform_together=transforms_together,
+                classification_mode=self.classification_mode,
+                loading_mode=self.loading_mode,
+                combine_train_val=self.combine_train_val,
+            )
+
+            train_set, valid_set = get_trainval_data_subsets(
+                trainval_dataset, valid_dataset
+            )
 
             self.train = train_set
             self.val = valid_set

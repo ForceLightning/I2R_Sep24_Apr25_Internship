@@ -38,7 +38,7 @@ from utils.utils import (
     get_transforms,
 )
 
-BATCH_SIZE_TRAIN = 4  # Default batch size
+BATCH_SIZE_TRAIN = 8  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 torch.set_float32_matmul_precision("medium")
 
@@ -537,7 +537,19 @@ class CineBaselineDataModule(L.LightningDataModule):
                 trainval_dataset
             ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
 
-            train_set, valid_set = get_trainval_data_subsets(trainval_dataset)
+            valid_dataset = CineDataset(
+                trainval_img_dir,
+                trainval_mask_dir,
+                indices_dir,
+                transform_img=transforms_img,
+                transform_mask=transforms_mask,
+                classification_mode=self.classification_mode,
+                loading_mode=self.loading_mode,
+            )
+
+            train_set, valid_set = get_trainval_data_subsets(
+                trainval_dataset, valid_dataset
+            )
 
             self.train = train_set
             self.val = valid_set

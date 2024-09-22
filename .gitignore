@@ -261,3 +261,7 @@ profiling/
 
 # Prototyping
 *.ipynb
+
+# Loose pickle or checkpoint files
+*.ckpt
+*.pickle
