@@ -38,7 +38,7 @@ from utils.utils import (
     get_transforms,
 )
 
-BATCH_SIZE_TRAIN = 4  # Default batch size
+BATCH_SIZE_TRAIN = 8  # Default batch size
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 torch.set_float32_matmul_precision("medium")
 

@@ -5,9 +5,11 @@ from typing import Sequence
 
 import lightning as L
 import torch
-from torch.optim._multi_tensor import Adam, AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
+from torch.optim.adam import Adam
+from torch.optim.adamw import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler, OneCycleLR
 from torch.optim.optimizer import Optimizer
+from torch.optim.sgd import SGD
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 from warmup_scheduler import GradualWarmupScheduler
@@ -167,35 +169,51 @@ def configure_optimizers(module: L.LightningModule):
     module.optimizer_kwargs.update({"lr": module.learning_rate})
     match module.optimizer:
         case "adam":
+            module.optimizer_kwargs.update({"fused": True})
             optimizer = Adam(
                 params=module.model.parameters(), **module.optimizer_kwargs
             )
         case "adamw":
+            module.optimizer_kwargs.update({"fused": True})
             optimizer = AdamW(
                 params=module.model.parameters(), **module.optimizer_kwargs
             )
+        case "sgd":
+            optimizer = SGD(params=module.model.parameters(), **module.optimizer_kwargs)
         case _:
             raise NotImplementedError(f"optimizer {module.optimizer} not implemented!")
 
     if isinstance(module.scheduler, str):
         match module.scheduler:
             case "gradual_warmup_scheduler":
-                module.scheduler_kwargs.update(
-                    {
-                        "optimizer": optimizer,
-                        "multiplier": module.multiplier,
-                        "total_epoch": 5,
-                        "T_max": module.total_epochs,
-                    }
-                )
+                kwargs = {
+                    "optimizer": optimizer,
+                    "multiplier": module.multiplier,
+                    "total_epoch": max(module.total_epochs // 10, 1),
+                    "T_max": module.total_epochs,
+                }
+                kwargs |= module.scheduler_kwargs
                 scheduler = {
-                    "scheduler": LightningGradualWarmupScheduler(
-                        **module.scheduler_kwargs
-                    ),
+                    "scheduler": LightningGradualWarmupScheduler(**kwargs),
                     "interval": "epoch",
                     "frequency": 1,
                     "monitor": "val_loss",
                     "strict": True,
+                }
+            case "one_cycle":
+                # Defaults
+                kwargs = {
+                    "optimizer": optimizer,
+                    "max_lr": module.learning_rate * module.multiplier,
+                    "total_steps": module.trainer.estimated_stepping_batches,
+                    "pct_start": 0.1,
+                }
+                # Apply hyperparameters
+                kwargs |= module.scheduler_kwargs
+
+                scheduler = {
+                    "scheduler": OneCycleLR(**kwargs),
+                    "interval": "step",
                 }
             case _:
                 raise NotImplementedError(
