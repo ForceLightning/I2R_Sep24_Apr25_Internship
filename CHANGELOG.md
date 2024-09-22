@@ -1,6 +1,14 @@
 # 2024-09-20 - Data augmentation
 [d8c3633](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/d8c3633276a509eea16a940efb57fbf64fad84bd)
-Adding simple image transforms such as `RandomRotation` to be applied to all LGE, Cine, and Masks for each sample together allows the model to be more robust when learning image features. This is facilitated by the `torchvision.transforms.v2` module, with the usage of `tv_tensors` to wrap image and mask tensors for operations.
+
+Adding simple image transforms such as `RandomRotation` to be applied to all LGE, Cine, and Masks for each sample together allows the model to be more robust when learning image features. This is facilitated by the `torchvision.transforms.v2` module, with the usage of `tv_tensors` to wrap image and mask tensors for operations. The performance difference for the LGE task is as shown below:
+
+![Data Augmentation comparison (LGE)](docs/images/data_augmentation.png)
+
+| Data Augmented? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 |
+| --------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ |
+| No              | 0.3625          | 0.5801            | 0.4834               | 0.7240       | 0.2162       | 0.4001       |
+| Yes             | 0.3616          | 0.7135            | 0.6746               | 0.7385       | 0.5705       | 0.5687       |
 
 # 2024-09-20 - Replaced OpenCV dataloading with Pillow methods
 [52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/52b468b243652c8ec7884b7a687cdf2ab746a4f3)

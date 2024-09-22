@@ -224,7 +224,9 @@ def configure_optimizers(module: L.LightningModule):
     return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
-def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose]:
+def get_transforms(
+    loading_mode: LoadingMode, augment: bool = False
+) -> tuple[Compose, Compose, Compose]:
     """Gets default transformations for all datasets.
 
     The default implementation resizes the images to (224, 224), casts them to float32,
@@ -232,6 +234,7 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
 
     Args:
         loading_mode: The loading mode for the images.
+        augment: Whether to augment the images and masks together.
 
     Returns:
         tuple: The image, mask, and combined transformations
@@ -265,6 +268,8 @@ def get_transforms(loading_mode: LoadingMode) -> tuple[Compose, Compose, Compose
             ),
             v2.ElasticTransform(alpha=33.0),
         ]
+        if augment
+        else [v2.Identity()]
     )
 
     return transforms_img, transforms_mask, transforms_together

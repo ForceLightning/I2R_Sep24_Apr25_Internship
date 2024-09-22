@@ -493,6 +493,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
+        augment: bool = False,
     ):
         """Datamodule for the Cine dataset for PyTorch Lightning compatibility.
 
@@ -509,7 +510,8 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             classification_mode: The classification mode for the dataloader.
             num_workers: The number of workers for the DataLoader.
             loading_mode: Determines the cv2.imread flags for the images.
-            combine_train_val: Whether to combine train/val sets
+            combine_train_val: Whether to combine train/val sets.
+            augment: Whether to augment images and masks together.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -525,6 +527,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         self.num_workers = num_workers
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
+        self.augment = augment
 
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
@@ -535,7 +538,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         # Handle color v. greyscale transforms.
 
         transforms_img, transforms_mask, transforms_together = get_transforms(
-            self.loading_mode
+            self.loading_mode, self.augment
         )
 
         trainval_dataset = TwoPlusOneDataset(

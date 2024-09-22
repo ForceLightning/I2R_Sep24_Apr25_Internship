@@ -35,6 +35,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
+        augment: bool = False,
     ):
         """LGE MRI image data module.
 
@@ -59,6 +60,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         self.num_workers = num_workers
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
+        self.augment = augment
 
     @override
     def setup(self, stage):
@@ -68,7 +70,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
         transforms_img, transforms_mask, transforms_together = get_transforms(
-            self.loading_mode
+            self.loading_mode, self.augment
         )
 
         trainval_dataset = LGEDataset(
