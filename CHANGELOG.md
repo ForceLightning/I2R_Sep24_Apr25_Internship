@@ -5,20 +5,26 @@ Adding simple image transforms such as `RandomRotation` to be applied to all LGE
 
 ![Data Augmentation comparison (LGE)](docs/images/data_augmentation.png)
 
-| Data Augmented? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 |
-| --------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ |
-| No              | 0.3625          | 0.5801            | 0.4834               | 0.7240       | 0.2162       | 0.4001       |
-| Yes             | 0.3616          | 0.7135            | 0.6746               | 0.7385       | 0.5705       | 0.5687       |
+A comparison on the LGE, Cine, and TwoPlusOne tasks are as follows:
+
+| Task | Data Augmented? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 |
+| ---- | --------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ |
+| LGE  | No              | 0.3625          | 0.5801            | 0.4834               | 0.7240       | 0.2162       | 0.4001       |
+| LGE  | Yes             | 0.3616          | 0.7135            | 0.6746               | 0.7385       | 0.5705       | 0.5687       |
+| Cine | No              | 0.4331          | 0.5425            | 0.4699               | 0.6317       | 0.3316       | 0.2573       |
+| Cine | Yes             | 0.4100          | 0.5607            | 0.5104               | 0.6177       | 0.3245       | 0.3481       |
+| 2+1  | No              | 0.3855          | 0.5372            | 0.5140               | 0.6508       | 0.3292       | 0.1788       |
+| 2+1  | Yes             | 0.3996          | 0.5501            | 0.4897               | 0.5792       | 0.3646       | 0.2494       |
 
 # 2024-09-20 - Replaced OpenCV dataloading with Pillow methods
 [52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/52b468b243652c8ec7884b7a687cdf2ab746a4f3)
 
 The original script used OpenCV methods to load the data, which takes a significant amount of time when loading multi-frame .TIFF files in the Cine task. Instead, we may use Pillow's lazily loaded Image objects which tie-in nicely with `torchvision`'s transform methods. The speedup for the Cine task is as shown below:
 
-| Implementation | `__getitem__` time | Time saved             |
-| -------------- | ---------------- | ---------------------- |
-| Original       | 171 ms ± 786 μs  | 00.00%                 |
-| Pillow         | 67.9 ms ± 600 μs | -39.70%                |
+| Implementation | `__getitem__` time | Time saved |
+| -------------- | ---------------- | ---------- |
+| Original       | 171 ms ± 786 μs  |            |
+| Pillow         | 67.9 ms ± 600 μs | -39.70%    |
 
 This includes image transformations, where the Pillow implementation includes an additional transform on the combined Cine images and mask, so that transformations like rotations and elastic transform can be applied together.
 
@@ -107,12 +113,11 @@ The original implementation for calculating the Dice coefficient used extensive 
 [d9f4f93](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/d9f4f932bd0c5b37e0a02cc9246f4e227c44e4f8)
 
 The original implementation used multiclass training loss and multilabel evaluation (using a threshold). The classification problem is somewhere in between multiclass and multilabel:
-$$
-\text{class}_{3} \subset \text{class}_{2}\\
-\text{class}_{2} \subset \text{class}_{1}\\
+```math
+\text{class}_{3} \subset \text{class}_{2},
+\text{class}_{2} \subset \text{class}_{1},
 \text{class}_{1} \cap \text{bg} = \emptyset
-$$
-
+```
 # 2024-09-09 - Automatic Mixed Precision (AMP)
 [c8a35ed](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/c8a35ed67a32f7f1c23a0b55e712604e401bbf98)
 
