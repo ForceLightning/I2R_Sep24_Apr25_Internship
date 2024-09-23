@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Sequence, override
+import warnings
+from typing import Any, Callable, Literal, override
 
 import torch
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
@@ -12,87 +13,182 @@ from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
 
-from models.common import CentreBlock, DecoderBlock, UnetDecoder
+from models.common import UnetDecoder
 
 
 class OneD(nn.Module):
+
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         num_frames: int,
+        flat: bool = False,
+        activation: str | None = None,
     ) -> None:
+        """1D Temporal Convolutional Block.
+
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            num_frames: Number of frames in the input tensor.
+            flat: If True, only one convolutional layer is used.
+            activation: Activation function to use.
+
+        Raises:
+            NotImplementedError: If the number of frames is not implemented.
+
+        Note:
+            The number of frames must be one of 5, 10, 15, 20, or 30.
+        """
         super().__init__()
-        match num_frames:
-            case 5:
-                self.one = nn.Sequential(
-                    nn.Conv1d(
-                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                )
-            case 10:
-                self.one = nn.Sequential(
-                    nn.Conv1d(
-                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                    nn.Conv1d(
-                        out_channels, out_channels, kernel_size=2, stride=2, padding=0
-                    ),
-                    nn.ReLU(),
-                )
-            case 15:
-                self.one = nn.Sequential(
-                    nn.Conv1d(
-                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                    nn.Conv1d(
-                        out_channels, out_channels, kernel_size=3, stride=3, padding=0
-                    ),
-                    nn.ReLU(),
-                )
-            case 20:
-                self.one = nn.Sequential(
-                    nn.Conv1d(
-                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                    nn.Conv1d(
-                        out_channels, out_channels, kernel_size=4, stride=4, padding=0
-                    ),
-                    nn.ReLU(),
-                )
-            case 25:
-                self.one = nn.Sequential(
-                    nn.Conv1d(
-                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                    nn.Conv1d(
-                        out_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                )
-            case 30:
-                self.one = nn.Sequential(
-                    nn.Conv1d(
-                        in_channels, out_channels, kernel_size=5, stride=5, padding=0
-                    ),
-                    nn.ReLU(),
-                    nn.Conv1d(
-                        out_channels, out_channels, kernel_size=3, stride=3, padding=0
-                    ),
-                    nn.ReLU(),
-                    nn.Conv1d(
-                        out_channels, out_channels, kernel_size=2, stride=2, padding=0
-                    ),
-                )
+        match activation:
+            case "relu":
+                self.activation = nn.ReLU
+            case "gelu":
+                self.activation = nn.GELU
+            case "mish":
+                self.activation = nn.Mish
+            case "elu":
+                self.activation = nn.ELU
+            case "silu" | "swish":
+                self.activation = nn.SiLU
             case _:
-                raise NotImplementedError(
-                    f"Model with num_frames of {num_frames} not implemented!"
+                warnings.warn(
+                    f"Activation function {activation} not recognized. Using ReLU."
                 )
+                self.activation = nn.ReLU
+
+        if flat:
+            self.one = nn.Sequential(
+                nn.Conv1d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=num_frames,
+                    stride=num_frames,
+                    padding=0,
+                ),
+                self.activation(),
+            )
+        else:
+            match num_frames:
+                case 5:
+                    self.one = nn.Sequential(
+                        nn.Conv1d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                    )
+                case 10:
+                    self.one = nn.Sequential(
+                        nn.Conv1d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                        nn.Conv1d(
+                            out_channels,
+                            out_channels,
+                            kernel_size=2,
+                            stride=2,
+                            padding=0,
+                        ),
+                        self.activation(),
+                    )
+                case 15:
+                    self.one = nn.Sequential(
+                        nn.Conv1d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                        nn.Conv1d(
+                            out_channels,
+                            out_channels,
+                            kernel_size=3,
+                            stride=3,
+                            padding=0,
+                        ),
+                        self.activation(),
+                    )
+                case 20:
+                    self.one = nn.Sequential(
+                        nn.Conv1d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                        nn.Conv1d(
+                            out_channels,
+                            out_channels,
+                            kernel_size=4,
+                            stride=4,
+                            padding=0,
+                        ),
+                        self.activation(),
+                    )
+                case 25:
+                    self.one = nn.Sequential(
+                        nn.Conv1d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                        nn.Conv1d(
+                            out_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                    )
+                case 30:
+                    self.one = nn.Sequential(
+                        nn.Conv1d(
+                            in_channels,
+                            out_channels,
+                            kernel_size=5,
+                            stride=5,
+                            padding=0,
+                        ),
+                        self.activation(),
+                        nn.Conv1d(
+                            out_channels,
+                            out_channels,
+                            kernel_size=3,
+                            stride=3,
+                            padding=0,
+                        ),
+                        self.activation(),
+                        nn.Conv1d(
+                            out_channels,
+                            out_channels,
+                            kernel_size=2,
+                            stride=2,
+                            padding=0,
+                        ),
+                    )
+                case _:
+                    raise NotImplementedError(
+                        f"Model with num_frames of {num_frames} not implemented!"
+                    )
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -130,12 +226,34 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
 class TwoPlusOneSegmentationModel(SegmentationModel):
     @override
-    def __init__(self, *args, num_frames: Literal[5, 10, 15, 20, 30], **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        num_frames: Literal[5, 10, 15, 20, 30],
+        flat_conv: bool = False,
+        activation: str | None = None,
+        **kwargs,
+    ) -> None:
+        """2+1D Segmentation model.
+
+        Args:
+            num_frames: Number of frames in the input tensor.
+            flat_conv: If True, only one convolutional layer is used.
+            activation: Activation function to use.
+        """
         super().__init__(*args, **kwargs)
         self.num_frames = num_frames
+        self.flat_conv = flat_conv
+        self.activation = activation
 
     @override
-    def initialize(self):
+    def initialize(self) -> None:
+        """Initialize the model.
+
+        This method initializes the decoder and the segmentation head. It also
+        initializes the 1D temporal convolutional blocks with the correct number of
+        output channels for each layer of the encoder.
+        """
         # Define encoders and segmentation head.
         initialize_decoder(self.decoder)
         initialize_head(self.segmentation_head)
@@ -150,11 +268,11 @@ class TwoPlusOneSegmentationModel(SegmentationModel):
         # this was not possible.
 
         # INFO: Parameter tuning for output channels.
-        self.oned1 = OneD(1, 2, self.num_frames)
-        self.oned2 = OneD(1, 5, self.num_frames)
-        self.oned3 = OneD(1, 10, self.num_frames)
-        self.oned4 = OneD(1, 20, self.num_frames)
-        self.oned5 = OneD(1, 40, self.num_frames)
+        self.oned1 = OneD(1, 2, self.num_frames, self.flat_conv, self.activation)
+        self.oned2 = OneD(1, 5, self.num_frames, self.flat_conv, self.activation)
+        self.oned3 = OneD(1, 10, self.num_frames, self.flat_conv, self.activation)
+        self.oned4 = OneD(1, 20, self.num_frames, self.flat_conv, self.activation)
+        self.oned5 = OneD(1, 40, self.num_frames, self.flat_conv, self.activation)
 
         self.onedlayers = [self.oned1, self.oned2, self.oned3, self.oned4, self.oned5]
 
@@ -231,9 +349,31 @@ class TwoPlusOneUnet(TwoPlusOneSegmentationModel):
         activation: str | Callable | None = None,
         num_frames: Literal[5, 10, 15, 20, 30] = 5,
         aux_params: dict[str, Any] | None = None,
+        flat_conv: bool = False,
+        unet_activation: str | None = None,
     ) -> None:
-        super().__init__(num_frames=num_frames)
+        """2+1D U-Net model.
 
+        Args:
+            encoder_name: Name of the encoder.
+            encoder_depth: Depth of the encoder.
+            encoder_weights: Weights to use for the encoder.
+            decoder_use_batchnorm: If True, use batch normalization in the decoder.
+            decoder_channels: Number of channels in the decoder.
+            decoder_attention_type: Attention type to use in the decoder.
+            in_channels: Number of input channels.
+            classes: Number of classes.
+            activation: Activation function to use.
+            num_frames: Number of frames in the input tensor.
+            aux_params: Auxiliary parameters for the model.
+            flat_conv: If True, only one convolutional layer is used.
+            unet_activation: Activation function to use in the U-Net.
+        """
+        super().__init__(
+            num_frames=num_frames, flat_conv=flat_conv, activation=unet_activation
+        )
+
+        # Define encoder, decoder, segmentation head and classification head.
         self.encoder = get_encoder(
             encoder_name,
             in_channels=in_channels,

@@ -51,6 +51,7 @@ class TestTwoPlusOneCLI:
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
     greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=1"]
+    flatten_conv_args = ["--model.flat_conv=True"]
     fast_dev_run_args = ["--trainer.fast_dev_run=1"]
     filename = "two_plus_one.py"
 
@@ -124,6 +125,21 @@ class TestTwoPlusOneCLI:
             + self.default_resnet_args
             + self.default_frames
             + self.greyscale_colour_mode
+            + self.fast_dev_run_args
+        )
+        self._run_with_args(args)
+
+    def test_flat_conv(self):
+        """
+        Tests whether the ResNet50 (2+1) can train with a flat temporal convolutional
+        layer.
+        """
+        args = (
+            self.default_train_args
+            + self.default_resnet_args
+            + ["--model.num_frames=30"]
+            + self.greyscale_colour_mode
+            + self.flatten_conv_args
             + self.fast_dev_run_args
         )
         self._run_with_args(args)

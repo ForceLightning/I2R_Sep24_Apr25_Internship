@@ -38,7 +38,6 @@ from utils.utils import (
 )
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
-
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -76,6 +75,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
+        flat_conv: bool = False,
+        unet_activation: str | None = None,
     ):
         """A LightningModule wrapper for the modified Unet for the two-plus-one
         architecture.
@@ -94,7 +95,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             optimizer_kwargs: The optimizer keyword arguments.
             scheduler: The learning rate scheduler to use.
             scheduler_kwargs: The scheduler keyword arguments.
-            multiplier: The multiplier for the learning rate.
+            multiplier: The multiplier for the learning rate to reach in the warmup.
             total_epochs: The total number of epochs.
             alpha: The alpha value for the loss function.
             _beta: The beta value for the loss function (Unused).
@@ -103,6 +104,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             eval_classifiation_mode: The classification mode for evaluation.
             loading_mode: Image loading mode.
             dump_memory_snapshot: Whether to dump a memory snapshot after training.
+            flat_conv: Whether to use a flat temporal convolutional layer.
+            unet_activation: The activation function for the U-Net.
 
         Raises:
             NotImplementedError: If the loss type is not implemented.
@@ -128,6 +131,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             in_channels=in_channels,
             classes=classes,
             num_frames=num_frames,
+            flat_conv=flat_conv,
+            activation=unet_activation,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs
@@ -159,6 +164,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             self.loss = (
                 loss
                 if isinstance(loss, nn.Module)
+                # If none
                 else (
                     DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
                     if dl_classification_mode == ClassificationMode.MULTILABEL_MODE
