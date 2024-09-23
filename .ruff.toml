@@ -3,3 +3,8 @@ exclude = [
     "checkpoints",
 ]
 target-version = "py312"
+
+select = ["F", "E", "W", "B", "C4"]
+ignore = [
+    "E501", # Line too long, handled by black
+]
