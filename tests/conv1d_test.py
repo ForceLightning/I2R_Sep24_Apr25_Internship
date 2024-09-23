@@ -23,7 +23,7 @@ class TestConv1D:
             old_compress_out = _compress_wrapper(input_original, oned)
             new_compress_out = _compress2_new(input_original, oned)
         except Exception as e:
-            raise ExceptionGroup(f"Input of shape {input_original.shape}", [e])
+            raise ExceptionGroup(f"Input of shape {input_original.shape}", [e]) from e
 
         try:
             allclose = torch.allclose(old_compress_out, new_compress_out)
@@ -31,16 +31,29 @@ class TestConv1D:
             raise ExceptionGroup(
                 f"Old shape: {old_compress_out.shape}, New shape: {new_compress_out.shape}",
                 [e],
-            )
+            ) from e
 
         assert allclose, "Values of the operations are not the same."
 
     def test_conv1d(self):
+        """Test the Conv1D model with different approaches to compressing the input.
+
+        This test is performed for frames in range 5 to 30, with a step of 5.
+        """
         for num_frames in range(5, 35, 5):
             self._test_with_num_frames(num_frames)
 
 
-def compress_2(stacked_outputs, block):
+def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
+    """Compresses the input tensor using the one dimensional block.
+
+    Args:
+        stacked_outputs: Input tensor of shape (n_frames, batch_size, channels, h, w).
+        block: One dimensional block.
+
+    Return:
+        Compressed output tensor.
+    """
     # Input shape is (n_frames, batch_size, channels, n, n). Ensure that block has an
     # in_channels of one and and out_channels of n*n
 
@@ -89,7 +102,16 @@ def compress_2(stacked_outputs, block):
     return final_output
 
 
-def _compress_wrapper(stacked_outputs: torch.Tensor, block: OneD):
+def _compress_wrapper(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
+    """Wrapper function for compress2.
+
+    Args:
+        stacked_outputs: Input tensor of shape (B, F, C, H, W).
+        block: One dimensional block.
+
+    Return
+        Compressed output tensor.
+    """
     # Incoming tensor of shape (B, F, C, H, W)
     # Input to compress2 must be of shape (F, B, C, H, W)
     reshaped_outputs = stacked_outputs.permute(1, 0, 2, 3, 4)

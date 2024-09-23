@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+"""Dice score metrics."""
 from typing import Any, Literal, override
 
 import torch

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+"""Logging utilities for metrics."""
 from typing import Literal
 
 import lightning as L

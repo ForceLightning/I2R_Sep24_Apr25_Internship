@@ -647,7 +647,9 @@ def concatenate_imgs(
             case "specific":
                 if frames not in CHOSEN_FRAMES_DICT:
                     raise ValueError(
-                        f"Invalid number of frames ({frames}) for the specific frame selection method. Ensure that it is within {list(sorted(CHOSEN_FRAMES_DICT.keys()))}"
+                        f"Invalid number of frames ({frames}) for the specific "
+                        + "frame selection method. "
+                        + f"Ensure that it is within {sorted(CHOSEN_FRAMES_DICT.keys())}"
                     )
                 return imgs[CHOSEN_FRAMES_DICT[frames]]
 
@@ -755,8 +757,8 @@ def load_train_indices(
             raise RuntimeError(f"Duplicate in train and valid indices exists: {name}")
 
     # Check to make sure no patients have images in both the training and testing.
-    train_bases = set([name.split("_")[0] for name in train_names])
-    valid_bases = set([name.split("_")[0] for name in valid_names])
+    train_bases = {name.split("_")[0] for name in train_names}
+    valid_bases = {name.split("_")[0] for name in valid_names}
 
     assert train_bases.isdisjoint(
         valid_bases

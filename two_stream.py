@@ -37,7 +37,6 @@ from utils.utils import (
 )
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
-
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 30  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
@@ -63,9 +62,9 @@ class TwoStreamUnetLightning(L.LightningModule):
         num_frames: int = 30,
         weights_from_ckpt_path: str | None = None,
         optimizer: Optimizer | str = "adamw",
-        optimizer_kwargs: dict[str, Any] = {},
+        optimizer_kwargs: dict[str, Any] | None = None,
         scheduler: LRScheduler | str = "gradual_warmup_scheduler",
-        scheduler_kwargs: dict[str, Any] = {},
+        scheduler_kwargs: dict[str, Any] | None = None,
         multiplier: int = 2,
         total_epochs: int = 50,
         alpha: float = 1.0,
@@ -97,9 +96,9 @@ class TwoStreamUnetLightning(L.LightningModule):
             num_frames=num_frames,
         )
         self.optimizer = optimizer
-        self.optimizer_kwargs = optimizer_kwargs
+        self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
         self.scheduler = scheduler
-        self.scheduler_kwargs = scheduler_kwargs
+        self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
         self.loading_mode = loading_mode
 
         # Sets loss if it's a string
@@ -415,6 +414,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 for img, mask in zip(
                     inv_norm_img[:, :3, :, :].detach().cpu(),
                     masks_preds.detach().cpu(),
+                    strict=True,
                 )
             ]
             tensorboard_logger.add_images(
@@ -435,6 +435,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 for img, mask in zip(
                     inv_norm_img[:, :3, :, :].detach().cpu(),
                     masks_one_hot.detach().cpu(),
+                    strict=True,
                 )
             ]
             tensorboard_logger.add_images(
@@ -594,8 +595,8 @@ class TwoStreamDataModule(L.LightningDataModule):
 
 class TwoStreamCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
-        if (subcommand := getattr(self, "subcommand")) is not None:
-            if (config := self.config.get(subcommand)) is not None:
+        if self.subcommand is not None:
+            if (config := self.config.get(self.subcommand)) is not None:
                 if (version := config.get("version")) is not None:
                     name = utils.get_last_checkpoint_filename(version)
                     ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]

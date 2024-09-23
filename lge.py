@@ -169,8 +169,8 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
 class LGECLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
-        if (subcommand := getattr(self, "subcommand")) is not None:
-            if (config := self.config.get(subcommand)) is not None:
+        if self.subcommand is not None:
+            if (config := self.config.get(self.subcommand)) is not None:
                 if (version := config.get("version")) is not None:
                     name = utils.get_last_checkpoint_filename(version)
                     ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]
