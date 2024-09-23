@@ -67,9 +67,11 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         if not self.weighted_average:
             return super().compute()
 
-        class_occurrences = self.class_occurrences.to(
-            torch.float32
-        ) * self.class_weights.to(self.class_occurrences.device)
+        self.class_weights = self.class_weights.to(self.class_occurrences.device)
+
+        class_occurrences = (
+            self.class_occurrences.to(torch.float32) * self.class_weights
+        )
 
         class_distribution = _safe_divide(
             class_occurrences,
@@ -101,13 +103,14 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 return self.per_class_metric
 
     def _compute_macro_avg(self) -> torch.Tensor:
-        score = self.score_running * self.class_weights.to(self.score_running.device)
-        score = _safe_divide(score[self.class_weights == 1.0], self.samples).mean()
+        score = (self.score_running * self.class_weights)[self.class_weights == 1.0]
+        score = score[1:] if not self.include_background else score
+        score = _safe_divide(score, self.samples).mean()
 
         return score
 
     def _compute_per_class(self) -> torch.Tensor:
-        score = self.score_running * self.class_weights.to(self.score_running.device)
+        score = self.score_running * self.class_weights
         score = _safe_divide(score, self.samples)
 
         return score

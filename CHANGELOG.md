@@ -1,3 +1,13 @@
+# 2024-09-23 - Flattened Temporal Convolutions
+[7b0ea7b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/7b0ea7b910b4faa302a7308eb9c050c2b624b154)
+
+Implemented options to set flat temporal convolutional layers for the 2+1 model. For example, if the original script had a convolutional layer stack of filters with (\[input\] → kernel 1 → kernel 2 → ... → \[output\]) ([\30\] → 5 → 3 → 2 → \[1\]) we had instead (\[30\] → 30 → \[1\])
+
+| Flattened Conv layers? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 | Runtime  |
+| ---------------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ | -------- |
+| No                     | 0.3996          | 0.4011            | 0.4897               | 0.5792       | 0.3646       | 0.2494       | 1.693 hr |
+| Yes                    | 0.3883          | 0.4061            | 0.5203               | 0.6040       | 0.3866       | 0.2276       | 1.009 hr |
+
 # 2024-09-20 - Data augmentation
 [d8c3633](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/d8c3633276a509eea16a940efb57fbf64fad84bd)
 
@@ -9,12 +19,12 @@ A comparison on the LGE, Cine, and TwoPlusOne tasks are as follows:
 
 | Task | Data Augmented? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 |
 | ---- | --------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ |
-| LGE  | No              | 0.3625          | 0.5801            | 0.4834               | 0.7240       | 0.2162       | 0.4001       |
-| LGE  | Yes             | 0.3616          | 0.7135            | 0.6746               | 0.7385       | 0.5705       | 0.5687       |
-| Cine | No              | 0.4331          | 0.5425            | 0.4699               | 0.6317       | 0.3316       | 0.2573       |
-| Cine | Yes             | 0.4100          | 0.5607            | 0.5104               | 0.6177       | 0.3245       | 0.3481       |
-| 2+1  | No              | 0.3855          | 0.5372            | 0.5140               | 0.6508       | 0.3292       | 0.1788       |
-| 2+1  | Yes             | 0.3996          | 0.5501            | 0.4897               | 0.5792       | 0.3646       | 0.2494       |
+| LGE  | No              | 0.3641          | 0.5075            | 0.4429               | 0.7736       | 0.2312       | 0.5177       |
+| LGE  | Yes             | 0.2277          | 0.7461            | 0.7919               | 0.8206       | 0.6827       | 0.7352       |
+| Cine | No              | 0.4331          | 0.4853            | 0.5977               | 0.6909       | 0.3912       | 0.3737       |
+| Cine | Yes             | 0.4099          | 0.5358            | 0.5974               | 0.6866       | 0.4123       | 0.5085       |
+| 2+1  | No              | 0.3855          | 0.4398            | 0.5540               | 0.6897       | 0.3357       | 0.2940       |
+| 2+1  | Yes             | 0.3996          | 0.4011            | 0.4897               | 0.5792       | 0.3646       | 0.2594       |
 
 # 2024-09-20 - Replaced OpenCV dataloading with Pillow methods
 [52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/52b468b243652c8ec7884b7a687cdf2ab746a4f3)
