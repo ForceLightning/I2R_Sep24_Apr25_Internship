@@ -2,6 +2,7 @@
 """2+1D U-Net model."""
 from __future__ import annotations
 
+import math
 import warnings
 from typing import Any, Callable, Literal, override
 
@@ -12,6 +13,44 @@ from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
 
+RESNET_OUTPUT_SHAPES = {
+    "resnet18": [
+        (64, 112, 112),
+        (64, 56, 56),
+        (128, 28, 28),
+        (256, 14, 14),
+        (512, 7, 7),
+    ],
+    "resnet34": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnet50": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnet101": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnet152": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+}
+
 
 class OneD(nn.Module):
     def __init__(
@@ -20,7 +59,7 @@ class OneD(nn.Module):
         out_channels: int,
         num_frames: int,
         flat: bool = False,
-        activation: str | Callable[..., None] | None = None,
+        activation: str | type[nn.Module] | None = None,
     ) -> None:
         """1D Temporal Convolutional Block.
 
@@ -38,8 +77,9 @@ class OneD(nn.Module):
             The number of frames must be one of 5, 10, 15, 20, or 30.
         """
         super().__init__()
-        if isinstance(activation, nn.Module):
-            self.activation = activation()
+        self.activation: type[nn.Module]
+        if isinstance(activation, type):
+            self.activation = activation
         else:
             match activation:
                 case "relu":
@@ -111,6 +151,93 @@ class OneD(nn.Module):
         return self.one(x)
 
 
+class DilatedOneD(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        num_frames: int,
+        sequence_length: int,
+        flat: bool = False,
+        activation: str | type[nn.Module] | None = None,
+    ):
+        super().__init__()
+        if isinstance(activation, type):
+            self.activation = activation
+        else:
+            match activation:
+                case "relu":
+                    self.activation = nn.ReLU
+                case "gelu":
+                    self.activation = nn.GELU
+                case "mish":
+                    self.activation = nn.Mish
+                case "elu":
+                    self.activation = nn.ELU
+                case "silu" | "swish":
+                    self.activation = nn.SiLU
+                case _:
+                    warnings.warn(
+                        f"Activation function {activation} not recognized. Using ReLU.",
+                        stacklevel=2,
+                    )
+                    self.activation = nn.ReLU
+        if flat:
+            self.one = nn.Sequential(
+                nn.Conv1d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=num_frames,
+                    stride=num_frames,
+                    padding=0,
+                ),
+                self.activation(),
+            )
+        else:
+            kernels: list[int] = []
+            match num_frames:
+                case 5:
+                    kernels = [5]
+                case 10:
+                    kernels = [5, 2]
+                case 15:
+                    kernels = [5, 3]
+                case 20:
+                    kernels = [5, 4]
+                case 25:
+                    kernels = [5, 5]
+                case 30:
+                    kernels = [5, 3, 2]
+                case _:
+                    raise NotImplementedError(
+                        f"Model with num_frames of {num_frames} not implemented!"
+                    )
+
+            layers: list[nn.Module] = []
+            for i, k in enumerate(kernels):
+                multiplication_factor = num_frames // math.prod(kernels[: i + 1])
+                dilation = sequence_length * multiplication_factor
+                layers += [
+                    nn.Conv1d(
+                        in_channels if i == 0 else out_channels,
+                        out_channels,
+                        kernel_size=k,
+                        stride=1,
+                        padding=0,
+                        dilation=dilation,
+                    ),
+                    self.activation(),
+                ]
+
+            self.one = nn.Sequential(*layers)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+    @override
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.one(x)
+
+
 def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     """Apply the OneD temporal convolution on the stacked outputs.
 
@@ -137,6 +264,24 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     return final_out
 
 
+def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch.Tensor:
+    # Input shape: (B, F, C, H, W).
+    b, f, c, h, w = stacked_outputs.shape
+    # Reshape to: (B, C, F, H, W).
+    inputs = stacked_outputs.permute(0, 2, 1, 3, 4).contiguous()
+    # Inputs to a Conv1D must be of shape (N, C_in, L_in).
+    # Reshape to (B * C, 1, F * H * W)
+    inputs = inputs.view(b * c, 1, f * h * w)
+    # Outputs are of shape (B * C, C_out, H * W)
+    out = block(inputs)
+    # Take the mean over the channel dimension -> (B * C, 1, H * W) and squeeze.
+    out = out.mean(dim=1).squeeze(dim=1)
+    # Return outputs of shape (B, C, H, W)
+    final_out = out.view(b, c, h, w)
+
+    return final_out
+
+
 class TwoPlusOneUnet(SegmentationModel):
     def __init__(
         self,
@@ -148,11 +293,12 @@ class TwoPlusOneUnet(SegmentationModel):
         decoder_attention_type: Literal["scse"] | None = None,
         in_channels: int = 3,
         classes: int = 1,
-        activation: str | Callable[..., None] | None = None,
+        activation: str | type[nn.Module] | None = None,
         num_frames: Literal[5, 10, 15, 20, 30] = 5,
         aux_params: dict[str, Any] | None = None,
         flat_conv: bool = False,
-        unet_activation: str | None = None,
+        res_conv_activation: str | None = None,
+        use_dilations: bool = False,
     ) -> None:
         """2+1D U-Net model.
 
@@ -176,6 +322,9 @@ class TwoPlusOneUnet(SegmentationModel):
         self.num_frames = num_frames
         self.flat_conv = flat_conv
         self.activation = activation
+        self.use_dilations = use_dilations
+        self.encoder_name = encoder_name
+        self.res_conv_activation = res_conv_activation
 
         init_decoder_channels = (
             decoder_channels if decoder_channels else [256, 128, 64, 32, 16]
@@ -213,6 +362,7 @@ class TwoPlusOneUnet(SegmentationModel):
             self.classification_head = None
 
         self.name = f"u-{encoder_name}"
+        self.compress: Callable[..., torch.Tensor]
         self.initialize()
 
     @override
@@ -234,13 +384,32 @@ class TwoPlusOneUnet(SegmentationModel):
         # this was not possible.
 
         # INFO: Parameter tuning for output channels.
-        self.oned1 = OneD(1, 2, self.num_frames, self.flat_conv, self.activation)
-        self.oned2 = OneD(1, 5, self.num_frames, self.flat_conv, self.activation)
-        self.oned3 = OneD(1, 10, self.num_frames, self.flat_conv, self.activation)
-        self.oned4 = OneD(1, 20, self.num_frames, self.flat_conv, self.activation)
-        self.oned5 = OneD(1, 40, self.num_frames, self.flat_conv, self.activation)
+        onedlayers: list[OneD | DilatedOneD] = []
+        for i, out_channels in enumerate([2, 5, 10, 20, 40]):
+            mod: OneD | DilatedOneD
+            if self.use_dilations and self.num_frames in [5, 30]:
+                _resnet_out_channels, h, w = RESNET_OUTPUT_SHAPES[self.encoder_name][i]
+                mod = DilatedOneD(
+                    1,
+                    out_channels,
+                    self.num_frames,
+                    h * w,
+                    flat=self.flat_conv,
+                    activation=self.res_conv_activation,
+                )
+                self.compress = compress_dilated
+            else:
+                mod = OneD(
+                    1,
+                    out_channels,
+                    self.num_frames,
+                    self.flat_conv,
+                    self.res_conv_activation,
+                )
+                self.compress = compress_2
+            onedlayers.append(mod)
 
-        self.onedlayers = [self.oned1, self.oned2, self.oned3, self.oned4, self.oned5]
+        self.onedlayers = nn.ModuleList(onedlayers)
 
     @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -282,7 +451,7 @@ class TwoPlusOneUnet(SegmentationModel):
             block = self.onedlayers[index - 1]
 
             # Applies the compress_2 function to resize and reorder channels.
-            compressed_output = compress_2(layer_output, block)
+            compressed_output = self.compress(layer_output, block)
             compressed_features.append(compressed_output)
 
         # Send the compressed features up the decoder

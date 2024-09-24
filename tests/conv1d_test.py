@@ -1,12 +1,20 @@
+from itertools import product
+from typing import Literal
 import torch
+import pytest
 
-from models.two_plus_one import OneD
+from models.two_plus_one import (
+    OneD,
+    RESNET_OUTPUT_SHAPES,
+    compress_dilated,
+    DilatedOneD,
+)
 from models.two_plus_one import compress_2 as _compress2_new
 
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 
-class TestConv1D:
+class TestNewCompress:
     batch_size = 2
     num_channels = 128
     height = 112
@@ -42,6 +50,55 @@ class TestConv1D:
         """
         for num_frames in range(5, 35, 5):
             self._test_with_num_frames(num_frames)
+
+
+class TestNewOneD:
+    batch_size = 2
+    resnets = ["resnet18", "resnet34", "resnet50"]
+    num_frames = range(5, 35, 5)
+
+    @pytest.mark.parametrize(
+        "num_frames,resnet,layer", product(num_frames, resnets, range(5))
+    )
+    def test_dilated_conv1d(
+        self,
+        num_frames: int,
+        resnet: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
+        layer: int,
+    ):
+        num_channels, height, width = RESNET_OUTPUT_SHAPES[resnet][layer]
+        input_original = torch.randn(
+            self.batch_size,
+            num_frames,
+            num_channels,
+            height,
+            width,
+        ).to(DEVICE)
+
+        torch.manual_seed(0)
+        current_oned = OneD(1, 2, num_frames, False, "relu").to(DEVICE)
+        torch.manual_seed(0)
+        new_oned = DilatedOneD(1, 2, num_frames, height * width, False, "relu").to(
+            DEVICE
+        )
+
+        try:
+            current_out = _compress2_new(input_original, current_oned)
+            new_out = compress_dilated(input_original, new_oned)
+        except Exception as e:
+            raise ExceptionGroup(f"Input of shape {input_original.shape}", [e]) from e
+
+        try:
+            allclose = torch.allclose(current_out, new_out)
+        except RuntimeError as e:
+            raise ExceptionGroup(
+                f"Current shape: {current_out.shape}, New shape: {new_out.shape}", [e]
+            ) from e
+
+        assert allclose, (
+            "Values of the operations are not the same; "
+            + f"avg abs diff: {(new_out - current_out).abs().mean()}"
+        )
 
 
 def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:

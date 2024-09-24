@@ -236,12 +236,18 @@ $RECYCLE.BIN/
 
 
 ### Project Specifics ###
-# Models
+# Models (handles symlinks)
+checkpoints
+.old_checkpoints
+lightning_logs
+
 checkpoints/
 .old_checkpoints/
 lightning_logs/
 
-# Data
+# Data (handles symlinks)
+data
+
 data/
 
 # Type stubs

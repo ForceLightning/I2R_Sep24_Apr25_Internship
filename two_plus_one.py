@@ -124,6 +124,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                 enabled="all", context="all", stacks="python"
             )
 
+        # PERF: The model can be `torch.compile()`'d but layout issues occur with
+        # convolutional networks. See: https://github.com/pytorch/pytorch/issues/126585
         self.model = TwoPlusOneUnet(
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
