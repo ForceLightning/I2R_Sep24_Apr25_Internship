@@ -38,6 +38,7 @@ seaborn = "*"
 viztracer = "*"
 ruff = "*"
 pytest = "*"
+isort = "*"
 
 [requires]
 python_version = "3.12"

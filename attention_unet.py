@@ -21,10 +21,7 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
-from dataset.dataset import (
-    ResidualTwoPlusOneDataset,
-    get_trainval_data_subsets,
-)
+from dataset.dataset import ResidualTwoPlusOneDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,

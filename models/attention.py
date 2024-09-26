@@ -11,6 +11,7 @@ from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 
+
 from models.two_plus_one import (
     RESNET_OUTPUT_SHAPES,
     DilatedOneD,
