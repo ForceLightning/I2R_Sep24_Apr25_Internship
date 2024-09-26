@@ -23,10 +23,10 @@ RESNET_OUTPUT_SHAPES = {
     ],
     "resnet34": [
         (64, 112, 112),
-        (256, 56, 56),
-        (512, 28, 28),
-        (1024, 14, 14),
-        (2048, 7, 7),
+        (64, 56, 56),
+        (128, 28, 28),
+        (256, 14, 14),
+        (512, 7, 7),
     ],
     "resnet50": [
         (64, 112, 112),
@@ -432,6 +432,7 @@ class TwoPlusOneUnet(SegmentationModel):
 
         assert x.numel() != 0, f"Input tensor is empty: {x}"
 
+        # NOTE: This goes through by batch actually.
         for img in x:
             self.check_input_shape(img)
             features = self.encoder(img)

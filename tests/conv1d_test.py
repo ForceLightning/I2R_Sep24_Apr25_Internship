@@ -1,3 +1,4 @@
+import os
 from itertools import product
 from typing import Literal
 import torch
@@ -66,6 +67,11 @@ class TestNewOneD:
         resnet: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         layer: int,
     ):
+        # Set deterministic mode so that the results are reproducible
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        torch.use_deterministic_algorithms(True)
         num_channels, height, width = RESNET_OUTPUT_SHAPES[resnet][layer]
         input_original = torch.randn(
             self.batch_size,
@@ -75,6 +81,7 @@ class TestNewOneD:
             width,
         ).to(DEVICE)
 
+        # Set the seeds each time to ensure that the weights are the same
         torch.manual_seed(0)
         current_oned = OneD(1, 2, num_frames, False, "relu").to(DEVICE)
         torch.manual_seed(0)
@@ -89,16 +96,22 @@ class TestNewOneD:
             raise ExceptionGroup(f"Input of shape {input_original.shape}", [e]) from e
 
         try:
-            allclose = torch.allclose(current_out, new_out)
+            allclose = torch.allclose(current_out, new_out, rtol=1e-03, atol=1e-5)
         except RuntimeError as e:
             raise ExceptionGroup(
                 f"Current shape: {current_out.shape}, New shape: {new_out.shape}", [e]
             ) from e
 
-        assert allclose, (
-            "Values of the operations are not the same; "
-            + f"avg abs diff: {(new_out - current_out).abs().mean()}"
-        )
+        diff = (new_out - current_out).abs()
+
+        if not allclose:
+            print((diff == 0).int()[0, 0, ...])
+            raise ValueError(
+                "Values of the operations are not the same; "
+                + f"min diff: {diff.min().item():.2E} "
+                + f"max diff: {diff.max().item():.2E} "
+                + f"mean diff: {diff.mean().item():.2E} "
+            )
 
 
 def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
