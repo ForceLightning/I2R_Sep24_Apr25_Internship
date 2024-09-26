@@ -7,6 +7,6 @@ trainer:
   precision: null
   logger: false
   callbacks:
-  - class_path: lightning.pytorch.callbacks.RichProgressBar
+  - class_path: utils.global_progress_bar.BetterProgressBar
 model:
   classes: 4

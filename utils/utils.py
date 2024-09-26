@@ -273,3 +273,10 @@ def get_transforms(
     )
 
     return transforms_img, transforms_mask, transforms_together
+
+
+def get_accumulate_grad_batches(batch_size: int):
+    if batch_size >= 4:
+        return 1
+    else:
+        return 4 // batch_size

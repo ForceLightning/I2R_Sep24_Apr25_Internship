@@ -173,13 +173,13 @@ class AttentionResidualBlock(nn.Module):
             q=compress_output, ks=res_embeddings, vs=res_embeddings
         )
 
-        out = torch.cat((compress_output, attention_output), dim=0)
+        out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
         out = self.reduce(input=out, dim=0).view(b, c, h, w)
 
         return out
 
 
-class TPOResidualAttentionUnet(SegmentationModel):
+class ResidualAttentionUnet(SegmentationModel):
     def __init__(
         self,
         encoder_name: str = "resnet34",

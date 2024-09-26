@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Two-plus-one architecture training script."""
+"""Attention-based U-Net on residual frame information."""
 from __future__ import annotations
 
 import os
@@ -21,14 +21,17 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
-from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
+from dataset.dataset import (
+    ResidualTwoPlusOneDataset,
+    get_trainval_data_subsets,
+)
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,
     shared_metric_calculation,
     shared_metric_logging_epoch_end,
 )
-from models.two_plus_one import TwoPlusOneUnet
+from models.attention import ResidualAttentionUnet
 from utils import utils
 from utils.utils import (
     ClassificationMode,
@@ -37,20 +40,13 @@ from utils.utils import (
     get_transforms,
 )
 
-BATCH_SIZE_TRAIN = 4  # Default batch size for training.
+BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
 
 
-class TwoPlusOneUnetLightning(L.LightningModule):
-    train_metric: Metric
-    train_class_2_3_metric: Metric
-    val_metric: Metric
-    val_class_2_3_metric: Metric
-    test_metric: Metric
-    test_class_2_3_metric: Metric
-
+class ResidualAttentionUnetLightning(L.LightningModule):
     def __init__(
         self,
         metric: Metric | None = None,
@@ -78,41 +74,9 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         flat_conv: bool = False,
         unet_activation: str | None = None,
     ):
-        """A LightningModule wrapper for the modified Unet for the two-plus-one
-        architecture.
-
-        Args:
-            metric: The metric to use for evaluation.
-            loss: The loss function to use for training.
-            encoder_name: The encoder name to use for the Unet.
-            encoder_depth: The depth of the encoder.
-            encoder_weights: The weights to use for the encoder.
-            in_channels: The number of input channels.
-            classes: The number of classes.
-            num_frames: The number of frames to use.
-            weights_from_ckpt_path: The path to the checkpoint to load weights from.
-            optimizer: The optimizer to use.
-            optimizer_kwargs: The optimizer keyword arguments.
-            scheduler: The learning rate scheduler to use.
-            scheduler_kwargs: The scheduler keyword arguments.
-            multiplier: The multiplier for the learning rate to reach in the warmup.
-            total_epochs: The total number of epochs.
-            alpha: The alpha value for the loss function.
-            _beta: The beta value for the loss function (Unused).
-            learning_rate: The learning rate.
-            dl_classification_mode: The classification mode for the dataloader.
-            eval_classifiation_mode: The classification mode for evaluation.
-            loading_mode: Image loading mode.
-            dump_memory_snapshot: Whether to dump a memory snapshot after training.
-            flat_conv: Whether to use a flat temporal convolutional layer.
-            unet_activation: The activation function for the U-Net.
-
-        Raises:
-            NotImplementedError: If the loss type is not implemented.
-            RuntimeError: If the checkpoint is not loaded correctly.
-        """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
+
         self.in_channels = in_channels
         self.classes = classes
         self.num_frames = num_frames
@@ -123,10 +87,9 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             torch.cuda.memory._record_memory_history(
                 enabled="all", context="all", stacks="python"
             )
-
         # PERF: The model can be `torch.compile()`'d but layout issues occur with
         # convolutional networks. See: https://github.com/pytorch/pytorch/issues/126585
-        self.model = TwoPlusOneUnet(
+        self.model = ResidualAttentionUnet(
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
@@ -135,6 +98,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             num_frames=num_frames,
             flat_conv=flat_conv,
             activation=unet_activation,
+            use_dilations=True,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
@@ -192,9 +156,14 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             if loading_mode == LoadingMode.RGB
             else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
-        self.example_input_array = torch.randn(
-            (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
-        ).to(DEVICE)
+        self.example_input_array = (
+            torch.randn(
+                (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
+            ).to(DEVICE),
+            torch.randn(
+                (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
+            ).to(DEVICE),
+        )
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
@@ -234,10 +203,10 @@ class TwoPlusOneUnetLightning(L.LightningModule):
 
     def on_train_end(self) -> None:
         if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
+            torch.cuda.memory._dump_snapshot("attention_unet_snapshot.pickle")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)  # pyright: ignore[reportCallIssue]
+    def forward(self, x_img: torch.Tensor, x_res: torch.Tensor) -> torch.Tensor:
+        return self.model(x_img, x_res)  # pyright: ignore[reportCallIssue]
 
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
@@ -249,18 +218,20 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         shared_metric_logging_epoch_end(self, "test")
 
     def training_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
-    ) -> torch.Tensor:
-        images, masks, _ = batch
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
+    ):
+        images, res_images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
+        images_input = images.to(self.device.type)
+        res_input = res_images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
 
         with torch.autocast(device_type=self.device.type):
-            # B x C x H x W
             masks_proba: torch.Tensor = self.model(
-                images_input
-            )  # pyright: ignore[reportCallIssue]
+                images_input, res_input
+            )  # pyright: ignore[reportCallIssue] # False positive
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
                 # GUARD: Check that the sizes match.
@@ -318,7 +289,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
         batch_idx: int,
         prefix: Literal["val", "test"],
     ):
@@ -330,13 +301,15 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             prefix: The runtime mode (val, test).
         """
         self.eval()
-        images, masks, _ = batch
+        images, res_images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
+        images_input = images.to(self.device.type)
+        res_input = res_images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
+
         masks_proba: torch.Tensor = self.model(
-            images_input
-        )  # pyright: ignore[reportCallIssue]
+            images_input, res_input
+        )  # pyright: ignore[reportCallIssue] # False positive
 
         if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -491,7 +464,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         raise exception
 
 
-class TwoPlusOneDataModule(L.LightningDataModule):
+class ResidualTwoPlusOneDataModule(L.LightningDataModule):
     def __init__(
         self,
         data_dir: str = "data/train_val/",
@@ -506,7 +479,8 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ):
-        """Datamodule for the TwoPlusOne dataset for PyTorch Lightning compatibility.
+        """Datamodule for the Residual TwoPlusOne dataset for PyTorch Lightning
+        compatibility.
 
         Args:
             data_dir: Path to train data directory containing Cine and masks
@@ -552,7 +526,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             self.loading_mode, self.augment
         )
 
-        trainval_dataset = TwoPlusOneDataset(
+        trainval_dataset = ResidualTwoPlusOneDataset(
             trainval_img_dir,
             trainval_mask_dir,
             indices_dir,
@@ -570,7 +544,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         test_img_dir = os.path.join(os.getcwd(), self.test_dir, "Cine")
         test_mask_dir = os.path.join(os.getcwd(), self.test_dir, "masks")
 
-        test_dataset = TwoPlusOneDataset(
+        test_dataset = ResidualTwoPlusOneDataset(
             test_img_dir,
             test_mask_dir,
             indices_dir,
@@ -597,7 +571,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
                 trainval_dataset
             ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
 
-            valid_dataset = TwoPlusOneDataset(
+            valid_dataset = ResidualTwoPlusOneDataset(
                 trainval_img_dir,
                 trainval_mask_dir,
                 indices_dir,
@@ -652,7 +626,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         )
 
 
-class TwoPlusOneCLI(LightningCLI):
+class ResidualAttentionCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
         if self.subcommand is not None:
             if (config := self.config.get(self.subcommand)) is not None:
@@ -715,7 +689,7 @@ class TwoPlusOneCLI(LightningCLI):
             compute_fn=utils.get_loading_mode,
         )
 
-        # Set accumulate grad batches depending on batch size (if <= 8)
+        # Set accumulate grad batches depending on batch size
         parser.link_arguments(
             "data.batch_size",
             "trainer.accumulate_grad_batches",
@@ -748,12 +722,12 @@ class TwoPlusOneCLI(LightningCLI):
 
 
 if __name__ == "__main__":
-    cli = TwoPlusOneCLI(
-        TwoPlusOneUnetLightning,
-        TwoPlusOneDataModule,
+    cli = ResidualAttentionCLI(
+        ResidualAttentionUnetLightning,
+        ResidualTwoPlusOneDataModule,
         save_config_callback=None,
         auto_configure_optimizers=False,
         parser_kwargs={
-            "fit": {"default_config_files": ["./configs/two_plus_one.yaml"]}
+            "fit": {"default_config_files": ["./configs/residual_attention.yaml"]}
         },
     )

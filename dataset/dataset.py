@@ -565,6 +565,127 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         return len(self.cine_list)
 
 
+class ResidualTwoPlusOneDataset(
+    Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]
+):
+    def __init__(
+        self,
+        img_dir: str,
+        mask_dir: str,
+        idxs_dir: str,
+        frames: int,
+        select_frame_method: Literal["consecutive", "specific"],
+        transform_img: Compose,
+        transform_mask: Compose,
+        transform_together: Compose | None = None,
+        batch_size: int = 2,
+        mode: Literal["train", "val", "test"] = "train",
+        classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        loading_mode: LoadingMode = LoadingMode.RGB,
+        combine_train_val: bool = False,
+    ) -> None:
+        super().__init__()
+        self.frames = frames
+        self.select_frame_method: Literal["consecutive", "specific"] = (
+            select_frame_method
+        )
+
+        self.img_dir = img_dir
+        self.mask_dir = mask_dir
+
+        self.img_list: list[str] = os.listdir(self.img_dir)
+        self.mask_list: list[str] = os.listdir(self.mask_dir)
+
+        self.transform_img = transform_img
+        self.transform_mask = transform_mask
+        self.transform_together = (
+            transform_together if transform_together else Compose([v2.Identity()])
+        )
+
+        self.train_idxs: list[int]
+        self.valid_idxs: list[int]
+
+        self.batch_size = batch_size
+        self.mode = mode
+        self.classification_mode = classification_mode
+        self.loading_mode = loading_mode
+        self._imread_mode = (
+            IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
+        )
+
+        if mode != "test" and not combine_train_val:
+            load_train_indices(
+                self,
+                os.path.join(idxs_dir, "train_indices.pkl"),
+                os.path.join(idxs_dir, "val_indices.pkl"),
+            )
+
+    def __len__(self) -> int:
+        return len(self.img_list)
+
+    @override
+    def __getitem__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, index: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+        img_name = self.img_list[index]
+        mask_name = self.img_list[index].split(".")[0] + ".nii.png"
+
+        with Image.open(
+            os.path.join(self.img_dir, img_name), formats=["tiff"]
+        ) as img_pil:
+            img_list = list(ImageSequence.Iterator(img_pil))
+            img_list = self.transform_img(img_list)
+
+            combined_video = tv_tensors.Video(default_collate(img_list))
+            residual_video = combined_video - torch.roll(combined_video, 1, 0)
+
+        # Perform necessary operations on the mask
+        with Image.open(
+            os.path.join(self.mask_dir, mask_name), formats=["png"]
+        ) as mask:
+            out_mask = tv_tensors.Mask(self.transform_mask(mask))
+
+        match self.classification_mode:
+            case ClassificationMode.MULTILABEL_MODE:
+                # NOTE: This turns the problem into a multilabel segmentation problem.
+                # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+                # bitwise or operations to adhere to those conditions.
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
+                lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                    lab_mask_one_hot[:, :, 3]
+                )
+                lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                    lab_mask_one_hot[:, :, 2]
+                )
+                out_mask = lab_mask_one_hot.bool().permute(-1, 0, 1)
+
+            case ClassificationMode.MULTICLASS_MODE:
+                pass
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
+
+        combined_video, residual_video, out_mask = self.transform_together(
+            combined_video, residual_video, out_mask
+        )
+        assert len(combined_video.shape) == 4 and len(residual_video.shape) == 4, (
+            "Combined images must be of shape: (F, C, H, W) but is "
+            + f"{combined_video.shape}, {residual_video.shape} instead."
+        )
+
+        out_video = concatenate_imgs(
+            self.frames, self.select_frame_method, combined_video
+        )
+        out_residuals = concatenate_imgs(
+            self.frames, self.select_frame_method, residual_video
+        )
+
+        return out_video, out_residuals, out_mask.squeeze().long(), img_name
+
+
 def concat(
     img_list: Sequence[cvt.MatLike],
     indices: Sequence[int] | None,
@@ -659,7 +780,13 @@ def concatenate_imgs(
 
 
 def load_train_indices(
-    dataset: LGEDataset | CineDataset | TwoPlusOneDataset | TwoStreamDataset,
+    dataset: (
+        LGEDataset
+        | CineDataset
+        | TwoPlusOneDataset
+        | TwoStreamDataset
+        | ResidualTwoPlusOneDataset
+    ),
     train_idxs_path: str,
     valid_idxs_path: str,
 ) -> tuple[list[int], list[int]]:
@@ -787,9 +914,20 @@ def seed_worker(worker_id):
 
 
 def get_trainval_data_subsets(
-    train_dataset: CineDataset | LGEDataset | TwoPlusOneDataset | TwoStreamDataset,
+    train_dataset: (
+        CineDataset
+        | LGEDataset
+        | TwoPlusOneDataset
+        | TwoStreamDataset
+        | ResidualTwoPlusOneDataset
+    ),
     valid_dataset: (
-        CineDataset | LGEDataset | TwoPlusOneDataset | TwoStreamDataset | None
+        CineDataset
+        | LGEDataset
+        | TwoPlusOneDataset
+        | TwoStreamDataset
+        | ResidualTwoPlusOneDataset
+        | None
     ) = None,
 ) -> tuple[Subset, Subset]:
     """Gets the subsets of the data as train/val splits from a superset consisting of
@@ -803,6 +941,11 @@ def get_trainval_data_subsets(
     """
     if not valid_dataset:
         valid_dataset = train_dataset
+
+    assert type(valid_dataset) == type(train_dataset), (
+        "train and valid datasets are not of the same type! "
+        + f"{type(train_dataset)} != {type(valid_dataset)}"
+    )
 
     train_set = Subset(train_dataset, train_dataset.train_idxs)
     valid_set = Subset(valid_dataset, valid_dataset.valid_idxs)

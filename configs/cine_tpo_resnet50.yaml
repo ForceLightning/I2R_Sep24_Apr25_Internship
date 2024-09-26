@@ -1,6 +1,6 @@
 # lightning.pytorch==2.4.0
 data:
-  batch_size: 4
+  batch_size: 8
 model:
   encoder_name: resnet50
   encoder_depth: 5

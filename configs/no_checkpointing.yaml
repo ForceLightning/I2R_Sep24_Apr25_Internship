@@ -1,6 +1,8 @@
 # lightning.pytorch==2.4.0
 trainer:
   logger: false
+  callbacks:
+  - class_path: utils.global_progress_bar.BetterProgressBar
 model_checkpoint:
   save_last: false
   save_top_k: 0

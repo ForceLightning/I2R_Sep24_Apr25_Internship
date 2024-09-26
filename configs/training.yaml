@@ -4,7 +4,7 @@ trainer:
   strategy: auto
   devices: auto
   num_nodes: 1
-  precision: bf16-mixed
+  precision: 16-mixed
   callbacks:
   - class_path: lightning.pytorch.callbacks.DeviceStatsMonitor
     init_args:
@@ -14,7 +14,7 @@ trainer:
       logging_interval: epoch
       log_momentum: false
       log_weight_decay: false
-  - class_path: lightning.pytorch.callbacks.RichProgressBar
+  - class_path: utils.global_progress_bar.BetterProgressBar
   logger:
     class_path: lightning.pytorch.loggers.TensorBoardLogger
     init_args:
@@ -23,6 +23,7 @@ trainer:
   log_every_n_steps: 5
 model:
   classes: 4
+  scheduler: one_cycle
 data:
   augment: true
 model_checkpoint:
