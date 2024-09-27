@@ -7,6 +7,7 @@ trainer:
     init_args:
       save_dir: ./checkpoints/residual-attention/lightning_logs
 model:
+  in_channels: 3
   classes: 4
   total_epochs: 50
 data:
@@ -16,4 +17,4 @@ data:
   select_frame_method: specific
 dl_classification_mode: MULTICLASS_MODE
 eval_classification_mode: MULTILABEL_MODE
-image_loading_mode: GREYSCALE
+image_loading_mode: RGB
