@@ -1,7 +1,12 @@
+# 2024-09-26 Attention mechanism in U-Net
+[1880917](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/188091789849554f7b3f012cb883802010ce2de9)
+
+Implemented the attention mechanism in the U-Net architecture with residual frames.
+
 # 2024-09-23 - Flattened Temporal Convolutions
 [7b0ea7b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/7b0ea7b910b4faa302a7308eb9c050c2b624b154)
 
-Implemented options to set flat temporal convolutional layers for the 2+1 model. For example, if the original script had a convolutional layer stack of filters with (\[input\] → kernel 1 → kernel 2 → ... → \[output\]) ([\30\] → 5 → 3 → 2 → \[1\]) we had instead (\[30\] → 30 → \[1\])
+Implemented options to set flat temporal convolutional layers for the 2+1 model. For example, if the original script had a convolutional layer stack of filters with ([input] → kernel 1 → kernel 2 → ... → [output]) ([\30] → 5 → 3 → 2 → [1]) we had instead ([30] → 30 → [1])
 
 | Flattened Conv layers? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 | Runtime  |
 | ---------------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ | -------- |
