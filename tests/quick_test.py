@@ -50,7 +50,7 @@ class TestTwoPlusOneCLI:
         "--config",
         "./configs/no_checkpointing.yaml",
     ]
-    default_senet_args = ["--model.encoder_name=senet154"]
+    default_senet_args = ["--model.encoder_name=senet154", "--data.batch_size=2"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
     greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=1"]
@@ -175,7 +175,7 @@ class TestCineCLI:
         "--config",
         "./configs/no_checkpointing.yaml",
     ]
-    default_senet_args = ["--model.encoder_name=senet154"]
+    default_senet_args = ["--model.encoder_name=senet154", "--data.batch_size=2"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     fast_dev_run_args = ["--trainer.fast_dev_run=1"]
     default_colour_mode = ["--image_loading_mode=RGB"]
@@ -369,7 +369,7 @@ class TestTwoStreamCLI:
         "--config",
         "./configs/no_checkpointing.yaml",
     ]
-    default_senet_args = ["--model.encoder_name=senet154"]
+    default_senet_args = ["--model.encoder_name=senet154", "--data.batch_size=2"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
     greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=1"]
@@ -458,7 +458,7 @@ class TestAttentionUnetCLI:
         "./configs/no_checkpointing.yaml",
         "--data.batch_size=1",
     ]
-    default_frames = ["--model.num_frames=15"]
+    default_frames = ["--model.num_frames=5"]
     default_test_args = [
         "test",
         "--config",
@@ -471,7 +471,7 @@ class TestAttentionUnetCLI:
         "./configs/no_checkpointing.yaml",
         "--data.batch_size=1",
     ]
-    default_senet_args = ["--model.encoder_name=senet154"]
+    default_senet_args = ["--model.encoder_name=senet154", "--data.batch_size=1"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
     greyscale_colour_mode = ["--config", "./configs/residual_attention_greyscale.yaml"]

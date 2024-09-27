@@ -45,3 +45,8 @@ python_version = "3.12"
 
 [prototyping]
 jupyter = "*"
+ipython = "*"
+widgetsnbextension = "*"
+ipywidgets = "*"
+ipykernel = "*"
+ipympl = "*"
