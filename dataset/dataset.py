@@ -942,7 +942,7 @@ def get_trainval_data_subsets(
     if not valid_dataset:
         valid_dataset = train_dataset
 
-    assert type(valid_dataset) == type(train_dataset), (
+    assert type(valid_dataset) is type(train_dataset), (
         "train and valid datasets are not of the same type! "
         + f"{type(train_dataset)} != {type(valid_dataset)}"
     )

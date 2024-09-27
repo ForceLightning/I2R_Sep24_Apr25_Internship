@@ -50,6 +50,9 @@ RESNET_OUTPUT_SHAPES = {
         (2048, 7, 7),
     ],
 }
+"""Output shapes for the different ResNet models. The output shapes are used to
+calculate the number of output channels for each 1D temporal convolutional block.
+"""
 
 
 class OneD(nn.Module):
@@ -161,6 +164,22 @@ class DilatedOneD(nn.Module):
         flat: bool = False,
         activation: str | type[nn.Module] | None = None,
     ):
+        """1D Temporal Convolutional Block with dilations.
+
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            num_frames: Number of frames in the input tensor.
+            sequence_length: Length of the sequence.
+            flat: If True, only one convolutional layer is used.
+            activation: Activation function to use.
+
+        Raises:
+            NotImplementedError: If the number of frames is not implemented.
+
+        Note:
+            The number of frames must be one of 5, 10, 15, 20, or 30.
+        """
         super().__init__()
         if isinstance(activation, type):
             self.activation = activation
@@ -242,11 +261,11 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     """Apply the OneD temporal convolution on the stacked outputs.
 
     Args:
-        stacked_outputs: 5D tensor of shape (num_frames, batch_size, num_channels, n, n).
+        stacked_outputs: 5D tensor of shape (num_frames, batch_size, num_channels, h, w).
         block: 1d temporal convolutional block.
 
     Return:
-        torch.Tensor: 4D tensor of shape (batch_size, num_channels, n, n).
+        torch.Tensor: 4D tensor of shape (batch_size, num_channels, h, w).
     """
     # Input shape: (B, F, C, H, W).
     b, f, c, h, w = stacked_outputs.shape
@@ -265,6 +284,15 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
 
 def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch.Tensor:
+    """Apply the DilatedOneD temporal convolution on the stacked outputs.
+
+    Args:
+        stacked_outputs: 5D tensor of shape (num_frames, batch_size, num_channels, h, w).
+        block: 1d temporal convolutional block.
+
+    Return:
+        torch.Tensor: 4D tensor of shape (batch_size, num_channels, h, w).
+    """
     # Input shape: (B, F, C, H, W).
     b, f, c, h, w = stacked_outputs.shape
     # Reshape to: (B, C, F, H, W).
