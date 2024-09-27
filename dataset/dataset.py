@@ -680,13 +680,13 @@ class ResidualTwoPlusOneDataset(
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        combined_video, residual_video, out_mask = self.transform_together(
-            combined_video, residual_video, out_mask
-        )
-        assert len(combined_video.shape) == 4 and len(residual_video.shape) == 4, (
+        combined_video, out_mask = self.transform_together(combined_video, out_mask)
+        assert len(combined_video.shape) == 4, (
             "Combined images must be of shape: (F, C, H, W) but is "
-            + f"{combined_video.shape}, {residual_video.shape} instead."
+            + f"{combined_video.shape}"
         )
+
+        residual_video = combined_video - torch.roll(combined_video, -1, 0)
 
         out_video = concatenate_imgs(
             self.frames, self.select_frame_method, combined_video
