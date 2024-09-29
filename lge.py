@@ -229,6 +229,11 @@ class LGECLI(LightningCLI):
             compute_fn=utils.get_loading_mode,
         )
 
+        # Link data.batch_size and model.batch_size
+        parser.link_arguments(
+            "data.batch_size", "model.batch_size", apply_on="instantiate"
+        )
+
         parser.set_defaults(
             {
                 "image_loading_mode": "RGB",

@@ -46,6 +46,7 @@ torch.set_float32_matmul_precision("medium")
 class ResidualAttentionUnetLightning(L.LightningModule):
     def __init__(
         self,
+        batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
@@ -73,7 +74,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
-
+        self.batch_size = batch_size
         self.in_channels = in_channels
         self.classes = classes
         self.num_frames = num_frames
@@ -155,10 +156,12 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         )
         self.example_input_array = (
             torch.randn(
-                (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
+                (self.batch_size, self.num_frames, self.in_channels, 224, 224),
+                dtype=torch.float32,
             ).to(DEVICE),
             torch.randn(
-                (2, self.num_frames, self.in_channels, 224, 224), dtype=torch.float32
+                (self.batch_size, self.num_frames, self.in_channels, 224, 224),
+                dtype=torch.float32,
             ).to(DEVICE),
         )
 
@@ -276,11 +279,17 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         return loss_all
 
     def validation_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
     ):
         self._shared_eval(batch, batch_idx, "val")
 
-    def test_step(self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int):
+    def test_step(
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch_idx: int,
+    ):
         self._shared_eval(batch, batch_idx, "test")
 
     @torch.no_grad()
@@ -691,6 +700,11 @@ class ResidualAttentionCLI(LightningCLI):
             "data.batch_size",
             "trainer.accumulate_grad_batches",
             compute_fn=utils.get_accumulate_grad_batches,
+        )
+
+        # Link data.batch_size and model.batch_size
+        parser.link_arguments(
+            "data.batch_size", "model.batch_size", apply_on="instantiate"
         )
 
         parser.set_defaults(

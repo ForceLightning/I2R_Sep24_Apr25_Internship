@@ -43,15 +43,9 @@ torch.set_float32_matmul_precision("medium")
 
 
 class TwoStreamUnetLightning(L.LightningModule):
-    train_metric: Metric
-    train_class_2_3_metric: Metric
-    val_metric: Metric
-    val_class_2_3_metric: Metric
-    test_metric: Metric
-    test_class_2_3_metric: Metric
-
     def __init__(
         self,
+        batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
@@ -77,6 +71,7 @@ class TwoStreamUnetLightning(L.LightningModule):
     ) -> None:
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
+        self.batch_size = batch_size
         self.in_channels = in_channels
         self.classes = classes
         self.num_frames = num_frames
@@ -150,11 +145,12 @@ class TwoStreamUnetLightning(L.LightningModule):
             else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
         self.example_input_array = (
-            torch.randn((8, self.in_channels, 224, 224), dtype=torch.float32).to(
-                DEVICE
-            ),
             torch.randn(
-                (8, self.num_frames * self.in_channels, 224, 224), dtype=torch.float32
+                (self.batch_size, self.in_channels, 224, 224), dtype=torch.float32
+            ).to(DEVICE),
+            torch.randn(
+                (self.batch_size, self.num_frames * self.in_channels, 224, 224),
+                dtype=torch.float32,
             ).to(DEVICE),
         )
 
@@ -654,6 +650,11 @@ class TwoStreamCLI(LightningCLI):
             "image_loading_mode",
             "model.loading_mode",
             compute_fn=utils.get_loading_mode,
+        )
+
+        # Link data.batch_size and model.batch_size
+        parser.link_arguments(
+            "data.batch_size", "model.batch_size", apply_on="instantiate"
         )
 
         parser.set_defaults(

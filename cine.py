@@ -46,6 +46,7 @@ torch.set_float32_matmul_precision("medium")
 class LightningUnetWrapper(L.LightningModule):
     def __init__(
         self,
+        batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
@@ -95,6 +96,7 @@ class LightningUnetWrapper(L.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters(ignore=["loss"])
+        self.batch_size = batch_size
         self.dump_memory_snapshot = dump_memory_snapshot
 
         # Trace memory usage
@@ -165,7 +167,7 @@ class LightningUnetWrapper(L.LightningModule):
             else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
         self.example_input_array = torch.randn(
-            (2, in_channels, 224, 224), dtype=torch.float32
+            (self.batch_size, in_channels, 224, 224), dtype=torch.float32
         ).to(DEVICE)
 
         self.learning_rate = learning_rate
@@ -655,6 +657,11 @@ class CineCLI(LightningCLI):
             "dl_classification_mode",
             "data.classification_mode",
             compute_fn=utils.get_classification_mode,
+        )
+
+        # Link data.batch_size and model.batch_size
+        parser.link_arguments(
+            "data.batch_size", "model.batch_size", apply_on="instantiate"
         )
 
         parser.set_defaults(
