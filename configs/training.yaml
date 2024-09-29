@@ -4,7 +4,7 @@ trainer:
   strategy: auto
   devices: auto
   num_nodes: 1
-  precision: 16-mixed
+  precision: bf16-mixed
   callbacks:
   - class_path: lightning.pytorch.callbacks.DeviceStatsMonitor
     init_args:

@@ -23,6 +23,7 @@ opencv-contrib-python = "*"
 lightning = {  extras = ["pytorch-extra"] }
 tensorboard = "*"
 rich = "*"
+deepspeed = "*"
 
 [dev-packages]
 autopep8 = "*"
