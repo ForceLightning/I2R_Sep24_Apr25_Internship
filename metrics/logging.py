@@ -41,8 +41,8 @@ def shared_metric_calculation(
     elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
         # Output: BS x C x H x W
         masks_preds = masks_proba.argmax(dim=1)
-        masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
-        module.metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+        masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        module.metrics[prefix].update(masks_preds, masks_one_hot)
     else:
         raise NotImplementedError(
             f"The mode {module.eval_classification_mode.name} is not implemented."
