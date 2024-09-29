@@ -2,15 +2,15 @@
 """U-Net with Attention mechanism on residual frames"""
 
 from __future__ import annotations
+
 from typing import Any, Literal, override
 
 import torch
-from torch import nn
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
-
+from torch import nn
 
 from models.two_plus_one import (
     RESNET_OUTPUT_SHAPES,
@@ -75,9 +75,8 @@ class ResidualFramesAttention(nn.Module):
     ) -> torch.Tensor:
         # Get the dimensions of the input tensors.
         batched = q.ndim == 4
-        c, h, w = q.shape[-3:]
+        f, c, h, w = q.shape[-4:]
         b = q.shape[0] if batched else 1
-        f = ks.shape[1] if batched else ks.shape[0]
 
         # Reshape the input tensors to the expected shape for the MultiheadAttention
         # module.
@@ -170,7 +169,7 @@ class AttentionResidualBlock(nn.Module):
             compress_output = compress_dilated(st_embeddings, self.temporal_conv)
 
         b, c, h, w = compress_output.shape
-        attention_output = self.attention(
+        attention_output: torch.Tensor = self.attention(
             q=compress_output, ks=res_embeddings, vs=res_embeddings
         )
 
