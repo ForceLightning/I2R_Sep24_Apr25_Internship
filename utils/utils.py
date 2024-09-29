@@ -262,6 +262,8 @@ def get_transforms(
     # Randomly rotates +/- 180 deg and warps the image.
     transforms_together = Compose(
         [
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
             v2.RandomRotation(
                 180.0,  # pyright: ignore[reportArgumentType]
                 v2.InterpolationMode.BILINEAR,
@@ -276,7 +278,7 @@ def get_transforms(
 
 
 def get_accumulate_grad_batches(batch_size: int):
-    if batch_size >= 4:
+    if batch_size >= 8:
         return 1
     else:
-        return 4 // batch_size
+        return 8 // batch_size

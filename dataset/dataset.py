@@ -242,11 +242,15 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         with Image.open(
             os.path.join(self.img_dir, img_name), formats=["tiff"]
         ) as img_pil:
-            img_list = (
-                [img.convert("RGB") for img in ImageSequence.Iterator(img_pil)]
-                if self.loading_mode == LoadingMode.RGB
-                else [*ImageSequence.Iterator(img_pil)]
+            img_list = ImageSequence.all_frames(
+                img_pil,
+                lambda img: (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.convert("L")
+                ),
             )
+
             img_list = self.transform_img(img_list)
             combined_imgs = tv_tensors.Video(default_collate(img_list))
 
@@ -357,11 +361,15 @@ class TwoPlusOneDataset(CineDataset):
         with Image.open(
             os.path.join(self.img_dir, img_name), formats=["tiff"]
         ) as img_pil:
-            img_list = (
-                [img.convert("RGB") for img in ImageSequence.Iterator(img_pil)]
-                if self.loading_mode == LoadingMode.RGB
-                else [*ImageSequence.Iterator(img_pil)]
+            img_list = ImageSequence.all_frames(
+                img_pil,
+                lambda img: (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.convert("L")
+                ),
             )
+
             img_list = self.transform_img(img_list)
 
             combined_video = tv_tensors.Video(default_collate(img_list))
@@ -512,25 +520,22 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
         # Convert LGE to RGB or Greyscale
         with Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"]) as lge:
-            lge_pil = (
-                lge.convert("RGB")
-                if self.loading_mode == LoadingMode.RGB
-                else lge.convert("L")
-            )
+            out_lge = self.transform_img(lge.convert("L"))
 
         with Image.open(
             os.path.join(self.cine_dir, cine_name), formats=["tiff"]
         ) as cine:
-            cine_list = (
-                [img.convert("RGB") for img in ImageSequence.Iterator(img_pil)]
-                if self.loading_mode == LoadingMode.RGB
-                else [*ImageSequence.Iterator(cine)]
+            img_list = ImageSequence.all_frames(
+                cine,
+                lambda img: (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.convert("L")
+                ),
             )
+            img_list = self.transform_img(img_list)
 
-            # Transform LGE and Cine together
-            out_lge, cine_list = self.transform_img(lge_pil, cine_list)
-
-        combined_cines = default_collate(cine_list)
+            combined_cines = tv_tensors.Video(default_collate(img_list))
 
         out_lge.squeeze()
 
@@ -645,10 +650,13 @@ class ResidualTwoPlusOneDataset(
         with Image.open(
             os.path.join(self.img_dir, img_name), formats=["tiff"]
         ) as img_pil:
-            img_list = (
-                [img.convert("RGB") for img in ImageSequence.Iterator(img_pil)]
-                if self.loading_mode == LoadingMode.RGB
-                else [*ImageSequence.Iterator(img_pil)]
+            img_list = ImageSequence.all_frames(
+                img_pil,
+                lambda img: (
+                    img.convert("RGB")
+                    if self.loading_mode == LoadingMode.RGB
+                    else img.convert("L")
+                ),
             )
             img_list = self.transform_img(img_list)
 
