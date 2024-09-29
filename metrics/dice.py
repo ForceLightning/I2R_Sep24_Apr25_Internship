@@ -107,7 +107,13 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
     def _compute_macro_avg(self) -> torch.Tensor:
         score = self.score_running * self.class_weights
         score = score[1:] if not self.include_background else score
-        score = score[self.class_weights == 1.0]
+        score = score[
+            (
+                self.class_weights[1:] == 1.0
+                if not self.include_background
+                else self.class_weights == 1.0
+            )
+        ]
         score = _safe_divide(score, self.samples).mean()
 
         return score
