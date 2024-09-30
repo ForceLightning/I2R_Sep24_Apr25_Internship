@@ -13,6 +13,7 @@ from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
+from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
@@ -461,6 +462,31 @@ class ResidualAttentionUnetLightning(L.LightningModule):
                 .cpu(),
                 global_step=batch_idx if prefix == "test" else self.global_step,
             )
+
+    @torch.no_grad()
+    def predict_step(
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str | list[str]],
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ):
+        self.eval()
+        images, res_images, masks, fn = batch
+        images_input = images.to(self.device.type)
+        res_input = res_images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
+
+        masks_proba: torch.Tensor = self.model(
+            images_input, res_input
+        )  # pyright: ignore[reportCallIssue]
+
+        if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+            masks_preds = masks_proba.argmax(dim=1)
+            masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        else:
+            masks_preds = masks_proba > 0.5
+
+        return masks_preds.detach().cpu(), images.detach().cpu(), fn
 
     @override
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
