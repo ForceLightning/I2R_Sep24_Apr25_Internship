@@ -205,6 +205,7 @@ def configure_optimizers(module: L.LightningModule):
                 kwargs = {
                     "optimizer": optimizer,
                     "max_lr": module.learning_rate * module.multiplier,
+                    "div_factor": module.multiplier,
                     "total_steps": module.trainer.estimated_stepping_batches,
                     "pct_start": 0.1,
                 }

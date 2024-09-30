@@ -21,7 +21,7 @@ from models.two_plus_one import (
 )
 
 
-class ResidualFramesAttention(nn.Module):
+class AttentionLayer(nn.Module):
     def __init__(
         self,
         embed_dim: int,
@@ -128,11 +128,11 @@ class ResidualFramesAttention(nn.Module):
         return attn_output_t
 
 
-class AttentionResidualBlock(nn.Module):
+class AttentionBlock(nn.Module):
     def __init__(
         self,
         temporal_conv: OneD | DilatedOneD,
-        attention: ResidualFramesAttention,
+        attention: AttentionLayer,
         reduce: Literal["sum", "cat"],
         reduce_dim: int = 0,
     ):
@@ -168,11 +168,11 @@ class AttentionResidualBlock(nn.Module):
         else:
             compress_output = compress_dilated(st_embeddings, self.temporal_conv)
 
-        b, c, h, w = compress_output.shape
         attention_output: torch.Tensor = self.attention(
             q=compress_output, ks=res_embeddings, vs=res_embeddings
         )
 
+        b, c, h, w = compress_output.shape
         out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
         out = self.reduce(input=out, dim=0).view(b, c, h, w)
 
@@ -275,7 +275,7 @@ class ResidualAttentionUnet(SegmentationModel):
         super().initialize()
 
         # Residual connection layers.
-        res_layers: list[AttentionResidualBlock] = []
+        res_layers: list[AttentionBlock] = []
         for i, out_channels in enumerate([2, 5, 10, 20, 40]):
             # (1): Create the 1D temporal convolutional layer.
             oned: OneD | DilatedOneD
@@ -300,11 +300,11 @@ class ResidualAttentionUnet(SegmentationModel):
                 )
 
             # (2): Create the attention mechanism.
-            attention = ResidualFramesAttention(
+            attention = AttentionLayer(
                 c, num_heads=1, num_frames=self.num_frames, need_weights=False
             )
 
-            res_block = AttentionResidualBlock(oned, attention, "sum")
+            res_block = AttentionBlock(oned, attention, "sum")
             res_layers.append(res_block)
 
         self.res_layers = nn.ModuleList(res_layers)
@@ -342,7 +342,7 @@ class ResidualAttentionUnet(SegmentationModel):
             img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
             res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
-            res_block: AttentionResidualBlock = self.res_layers[i - 1]
+            res_block: AttentionBlock = self.res_layers[i - 1]
 
             skip_output = res_block(
                 st_embeddings=img_outputs, res_embeddings=res_outputs
