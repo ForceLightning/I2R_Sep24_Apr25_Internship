@@ -216,6 +216,17 @@ def configure_optimizers(module: L.LightningModule):
                     "scheduler": OneCycleLR(**kwargs),
                     "interval": "step",
                 }
+            case "cosine_anneal":
+                kwargs = {
+                    "optimizer": optimizer,
+                    "T_max": module.trainer.estimated_stepping_batches,
+                }
+                kwargs |= module.scheduler_kwargs
+
+                scheduler = {
+                    "scheduler": CosineAnnealingLR(**kwargs),
+                    "interval": "step",
+                }
             case _:
                 raise NotImplementedError(
                     f"Scheduler of type {module.scheduler} not implemented"
