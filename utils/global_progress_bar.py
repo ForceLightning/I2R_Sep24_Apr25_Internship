@@ -49,8 +49,11 @@ class RemainingTimeColumn(ProgressColumn):
                     + remaining
                 )
 
+                remaining_total_td = timedelta(seconds=int(remaining_total))
+                total_estimated_td = timedelta(seconds=int(remaining_total + elapsed))
+
                 return Text(
-                    f"• {timedelta(seconds=int(remaining_total))}", style=self.style
+                    f"• {remaining_total_td} / {total_estimated_td}", style=self.style
                 )
 
         return Text("")

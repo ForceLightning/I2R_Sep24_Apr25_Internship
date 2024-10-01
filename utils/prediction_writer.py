@@ -9,6 +9,7 @@ from lightning.pytorch.callbacks import BasePredictionWriter
 from PIL.Image import Image
 from torchvision.transforms.v2 import functional as v2f
 from torchvision.utils import draw_segmentation_masks
+from tqdm.auto import tqdm
 
 from utils.utils import InverseNormalize, LoadingMode
 
@@ -29,15 +30,20 @@ class MaskImageWriter(BasePredictionWriter):
 
     def __init__(
         self,
-        output_dir: str,
+        loading_mode: LoadingMode,
+        output_dir: str | None = None,
         write_interval: Literal["batch", "epoch", "batch_and_epoch"] = "epoch",
         inv_transform: InverseNormalize = default_inv_transform,
-        loading_mode: LoadingMode = LoadingMode.RGB,
+        format: Literal["apng", "tiff", "gif", "webp"] = "tiff",
     ):
         super().__init__(write_interval)
         self.output_dir = output_dir
         self.inv_transform = inv_transform
         self.loading_mode = loading_mode
+        self.format: Literal["apng", "tiff", "gif", "webp"] = format
+        if self.output_dir:
+            if not os.path.exists(out_dir := os.path.normpath(self.output_dir)):
+                os.makedirs(out_dir)
 
     def write_on_epoch_end(
         self,
@@ -54,46 +60,104 @@ class MaskImageWriter(BasePredictionWriter):
             predictions: The predictions from the model.
             batch_indices: The indices of the batch.
         """
+        if not self.output_dir:
+            return
+        for batched_mask_preds, batched_images, batched_fns in tqdm(
+            predictions, desc="Batches"
+        ):
 
-        for batched_mask_preds, batched_images, batched_fns in predictions:
-            for mask_preds, images, fns in zip(
+            for mask_pred, image, fn in zip(
                 batched_mask_preds, batched_images, batched_fns, strict=True
             ):
-                for mask_pred, image, fn in zip(mask_preds, images, fns, strict=True):
-                    masked_frames: list[Image] = []
-                    for frame in image:
-                        masked_frame = _draw_masks(frame, mask_pred, self.loading_mode)
-                        masked_frames.append(masked_frame)
-                    save_path = os.path.join(self.output_dir, f"{fn}_pred")
-                    masked_frames[0].save(
-                        save_path,
-                        format="tiff",
-                        append_images=masked_frames[1:],
-                        save_all=True,
+
+                masked_frames: list[Image] = []
+                for frame in image:
+                    masked_frame = _draw_masks(
+                        frame, mask_pred, self.loading_mode, self.inv_transform
                     )
+                    masked_frames.append(masked_frame)
+
+                save_sample_fp = ".".join(fn.split(".")[:-1])
+
+                save_path = os.path.join(
+                    os.path.normpath(self.output_dir),
+                    f"{save_sample_fp}_pred.{self.format}",
+                )
+                match self.format:
+                    case "tiff":
+                        masked_frames[0].save(
+                            save_path,
+                            append_images=masked_frames[1:],
+                            save_all=True,
+                        )
+                    case "apng":
+                        masked_frames[0].save(
+                            save_path,
+                            append_images=masked_frames[1:],
+                            save_all=True,
+                            duration=1000 / 30,
+                            default_image=False,
+                            disposal=1,
+                            loop=0,
+                        )
+                    case "gif":
+                        masked_frames[0].save(
+                            save_path,
+                            append_images=masked_frames[1:],
+                            save_all=True,
+                            duration=1000 / 30,
+                            disposal=2,
+                            loop=0,
+                        )
+                    case "webp":
+                        masked_frames[0].save(
+                            save_path,
+                            append_images=masked_frames[1:],
+                            save_all=True,
+                            duration=1000 / 30,
+                            loop=0,
+                            background=(0, 0, 0, 0),
+                            allow_mixed=True,
+                        )
+
+
+def get_output_dir_from_ckpt_path(ckpt_path: str | None):
+    # Checkpoint paths are in the format:
+    # ./checkpoints/<model type>/lightning_logs/<experiment name>/<version>/checkpoints/
+    # <ckpt name>.ckpt
+    if not ckpt_path:
+        return None
+    path = os.path.normpath(ckpt_path)
+    split_path = path.split(os.sep)
+    path_to_version = os.path.join(*split_path[:-2])
+    return os.path.join(path_to_version, "predictions")
 
 
 def _draw_masks(
-    img: torch.Tensor, mask_one_hot: torch.Tensor, loading_mode: LoadingMode
+    img: torch.Tensor,
+    mask_one_hot: torch.Tensor,
+    loading_mode: LoadingMode,
+    inv_transform: InverseNormalize,
 ) -> Image:
     """Draws the masks on the image.
 
     Args:
         img: The image tensor.
         mask_one_hot: The one-hot encoded mask tensor.
+        loading_mode: Whether the image is loaded as RGB or Greyscale.
+        inv_transform: Inverse normalisation transformation of the image.
 
     Return:
         Image: The image with the masks drawn on it.
     """
-    match loading_mode:
-        case LoadingMode.GREYSCALE:
-            img = img.repeat(3, 1, 1)
-        case _:
-            pass
+    if loading_mode == LoadingMode.GREYSCALE:
+        norm_img = inv_transform(img.repeat(3, 1, 1)).clamp(0, 1)
+    else:
+        norm_img = inv_transform(img).clamp(0, 1)
 
     return v2f.to_pil_image(
         draw_segmentation_masks(
-            img.clamp(0, 1),
+            norm_img,
             mask_one_hot,
             colors=["black", "red", "blue", "green"],
             alpha=0.5,

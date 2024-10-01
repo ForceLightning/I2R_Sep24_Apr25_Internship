@@ -30,7 +30,7 @@ model_checkpoint:
   dirpath: null
   monitor: loss/val
   verbose: false
-  save_last: true
+  save_last: link
   save_top_k: 1
   save_weights_only: true
   mode: min
