@@ -146,7 +146,10 @@ class WeightedAverage(nn.Module):
             self.weights = nn.Parameter(torch.randn((in_features)), requires_grad=True)
         else:
             self.weights = nn.Parameter(
-                torch.tensor([0.5] + [0.5 / 30] * 30, dtype=torch.float32),
+                torch.tensor(
+                    [0.5] + [0.5 / (in_features - 1)] * (in_features - 1),
+                    dtype=torch.float32,
+                ),
                 requires_grad=False,
             )
 
@@ -167,6 +170,7 @@ class AttentionBlock(nn.Module):
         self,
         temporal_conv: OneD | DilatedOneD,
         attention: AttentionLayer,
+        num_frames: int,
         reduce: Literal["sum", "cat", "weighted", "weighted_learnable"],
         reduce_dim: int = 0,
     ):
@@ -177,6 +181,7 @@ class AttentionBlock(nn.Module):
             temporal_conv: Temporal convolutional layer to compress the spatial
             embeddings.
             attention: Attention mechanism between the embeddings.
+            num_frames: Number of frames per input.
             reduce: The reduction method to apply to the concatenated embeddings.
             reduce_dim: The dimension to reduce the concatenated embeddings.
         """
@@ -189,9 +194,9 @@ class AttentionBlock(nn.Module):
             case "cat":
                 self.reduce = nn.Identity()
             case "weighted":
-                self.reduce = WeightedAverage(31, False)
+                self.reduce = WeightedAverage(num_frames + 1, False)
             case "weighted_learnable":
-                self.reduce = WeightedAverage(31, True)
+                self.reduce = WeightedAverage(num_frames + 1, True)
 
     def forward(self, st_embeddings: torch.Tensor, res_embeddings: torch.Tensor):
         """Forward pass of the residual block.
@@ -264,6 +269,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.use_dilations = use_dilations
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
+        self.reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = reduce
 
         # Handle defaults.
         decoder_channels = (
@@ -346,7 +352,9 @@ class ResidualAttentionUnet(SegmentationModel):
                 c, num_heads=1, num_frames=self.num_frames, need_weights=False
             )
 
-            res_block = AttentionBlock(oned, attention, "sum")
+            res_block = AttentionBlock(
+                oned, attention, num_frames=self.num_frames, reduce=self.reduce
+            )
             res_layers.append(res_block)
 
         self.res_layers = nn.ModuleList(res_layers)
