@@ -661,7 +661,6 @@ class ResidualTwoPlusOneDataset(
             img_list = self.transform_img(img_list)
 
             combined_video = tv_tensors.Video(default_collate(img_list))
-            residual_video = combined_video - torch.roll(combined_video, -1, 0)
 
         # Perform necessary operations on the mask
         with Image.open(
@@ -698,14 +697,10 @@ class ResidualTwoPlusOneDataset(
             + f"{combined_video.shape}"
         )
 
-        residual_video = combined_video - torch.roll(combined_video, -1, 0)
-
         out_video = concatenate_imgs(
             self.frames, self.select_frame_method, combined_video
         )
-        out_residuals = concatenate_imgs(
-            self.frames, self.select_frame_method, residual_video
-        )
+        out_residuals = out_video - torch.roll(out_video, -1, 0)
 
         return out_video, out_residuals, out_mask.squeeze().long(), img_name
 
