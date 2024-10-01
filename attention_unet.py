@@ -72,6 +72,9 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         dump_memory_snapshot: bool = False,
         flat_conv: bool = False,
         unet_activation: str | None = None,
+        attention_reduction: Literal[
+            "sum", "cat", "weighted", "weighted_learnable"
+        ] = "sum",
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -98,6 +101,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             flat_conv=flat_conv,
             activation=unet_activation,
             use_dilations=True,
+            reduce=attention_reduction,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}

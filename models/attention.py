@@ -11,6 +11,7 @@ from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
+from torch.nn import functional as F
 
 from models.two_plus_one import (
     RESNET_OUTPUT_SHAPES,
@@ -128,12 +129,45 @@ class AttentionLayer(nn.Module):
         return attn_output_t
 
 
+class WeightedAverage(nn.Module):
+    """A weighted average module that can have a learnable parameter for the
+        weights.
+
+    Args:
+        in_features: Number of features to reduce.
+        learnable: Whether the parameter should store gradients.
+    """
+
+    def __init__(self, in_features: int, learnable: bool = False):
+        super().__init__()
+        self.in_features = in_features
+        self.learnable = learnable
+        if learnable:
+            self.weights = nn.Parameter(torch.randn((in_features)), requires_grad=True)
+        else:
+            self.weights = nn.Parameter(
+                torch.tensor([0.5] + [0.5 / 30] * 30, dtype=torch.float32),
+                requires_grad=False,
+            )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        assert x.shape[-1] == self.in_features, (
+            f"Input of shape {x.shape} does not have last dimension "
+            + f"matching in_features {self.in_features}"
+        )
+        if self.learnable:
+            weighted_values = F.softmax(self.weights, dim=-1)
+        else:
+            weighted_values = self.weights
+        return F.linear(x, weighted_values)
+
+
 class AttentionBlock(nn.Module):
     def __init__(
         self,
         temporal_conv: OneD | DilatedOneD,
         attention: AttentionLayer,
-        reduce: Literal["sum", "cat"],
+        reduce: Literal["sum", "cat", "weighted", "weighted_learnable"],
         reduce_dim: int = 0,
     ):
         """Residual block with attention mechanism between spatio-temporal embeddings
@@ -154,6 +188,10 @@ class AttentionBlock(nn.Module):
                 self.reduce = torch.sum
             case "cat":
                 self.reduce = nn.Identity()
+            case "weighted":
+                self.reduce = WeightedAverage(31, False)
+            case "weighted_learnable":
+                self.reduce = WeightedAverage(31, True)
 
     def forward(self, st_embeddings: torch.Tensor, res_embeddings: torch.Tensor):
         """Forward pass of the residual block.
@@ -174,6 +212,7 @@ class AttentionBlock(nn.Module):
 
         b, c, h, w = compress_output.shape
         out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
+        # TODO: Use a weighted sum
         out = self.reduce(input=out, dim=0).view(b, c, h, w)
 
         return out
@@ -196,6 +235,7 @@ class ResidualAttentionUnet(SegmentationModel):
         flat_conv: bool = False,
         res_conv_activation: str | None = None,
         use_dilations: bool = False,
+        reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = "sum",
     ):
         """U-Net with Attention mechanism on residual frames.
 
@@ -212,8 +252,10 @@ class ResidualAttentionUnet(SegmentationModel):
             num_frames: Number of frames in the sequence.
             aux_params: Auxiliary parameters for the classification head.
             flat_conv: Whether to use flat convolutions.
-            res_conv_activation: Activation function to use in the residual convolutions.
+            res_conv_activation: Activation function to use in the residual
+                convolutions.
             use_dilations: Whether to use dilated conv
+            reduce: How to reduce the post-attention features and the original features.
         """
         super().__init__()
         self.num_frames = num_frames
