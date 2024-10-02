@@ -31,6 +31,7 @@ class AttentionLayer(nn.Module):
         key_embed_dim: int | None = None,
         value_embed_dim: int | None = None,
         need_weights: bool = False,
+        reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = "sum",
     ) -> None:
         """Attention mechanism between spatio-temporal embeddings from raw frames and
         spatial embeddings from residual frames.
@@ -56,6 +57,7 @@ class AttentionLayer(nn.Module):
         self.num_heads = num_heads
         self.need_weights = need_weights
         self.num_frames = num_frames
+        self.reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = reduce
 
         # Create a MultiheadAttention module for each frame in the sequence.
         attentions = []
@@ -111,20 +113,38 @@ class AttentionLayer(nn.Module):
             )
             attn_outputs.append(out)
 
+        # NOTE: Maybe don't sum this here, if we want to do weighted averages.
         if batched:
-            attn_output_t = (
-                torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
-                .sum(dim=0)  # (H * W, B, C)
-                .view(h, w, b, c)
-                .permute(2, 3, 0, 1)  # (B, C, H, W)
-            )
+            match self.reduce:
+                case "sum":
+                    attn_output_t = (
+                        torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
+                        .sum(dim=0)  # (H * W, B, C)
+                        .view(h, w, b, c)
+                        .permute(2, 3, 0, 1)  # (B, C, H, W)
+                    )
+                case "cat" | "weighted" | "weighted_learnable":
+                    attn_output_t = (
+                        torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
+                        .view(f, h, w, b, c)
+                        .permute(0, 3, 4, 1, 2)  # (F, B, C, H, W)
+                    )
+
         else:
-            attn_output_t = (
-                torch.stack(attn_outputs, dim=0)  # (F, H * W, C)
-                .sum(dim=0)  # (H * W, C)
-                .view(h, w, c)
-                .permute(2, 0, 1)  # (C, H, W)
-            )
+            match self.reduce:
+                case "sum":
+                    attn_output_t = (
+                        torch.stack(attn_outputs, dim=0)  # (F, H * W, C)
+                        .sum(dim=0)  # (H * W, C)
+                        .view(h, w, c)
+                        .permute(2, 0, 1)  # (C, H, W)
+                    )
+                case "cat" | "weighted" | "weighted_learnable":
+                    attn_output_t = (
+                        torch.stack(attn_outputs, dim=0)  # (F, H * W, C)
+                        .view(f, c, h, w)
+                        .permute(0, 3, 1, 0)  # (F, C, H, W)
+                    )
 
         return attn_output_t
 
@@ -217,8 +237,10 @@ class AttentionBlock(nn.Module):
 
         b, c, h, w = compress_output.shape
         out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
-        # TODO: Use a weighted sum
-        out = self.reduce(input=out, dim=0).view(b, c, h, w)
+        if isinstance(self.reduce, (WeightedAverage, nn.Identity)):
+            out = self.reduce(out)
+        else:
+            out = self.reduce(input=out, dim=0).view(b, c, h, w)
 
         return out
 
