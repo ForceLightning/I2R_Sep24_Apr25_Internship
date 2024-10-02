@@ -187,10 +187,12 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             if loading_mode == LoadingMode.RGB
             else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
-        self.example_input_array = torch.randn(
-            (self.batch_size, self.num_frames, self.in_channels, 224, 224),
-            dtype=torch.float32,
-        ).to(DEVICE)
+        # NOTE: This is to help with reproducibility
+        with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+            self.example_input_array = torch.randn(
+                (self.batch_size, self.num_frames, self.in_channels, 224, 224),
+                dtype=torch.float32,
+            ).to(DEVICE)
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
@@ -256,7 +258,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             # B x C x H x W
             masks_proba: torch.Tensor = self.model(
                 images_input
-            )  # pyright: ignore[reportCallIssue]
+            )  # pyright: ignore[reportCallIssue] False positive
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
                 # GUARD: Check that the sizes match.

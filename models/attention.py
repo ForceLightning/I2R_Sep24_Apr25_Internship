@@ -193,6 +193,7 @@ class AttentionBlock(nn.Module):
         num_frames: int,
         reduce: Literal["sum", "cat", "weighted", "weighted_learnable"],
         reduce_dim: int = 0,
+        _attention_only: bool = False,
     ):
         """Residual block with attention mechanism between spatio-temporal embeddings
         from raw frames and spatial embeddings from residual frames.
@@ -208,6 +209,7 @@ class AttentionBlock(nn.Module):
         super().__init__()
         self.temporal_conv = temporal_conv
         self.attention = attention
+        self._attention_only = _attention_only
         match reduce:
             case "sum":
                 self.reduce = torch.sum
@@ -235,6 +237,10 @@ class AttentionBlock(nn.Module):
             q=compress_output, ks=res_embeddings, vs=res_embeddings
         )
 
+        # NOTE: This is for debugging purposes only.
+        if self._attention_only:
+            return attention_output
+
         b, c, h, w = compress_output.shape
         out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
         if isinstance(self.reduce, (WeightedAverage, nn.Identity)):
@@ -246,6 +252,29 @@ class AttentionBlock(nn.Module):
 
 
 class ResidualAttentionUnet(SegmentationModel):
+    """U-Net with Attention mechanism on residual frames.
+
+    Args:
+        encoder_name: Name of the encoder.
+        encoder_depth: Depth of the encoder.
+        encoder_weights: Weights of the encoder.
+        decoder_use_batchnorm: Whether to use batch normalization in the decoder.
+        decoder_channels: Number of channels in the decoder.
+        decoder_attention_type: Type of attention in the decoder.
+        in_channels: Number of channels in the input image.
+        classes: Number of classes in the output mask.
+        activation: Activation function to use.
+        skip_conn_channels: Number of channels in each skip connection's temporal
+            convolutions.
+        num_frames: Number of frames in the sequence.
+        aux_params: Auxiliary parameters for the classification head.
+        flat_conv: Whether to use flat convolutions.
+        res_conv_activation: Activation function to use in the residual
+            convolutions.
+        use_dilations: Whether to use dilated conv
+        reduce: How to reduce the post-attention features and the original features.
+    """
+
     _default_decoder_channels = [256, 128, 64, 32, 16]
     _default_skip_conn_channels = [2, 5, 10, 20, 40]
 
@@ -267,29 +296,8 @@ class ResidualAttentionUnet(SegmentationModel):
         res_conv_activation: str | None = None,
         use_dilations: bool = False,
         reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = "sum",
+        _attention_only: bool = False,
     ):
-        """U-Net with Attention mechanism on residual frames.
-
-        Args:
-            encoder_name: Name of the encoder.
-            encoder_depth: Depth of the encoder.
-            encoder_weights: Weights of the encoder.
-            decoder_use_batchnorm: Whether to use batch normalization in the decoder.
-            decoder_channels: Number of channels in the decoder.
-            decoder_attention_type: Type of attention in the decoder.
-            in_channels: Number of channels in the input image.
-            classes: Number of classes in the output mask.
-            activation: Activation function to use.
-            skip_conn_channels: Number of channels in each skip connection's temporal
-                convolutions.
-            num_frames: Number of frames in the sequence.
-            aux_params: Auxiliary parameters for the classification head.
-            flat_conv: Whether to use flat convolutions.
-            res_conv_activation: Activation function to use in the residual
-                convolutions.
-            use_dilations: Whether to use dilated conv
-            reduce: How to reduce the post-attention features and the original features.
-        """
         super().__init__()
         self.num_frames = num_frames
         self.flat_conv = flat_conv
@@ -299,6 +307,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.res_conv_activation = res_conv_activation
         self.reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = reduce
         self.skip_conn_channels = skip_conn_channels
+        self._attention_only = _attention_only
 
         # Define encoder, decoder, segmentation head, and classification head.
         self.spatial_encoder = get_encoder(
@@ -349,7 +358,7 @@ class ResidualAttentionUnet(SegmentationModel):
         super().initialize()
 
         # Residual connection layers.
-        res_layers: list[AttentionBlock] = []
+        res_layers: list[nn.Module] = []
         for i, out_channels in enumerate(self.skip_conn_channels):
             # (1): Create the 1D temporal convolutional layer.
             oned: OneD | DilatedOneD
@@ -381,7 +390,11 @@ class ResidualAttentionUnet(SegmentationModel):
                 )
 
                 res_block = AttentionBlock(
-                    oned, attention, num_frames=self.num_frames, reduce=self.reduce
+                    oned,
+                    attention,
+                    num_frames=self.num_frames,
+                    reduce=self.reduce,
+                    _attention_only=self._attention_only,
                 )
                 res_layers.append(res_block)
 
@@ -413,8 +426,8 @@ class ResidualAttentionUnet(SegmentationModel):
             self.check_input_shape(r_imgs)
 
             img_features = self.spatial_encoder(imgs)
-            res_features = self.residual_encoder(r_imgs)
             img_features_list.append(img_features)
+            res_features = self.residual_encoder(r_imgs)
             res_features_list.append(res_features)
 
         residual_outputs: list[torch.Tensor | list[str]] = [["EMPTY"]]

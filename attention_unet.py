@@ -77,6 +77,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         attention_reduction: Literal[
             "sum", "cat", "weighted", "weighted_learnable"
         ] = "sum",
+        attention_only: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -104,6 +105,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             activation=unet_activation,
             use_dilations=True,
             reduce=attention_reduction,
+            _attention_only=attention_only,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
@@ -161,16 +163,18 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             if loading_mode == LoadingMode.RGB
             else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
         )
-        self.example_input_array = (
-            torch.randn(
-                (self.batch_size, self.num_frames, self.in_channels, 224, 224),
-                dtype=torch.float32,
-            ).to(DEVICE),
-            torch.randn(
-                (self.batch_size, self.num_frames, self.in_channels, 224, 224),
-                dtype=torch.float32,
-            ).to(DEVICE),
-        )
+        # NOTE: This is to help with reproducibility
+        with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+            self.example_input_array = (
+                torch.randn(
+                    (self.batch_size, self.num_frames, self.in_channels, 224, 224),
+                    dtype=torch.float32,
+                ).to(DEVICE),
+                torch.randn(
+                    (self.batch_size, self.num_frames, self.in_channels, 224, 224),
+                    dtype=torch.float32,
+                ).to(DEVICE),
+            )
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
