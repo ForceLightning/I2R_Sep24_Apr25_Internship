@@ -4,7 +4,7 @@
 Taken from https://github.com/Lightning-AI/pytorch-lightning/issues/3009
 """
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBar
 from rich.progress import ProgressColumn
@@ -20,6 +20,7 @@ class RemainingTimeColumn(ProgressColumn):
     def __init__(self, style: str | Style) -> None:
         self.style = style
         self.estimated_time_per_epoch = None
+        self.start_time = datetime.now()
         super().__init__()
 
     def render(self, task) -> Text:
@@ -44,13 +45,18 @@ class RemainingTimeColumn(ProgressColumn):
                         0.99 * self.estimated_time_per_epoch + 0.01 * time_per_epoch
                     )
 
+                full_elapsed = datetime.now() - self.start_time
                 remaining_total = (
                     self.estimated_time_per_epoch * (total_epoch - current_epoch - 1)
                     + remaining
                 )
 
                 remaining_total_td = timedelta(seconds=int(remaining_total))
-                total_estimated_td = timedelta(seconds=int(remaining_total + elapsed))
+                total_estimated_td = timedelta(
+                    seconds=int(
+                        remaining_total + elapsed + full_elapsed.total_seconds()
+                    )
+                )
 
                 return Text(
                     f"• {remaining_total_td} / {total_estimated_td}", style=self.style
