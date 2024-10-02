@@ -311,17 +311,21 @@ def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch
 
 
 class TwoPlusOneUnet(SegmentationModel):
+    _default_decoder_channels = [256, 128, 64, 32, 16]
+    _default_skip_conn_channels = [2, 5, 10, 20, 40]
+
     def __init__(
         self,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
         decoder_use_batchnorm: bool = True,
-        decoder_channels: list[int] | None = None,
+        decoder_channels: list[int] = _default_decoder_channels,
         decoder_attention_type: Literal["scse"] | None = None,
         in_channels: int = 3,
         classes: int = 1,
         activation: str | type[nn.Module] | None = None,
+        skip_conn_channels: list[int] = _default_skip_conn_channels,
         num_frames: Literal[5, 10, 15, 20, 30] = 5,
         aux_params: dict[str, Any] | None = None,
         flat_conv: bool = False,
@@ -340,7 +344,9 @@ class TwoPlusOneUnet(SegmentationModel):
             in_channels: Number of input channels.
             classes: Number of classes.
             activation: Activation function to use. This can be a string or a class to
-            be instantiated.
+                be instantiated.
+            skip_conn_channels: Number of channels in each skip connection's temporal
+                convolutions.
             num_frames: Number of frames in the input tensor.
             aux_params: Auxiliary parameters for the model.
             flat_conv: If True, only one convolutional layer is used.
@@ -353,10 +359,7 @@ class TwoPlusOneUnet(SegmentationModel):
         self.use_dilations = use_dilations
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
-
-        init_decoder_channels = (
-            decoder_channels if decoder_channels else [256, 128, 64, 32, 16]
-        )
+        self.skip_conn_channels = skip_conn_channels
 
         # Define encoder, decoder, segmentation head and classification head.
         self.encoder = get_encoder(
@@ -368,7 +371,7 @@ class TwoPlusOneUnet(SegmentationModel):
 
         self.decoder = UnetDecoder(
             encoder_channels=self.encoder.out_channels,
-            decoder_channels=init_decoder_channels,
+            decoder_channels=decoder_channels,
             n_blocks=encoder_depth,
             use_batchnorm=decoder_use_batchnorm,
             center=encoder_name.startswith("vgg"),
@@ -376,7 +379,7 @@ class TwoPlusOneUnet(SegmentationModel):
         )
 
         self.segmentation_head = SegmentationHead(
-            in_channels=init_decoder_channels[-1],
+            in_channels=decoder_channels[-1],
             out_channels=classes,
             activation=activation,
             kernel_size=3,
@@ -413,7 +416,7 @@ class TwoPlusOneUnet(SegmentationModel):
 
         # INFO: Parameter tuning for output channels.
         onedlayers: list[OneD | DilatedOneD] = []
-        for i, out_channels in enumerate([2, 5, 10, 20, 40]):
+        for i, out_channels in enumerate(self.skip_conn_channels):
             mod: OneD | DilatedOneD
             if self.use_dilations and self.num_frames in [5, 30]:
                 _resnet_out_channels, h, w = RESNET_OUTPUT_SHAPES[self.encoder_name][i]
@@ -449,14 +452,12 @@ class TwoPlusOneUnet(SegmentationModel):
         Return:
             torch.Tensor: 4D tensor of shape (batch_size, classes, height, width).
         """
-        compressed_features = []
-
         # The first layer of the skip connection gets ignored, but in order for the
         # indexing later on to work, the feature output needs an empty first output.
-        compressed_features.append(["EMPTY"])
+        compressed_features: list[torch.Tensor | list[str]] = [["EMPTY"]]
 
-        # Goes through each frame of the image and add the output features to a list.
-        features_list = []
+        # Go through each frame of the image and add the output features to a list.
+        features_list: list[torch.Tensor] = []
 
         assert x.numel() != 0, f"Input tensor is empty: {x}"
 
@@ -477,7 +478,9 @@ class TwoPlusOneUnet(SegmentationModel):
             layer_output = torch.stack(layer_output)
 
             # Define the 1D block with the correct number of output channels.
-            block = self.onedlayers[index - 1]
+            block: OneD | DilatedOneD = self.onedlayers[
+                index - 1
+            ]  # pyright: ignore[reportAssignmentType] False positive
 
             # Applies the compress_2 function to resize and reorder channels.
             compressed_output = self.compress(layer_output, block)

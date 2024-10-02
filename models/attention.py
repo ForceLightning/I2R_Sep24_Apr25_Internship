@@ -246,17 +246,21 @@ class AttentionBlock(nn.Module):
 
 
 class ResidualAttentionUnet(SegmentationModel):
+    _default_decoder_channels = [256, 128, 64, 32, 16]
+    _default_skip_conn_channels = [2, 5, 10, 20, 40]
+
     def __init__(
         self,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
         decoder_use_batchnorm: bool = True,
-        decoder_channels: list[int] | None = None,
+        decoder_channels: list[int] = _default_decoder_channels,
         decoder_attention_type: Literal["scse"] | None = None,
         in_channels: int = 3,
         classes: int = 1,
         activation: str | type[nn.Module] | None = None,
+        skip_conn_channels: list[int] = _default_skip_conn_channels,
         num_frames: Literal[5, 10, 15, 20, 30] = 5,
         aux_params: dict[str, Any] | None = None,
         flat_conv: bool = False,
@@ -276,6 +280,8 @@ class ResidualAttentionUnet(SegmentationModel):
             in_channels: Number of channels in the input image.
             classes: Number of classes in the output mask.
             activation: Activation function to use.
+            skip_conn_channels: Number of channels in each skip connection's temporal
+                convolutions.
             num_frames: Number of frames in the sequence.
             aux_params: Auxiliary parameters for the classification head.
             flat_conv: Whether to use flat convolutions.
@@ -292,11 +298,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
         self.reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = reduce
-
-        # Handle defaults.
-        decoder_channels = (
-            decoder_channels if decoder_channels else [256, 128, 64, 32, 16]
-        )
+        self.skip_conn_channels = skip_conn_channels
 
         # Define encoder, decoder, segmentation head, and classification head.
         self.spatial_encoder = get_encoder(
@@ -306,12 +308,14 @@ class ResidualAttentionUnet(SegmentationModel):
             weights=encoder_weights,
         )
 
-        self.residual_encoder = get_encoder(
-            encoder_name,
-            in_channels=in_channels,
-            depth=encoder_depth,
-            weights=encoder_weights,
-        )
+        # NOTE: This is to help with reproducibility during ablation studies.
+        with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+            self.residual_encoder = get_encoder(
+                encoder_name,
+                in_channels=in_channels,
+                depth=encoder_depth,
+                weights=encoder_weights,
+            )
 
         self.decoder = UnetDecoder(
             encoder_channels=self.spatial_encoder.out_channels,
@@ -346,7 +350,7 @@ class ResidualAttentionUnet(SegmentationModel):
 
         # Residual connection layers.
         res_layers: list[AttentionBlock] = []
-        for i, out_channels in enumerate([2, 5, 10, 20, 40]):
+        for i, out_channels in enumerate(self.skip_conn_channels):
             # (1): Create the 1D temporal convolutional layer.
             oned: OneD | DilatedOneD
             c, h, w = RESNET_OUTPUT_SHAPES[self.encoder_name][i]
@@ -370,14 +374,16 @@ class ResidualAttentionUnet(SegmentationModel):
                 )
 
             # (2): Create the attention mechanism.
-            attention = AttentionLayer(
-                c, num_heads=1, num_frames=self.num_frames, need_weights=False
-            )
+            # NOTE: This is to help with reproducibility during ablation studies.
+            with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+                attention = AttentionLayer(
+                    c, num_heads=1, num_frames=self.num_frames, need_weights=False
+                )
 
-            res_block = AttentionBlock(
-                oned, attention, num_frames=self.num_frames, reduce=self.reduce
-            )
-            res_layers.append(res_block)
+                res_block = AttentionBlock(
+                    oned, attention, num_frames=self.num_frames, reduce=self.reduce
+                )
+                res_layers.append(res_block)
 
         self.res_layers = nn.ModuleList(res_layers)
 
@@ -397,24 +403,30 @@ class ResidualAttentionUnet(SegmentationModel):
             residual_frames: Residual frames from the sequence.
         """
 
-        img_features_list: list[torch.Tensor] = []
-        res_features_list: list[torch.Tensor] = []
+        # Output features by batch and then by encoder layer.
+        img_features_list: list[list[torch.Tensor]] = []
+        res_features_list: list[list[torch.Tensor]] = []
 
-        for img, r_img in zip(regular_frames, residual_frames, strict=False):
-            self.check_input_shape(img)
-            self.check_input_shape(r_img)
+        # Go through by batch and get the results for each layer of the encoder.
+        for imgs, r_imgs in zip(regular_frames, residual_frames, strict=False):
+            self.check_input_shape(imgs)
+            self.check_input_shape(r_imgs)
 
-            img_features = self.spatial_encoder(img)
-            res_features = self.residual_encoder(r_img)
+            img_features = self.spatial_encoder(imgs)
+            res_features = self.residual_encoder(r_imgs)
             img_features_list.append(img_features)
             res_features_list.append(res_features)
 
         residual_outputs: list[torch.Tensor | list[str]] = [["EMPTY"]]
+
         for i in range(1, 6):
+            # Now inputs to the attn block are stacked by batch dimension first.
             img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
             res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
-            res_block: AttentionBlock = self.res_layers[i - 1]
+            res_block: AttentionBlock = self.res_layers[
+                i - 1
+            ]  # pyright: ignore[reportAssignmentType] False positive
 
             skip_output = res_block(
                 st_embeddings=img_outputs, res_embeddings=res_outputs
