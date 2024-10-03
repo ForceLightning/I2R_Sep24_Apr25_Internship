@@ -1,0 +1,9 @@
+# lightning.pytorch==2.4.0
+trainer:
+  strategy: deepspeed_stage_2
+  precision: null
+  devices: 2
+  plugins:
+    - class_path: lightning.pytorch.plugins.precision.DeepSpeedPrecision
+      init_args:
+        precision: 16-mixed

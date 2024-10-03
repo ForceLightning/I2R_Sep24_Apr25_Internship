@@ -212,7 +212,8 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             torch.cuda.memory._dump_snapshot("attention_unet_snapshot.pickle")
 
     def forward(self, x_img: torch.Tensor, x_res: torch.Tensor) -> torch.Tensor:
-        return self.model(x_img, x_res)  # pyright: ignore[reportCallIssue]
+        with torch.autocast(device_type=self.device.type):
+            return self.model(x_img, x_res)  # pyright: ignore[reportCallIssue]
 
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
