@@ -90,10 +90,16 @@ class AttentionLayer(nn.Module):
         if batched:
             q_vec = q.flatten(2, 3).permute(2, 0, 1)  # (B, C, H * W) -> (H * W, B, C)
             k_vec = ks.flatten(3, 4).permute(  # (B, F, C, H * W)
-                1, 3, 0, 2  # (F, H * W, B, C)
+                1,
+                3,
+                0,
+                2,  # (F, H * W, B, C)
             )
             v_vec = vs.flatten(3, 4).permute(  # (B, F, C, H * W)
-                1, 3, 0, 2  # (F, H * W, B, C)
+                1,
+                3,
+                0,
+                2,  # (F, H * W, B, C)
             )
 
         else:
@@ -244,11 +250,8 @@ class AttentionBlock(nn.Module):
         b, c, h, w = compress_output.shape
         out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
         if isinstance(self.reduce, (WeightedAverage, nn.Identity)):
-            out = self.reduce(out)
-        else:
-            out = self.reduce(input=out, dim=0).view(b, c, h, w)
-
-        return out
+            return self.reduce(out)
+        return self.reduce(input=out, dim=0).view(b, c, h, w)
 
 
 class ResidualAttentionUnet(SegmentationModel):
@@ -437,9 +440,7 @@ class ResidualAttentionUnet(SegmentationModel):
             img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
             res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
-            res_block: AttentionBlock = self.res_layers[
-                i - 1
-            ]  # pyright: ignore[reportAssignmentType] False positive
+            res_block: AttentionBlock = self.res_layers[i - 1]  # pyright: ignore[reportAssignmentType] False positive
 
             skip_output = res_block(
                 st_embeddings=img_outputs, res_embeddings=res_outputs
