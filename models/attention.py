@@ -248,7 +248,9 @@ class AttentionBlock(nn.Module):
             return attention_output
 
         b, c, h, w = compress_output.shape
-        out = torch.cat((compress_output, attention_output), dim=0).view(2, b, c, h, w)
+        compress_output = compress_output.view(1, b, c, h, w)
+        attention_output = attention_output.view(-1, b, c, h, w)
+        out = torch.cat((compress_output, attention_output), dim=0)
         if isinstance(self.reduce, (WeightedAverage, nn.Identity)):
             return self.reduce(out)
         return self.reduce(input=out, dim=0).view(b, c, h, w)
