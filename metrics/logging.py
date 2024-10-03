@@ -260,4 +260,4 @@ def _grouped_generalized_dice_logging(
             for _, metric in results.items()
         ), f"Invalid metric primative type for dict: {results}"
 
-        module.log_dict(results, on_step=False, on_epoch=True)
+        module.log_dict(results, on_step=False, on_epoch=True, sync_dist=True)
