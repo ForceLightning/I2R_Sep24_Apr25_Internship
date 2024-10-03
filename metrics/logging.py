@@ -210,9 +210,12 @@ def _grouped_generalized_dice_logging(
         for k, v in results.items():
             if k in [
                 "val/dice_macro_avg",
-                "val/dice_macro_class_2_3",
                 "val/dice_weighted_avg",
+                "val/dice_macro_class_2_3",
                 "val/dice_weighted_class_2_3",
+                "val/dice_class_1",
+                "val/dice_class_2",
+                "val/dice_class_3",
             ]:
                 results_new[f"hp/{k}"] = v
 
