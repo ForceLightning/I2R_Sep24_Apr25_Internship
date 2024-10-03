@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Attention-based U-Net on residual frame information."""
+
 from __future__ import annotations
 
 import os
@@ -234,9 +235,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         masks = masks.to(self.device.type).long()
 
         with torch.autocast(device_type=self.device.type):
-            masks_proba: torch.Tensor = self.model(
-                images_input, res_input
-            )  # pyright: ignore[reportCallIssue] # False positive
+            masks_proba: torch.Tensor = self.model(images_input, res_input)  # pyright: ignore[reportCallIssue] # False positive
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
                 # GUARD: Check that the sizes match.
@@ -254,13 +253,19 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             loss_all = loss_seg
 
         self.log(
-            "loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
+            "loss/train",
+            loss_all.item(),
+            batch_size=bs,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
         )
         self.log(
             f"loss/train/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
 
         if isinstance(self.metrics["train"], GeneralizedDiceScoreVariant) or isinstance(
@@ -318,9 +323,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         res_input = res_images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
-        masks_proba: torch.Tensor = self.model(
-            images_input, res_input
-        )  # pyright: ignore[reportCallIssue] # False positive
+        masks_proba: torch.Tensor = self.model(images_input, res_input)  # pyright: ignore[reportCallIssue] # False positive
 
         if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -343,18 +346,21 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=True,
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
         self.log(
             f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
 
         if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
@@ -480,9 +486,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         res_input = res_images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
-        masks_proba: torch.Tensor = self.model(
-            images_input, res_input
-        )  # pyright: ignore[reportCallIssue]
+        masks_proba: torch.Tensor = self.model(images_input, res_input)  # pyright: ignore[reportCallIssue]
 
         if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
             masks_preds = masks_proba.argmax(dim=1)
@@ -599,12 +603,12 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
             self.val = test_dataset
             self.test = test_dataset
         else:
-            assert (idx := max(trainval_dataset.train_idxs)) < len(
-                trainval_dataset
+            assert (
+                (idx := max(trainval_dataset.train_idxs)) < len(trainval_dataset)
             ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
 
-            assert (idx := max(trainval_dataset.valid_idxs)) < len(
-                trainval_dataset
+            assert (
+                (idx := max(trainval_dataset.valid_idxs)) < len(trainval_dataset)
             ), f"Malformed training indices: {idx} for dataset of len: {len(trainval_dataset)}"
 
             valid_dataset = ResidualTwoPlusOneDataset(

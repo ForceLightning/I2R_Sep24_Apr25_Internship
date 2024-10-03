@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Logging utilities for metrics."""
+
 from typing import Literal
 
 import lightning as L
@@ -177,16 +178,29 @@ def _single_generalized_dice_logging(
     per_class = metric_obj.per_class_metric
 
     if isinstance(module.logger, TensorBoardLogger):
-        module.log(f"hp/{prefix}/dice_weighted_avg", weighted_avg.item(), logger=True)
-        module.log(f"hp/{prefix}/dice_macro_avg", macro_avg.item(), logger=True)
+        module.log(
+            f"hp/{prefix}/dice_weighted_avg",
+            weighted_avg.item(),
+            logger=True,
+            sync_dist=True,
+        )
+        module.log(
+            f"hp/{prefix}/dice_macro_avg", macro_avg.item(), logger=True, sync_dist=True
+        )
 
-    module.log(f"{prefix}/dice_macro_avg", macro_avg.item(), logger=True)
-    module.log(f"{prefix}/dice_weighted_avg", weighted_avg.item(), logger=True)
+    module.log(
+        f"{prefix}/dice_macro_avg", macro_avg.item(), logger=True, sync_dist=True
+    )
+    module.log(
+        f"{prefix}/dice_weighted_avg", weighted_avg.item(), logger=True, sync_dist=True
+    )
 
     for i, class_metric in enumerate(per_class):
         if i == 0:  # NOTE: Skips background class.
             continue
-        module.log(f"{prefix}/dice_class_{i}", class_metric.item(), logger=True)
+        module.log(
+            f"{prefix}/dice_class_{i}", class_metric.item(), logger=True, sync_dist=True
+        )
     metric_obj.reset()
 
 
