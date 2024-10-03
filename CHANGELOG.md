@@ -1,3 +1,8 @@
+# 2024-10-02 Deterministic initialisation of modules
+[ae66a9a](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/ae66a9a23d6a21e7dc88280b5fde7e89f9186e0b)
+
+By using `torch.random.fork_rng()`, we can initialise the modules of similarly structured models like the CINE, 2 + 1, and Attention tasks such that their encoders, skip connections, and decoder layers have the same initial weights.
+
 # 2024-09-26 Attention mechanism in U-Net
 [1880917](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/188091789849554f7b3f012cb883802010ce2de9)
 
