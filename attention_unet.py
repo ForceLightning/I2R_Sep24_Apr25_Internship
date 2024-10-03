@@ -32,13 +32,7 @@ from metrics.logging import (
 from models.attention import ResidualAttentionUnet
 from utils import utils
 from utils.prediction_writer import MaskImageWriter, get_output_dir_from_ckpt_path
-from utils.utils import (
-    ClassificationMode,
-    InverseNormalize,
-    LoadingMode,
-    get_loading_mode,
-    get_transforms,
-)
+from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -564,7 +558,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
 
         # Handle color v. greyscale transforms.
 
-        transforms_img, transforms_mask, transforms_together = get_transforms(
+        transforms_img, transforms_mask, transforms_together = utils.get_transforms(
             self.loading_mode, self.augment
         )
 

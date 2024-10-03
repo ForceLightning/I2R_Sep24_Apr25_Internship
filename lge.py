@@ -16,7 +16,8 @@ from torch.utils.data import DataLoader
 from cine import LightningUnetWrapper
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from utils import utils
-from utils.utils import ClassificationMode, LoadingMode, get_transforms
+from utils.prediction_writer import MaskImageWriter, get_output_dir_from_ckpt_path
+from utils.utils import ClassificationMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -69,7 +70,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "LGE")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
-        transforms_img, transforms_mask, transforms_together = get_transforms(
+        transforms_img, transforms_mask, transforms_together = utils.get_transforms(
             self.loading_mode, self.augment
         )
 
@@ -166,6 +167,15 @@ class LGEBaselineDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    def predict_dataloader(self):
+        return DataLoader(
+            self.test,
+            batch_size=self.batch_size,
+            pin_memory=True,
+            num_workers=self.num_workers,
+            persistent_workers=False,
+        )
+
 
 class LGECLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
@@ -234,6 +244,15 @@ class LGECLI(LightningCLI):
             "data.batch_size", "model.batch_size", apply_on="instantiate"
         )
 
+        # Prediction writer
+        parser.add_lightning_class_args(MaskImageWriter, "prediction_writer")
+        parser.link_arguments("image_loading_mode", "prediction_writer.loading_mode")
+        parser.link_arguments(
+            "model.weights_from_ckpt_path",
+            "prediction_writer.output_dir",
+            compute_fn=get_output_dir_from_ckpt_path,
+        )
+
         parser.set_defaults(
             {
                 "image_loading_mode": "RGB",
@@ -265,5 +284,13 @@ if __name__ == "__main__":
         LGEBaselineDataModule,
         save_config_callback=None,
         auto_configure_optimizers=False,
-        parser_kwargs={"fit": {"default_config_files": ["./configs/lge.yaml"]}},
+        parser_kwargs={
+            "fit": {"default_config_files": ["./configs/lge.yaml"]},
+            "predict": {
+                "default_config_files": [
+                    "./configs/lge.yaml",
+                    "./configs/predict.yaml",
+                ]
+            },
+        },
     )

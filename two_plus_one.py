@@ -13,6 +13,7 @@ from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
+from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
@@ -30,12 +31,8 @@ from metrics.logging import (
 )
 from models.two_plus_one import TwoPlusOneUnet
 from utils import utils
-from utils.utils import (
-    ClassificationMode,
-    InverseNormalize,
-    LoadingMode,
-    get_transforms,
-)
+from utils.prediction_writer import MaskImageWriter, get_output_dir_from_ckpt_path
+from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -481,6 +478,30 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                 global_step=batch_idx if prefix == "test" else self.global_step,
             )
 
+    @torch.no_grad()
+    def predict_step(
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, str | list[str]],
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ):
+        self.eval()
+        images, masks, fn = batch
+        images_input = images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
+
+        masks_proba: torch.Tensor = self.model(
+            images_input
+        )  # pyright: ignore[reportCallIssue]
+
+        if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+            masks_preds = masks_proba.argmax(dim=1)
+            masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        else:
+            masks_preds = masks_proba > 0.5
+
+        return masks_preds.detach().cpu(), images.detach().cpu(), fn
+
     @override
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
@@ -544,9 +565,8 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
-        # Handle color v. greyscale transforms.
-
-        transforms_img, transforms_mask, transforms_together = get_transforms(
+        # Get transforms for the CINE images, masks, and combined transforms.
+        transforms_img, transforms_mask, transforms_together = utils.get_transforms(
             self.loading_mode, self.augment
         )
 
@@ -649,6 +669,15 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    def predict_dataloader(self):
+        return DataLoader(
+            self.test,
+            batch_size=self.batch_size,
+            pin_memory=True,
+            num_workers=self.num_workers,
+            persistent_workers=False,
+        )
+
 
 class TwoPlusOneCLI(LightningCLI):
     def before_instantiate_classes(self) -> None:
@@ -725,6 +754,15 @@ class TwoPlusOneCLI(LightningCLI):
             "data.batch_size", "model.batch_size", apply_on="instantiate"
         )
 
+        # Prediction writer
+        parser.add_lightning_class_args(MaskImageWriter, "prediction_writer")
+        parser.link_arguments("image_loading_mode", "prediction_writer.loading_mode")
+        parser.link_arguments(
+            "model.weights_from_ckpt_path",
+            "prediction_writer.output_dir",
+            compute_fn=get_output_dir_from_ckpt_path,
+        )
+
         parser.set_defaults(
             {
                 "image_loading_mode": "RGB",
@@ -757,6 +795,12 @@ if __name__ == "__main__":
         save_config_callback=None,
         auto_configure_optimizers=False,
         parser_kwargs={
-            "fit": {"default_config_files": ["./configs/two_plus_one.yaml"]}
+            "fit": {"default_config_files": ["./configs/two_plus_one.yaml"]},
+            "predict": {
+                "default_config_files": [
+                    "./configs/two_plus_one.yaml",
+                    "./configs/predict.yaml",
+                ]
+            },
         },
     )
