@@ -78,7 +78,7 @@ class AttentionLayer(nn.Module):
     ) -> torch.Tensor:
         # Get the dimensions of the input tensors.
         batched = q.ndim == 4
-        f, c, h, w = q.shape[-4:]
+        f, c, h, w = ks.shape[-4:]
         b = q.shape[0] if batched else 1
 
         # Reshape the input tensors to the expected shape for the MultiheadAttention
