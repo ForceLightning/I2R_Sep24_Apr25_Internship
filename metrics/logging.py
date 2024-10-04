@@ -34,14 +34,14 @@ def shared_metric_calculation(
     # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
     # of the combinations of classification modes and sets the metrics correctly.
     if module.eval_classification_mode == ClassificationMode.MULTILABEL_MODE:
-        masks_preds = masks_proba > 0.5  # BS x C x H x W
+        masks_preds = masks_proba.sigmoid() > 0.5  # BS x C x H x W
         if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
             module.metrics[prefix].update(masks_preds, masks_one_hot)
         else:
             module.metrics[prefix].update(masks_preds, masks)
     elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
         # Output: BS x C x H x W
-        masks_preds = masks_proba.argmax(dim=1)
+        masks_preds = masks_proba.softmax(dim=1).argmax(dim=1)
         masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
         module.metrics[prefix].update(masks_preds, masks_one_hot)
     else:
