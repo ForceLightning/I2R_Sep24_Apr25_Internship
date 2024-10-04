@@ -77,9 +77,11 @@ class AttentionLayer(nn.Module):
         self, q: torch.Tensor, ks: torch.Tensor, vs: torch.Tensor
     ) -> torch.Tensor:
         # Get the dimensions of the input tensors.
-        batched = q.ndim == 4
-        f, c, h, w = ks.shape[-4:]
-        b = q.shape[0] if batched else 1
+        if ks.ndim == 4:
+            q = q.view(1, *q.shape)
+            ks = ks.view(1, *ks.shape)
+            vs = vs.view(1, *vs.shape)
+        b, f, c, h, w = ks.shape
 
         # Reshape the input tensors to the expected shape for the MultiheadAttention
         # module.
@@ -87,25 +89,13 @@ class AttentionLayer(nn.Module):
         # K: (<B>, F, H, W, C) -> (F, H, W, <B>, C) -> (F, H * W, <B>, C) [S, <N>, E_k]
         # V: (<B>, F, H, W, C) -> (F, H, W, <B>, C) -> (F, H * W, <B>, C) [S, <N>, E_v]
         # NOTE: For K and V, we iterate over the frames in the sequence.
-        if batched:
-            q_vec = q.flatten(2, 3).permute(2, 0, 1)  # (B, C, H * W) -> (H * W, B, C)
-            k_vec = ks.flatten(3, 4).permute(  # (B, F, C, H * W)
-                1,
-                3,
-                0,
-                2,  # (F, H * W, B, C)
-            )
-            v_vec = vs.flatten(3, 4).permute(  # (B, F, C, H * W)
-                1,
-                3,
-                0,
-                2,  # (F, H * W, B, C)
-            )
-
-        else:
-            q_vec = q.flatten(1, 2).permute(1, 0)  # (C, H * W) -> (H * W, C)
-            k_vec = ks.flatten(2, 3).permute(0, 2, 1)  # (F, C, H * W) -> (F, H * W, C)
-            v_vec = vs.flatten(2, 3).permute(0, 2, 1)  # (F, C, H * W) -> (F, H * W, C)
+        q_vec = q.flatten(2, 3).permute(2, 0, 1)  # (B, C, H * W) -> (H * W, B, C)
+        k_vec = ks.flatten(3, 4).permute(  # (B, F, C, H * W)
+            1, 3, 0, 2
+        )  # (F, H * W, B, C)
+        v_vec = vs.flatten(3, 4).permute(  # (B, F, C, H * W)
+            1, 3, 0, 2
+        )  # (F, H * W, B, C)
 
         attn_outputs: list[torch.Tensor] = []
         for i in range(f):  # Iterate over the frames in the sequence.
@@ -120,37 +110,20 @@ class AttentionLayer(nn.Module):
             attn_outputs.append(out)
 
         # NOTE: Maybe don't sum this here, if we want to do weighted averages.
-        if batched:
-            match self.reduce:
-                case "sum":
-                    attn_output_t = (
-                        torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
-                        .sum(dim=0)  # (H * W, B, C)
-                        .view(h, w, b, c)
-                        .permute(2, 3, 0, 1)  # (B, C, H, W)
-                    )
-                case "cat" | "weighted" | "weighted_learnable":
-                    attn_output_t = (
-                        torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
-                        .view(f, h, w, b, c)
-                        .permute(0, 3, 4, 1, 2)  # (F, B, C, H, W)
-                    )
-
-        else:
-            match self.reduce:
-                case "sum":
-                    attn_output_t = (
-                        torch.stack(attn_outputs, dim=0)  # (F, H * W, C)
-                        .sum(dim=0)  # (H * W, C)
-                        .view(h, w, c)
-                        .permute(2, 0, 1)  # (C, H, W)
-                    )
-                case "cat" | "weighted" | "weighted_learnable":
-                    attn_output_t = (
-                        torch.stack(attn_outputs, dim=0)  # (F, H * W, C)
-                        .view(f, c, h, w)
-                        .permute(0, 3, 1, 0)  # (F, C, H, W)
-                    )
+        match self.reduce:
+            case "sum":
+                attn_output_t = (
+                    torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
+                    .sum(dim=0)  # (H * W, B, C)
+                    .view(h, w, b, c)
+                    .permute(2, 3, 0, 1)  # (B, C, H, W)
+                )
+            case "cat" | "weighted" | "weighted_learnable":
+                attn_output_t = (
+                    torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
+                    .view(f, h, w, b, c)
+                    .permute(0, 3, 4, 1, 2)  # (F, B, C, H, W)
+                )
 
         return attn_output_t
 
@@ -442,7 +415,9 @@ class ResidualAttentionUnet(SegmentationModel):
             img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
             res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
-            res_block: AttentionBlock = self.res_layers[i - 1]  # pyright: ignore[reportAssignmentType] False positive
+            res_block: AttentionBlock = self.res_layers[
+                i - 1
+            ]  # pyright: ignore[reportAssignmentType] False positive
 
             skip_output = res_block(
                 st_embeddings=img_outputs, res_embeddings=res_outputs
