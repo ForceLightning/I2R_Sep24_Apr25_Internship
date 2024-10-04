@@ -232,7 +232,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)  # pyright: ignore[reportCallIssue]
+        with torch.autocast(device_type=self.device.type):
+            return self.model(x)  # pyright: ignore[reportCallIssue]
 
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")

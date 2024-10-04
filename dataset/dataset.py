@@ -173,6 +173,8 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         transform_img: Compose,
         transform_mask: Compose,
         transform_together: Compose | None = None,
+        frames: int = 30,
+        select_frame_method: Literal["consecutive", "specific"] = "consecutive",
         batch_size: int = 4,
         mode: Literal["train", "val", "test"] = "train",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
@@ -213,6 +215,10 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             transform_together if transform_together else Compose([v2.Identity()])
         )
 
+        self.frames = frames
+        self.select_frame_method: Literal["consecutive", "specific"] = (
+            select_frame_method
+        )
         self.train_idxs: list[int]
         self.valid_idxs: list[int]
 
@@ -283,9 +289,10 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
                 )
 
         out_video, out_mask = self.transform_together(combined_imgs, out_mask)
+        out_video = concatenate_imgs(self.frames, self.select_frame_method, out_video)
 
         f, c, h, w = out_video.shape
-        out_video = out_video.reshape(f * c, h, w)
+        out_video = out_video.view(f * c, h, w)
 
         return out_video, out_mask.squeeze().long(), img_name
 

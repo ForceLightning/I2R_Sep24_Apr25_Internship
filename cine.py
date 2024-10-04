@@ -209,7 +209,8 @@ class LightningUnetWrapper(L.LightningModule):
             torch.cuda.memory._dump_snapshot("unet_snapshot.pickle")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)  # pyright: ignore[reportCallIssue]
+        with torch.autocast(device_type=self.device.type):
+            return self.model(x)  # pyright: ignore[reportCallIssue]
 
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
@@ -225,13 +226,9 @@ class LightningUnetWrapper(L.LightningModule):
     ) -> torch.Tensor:
         images, masks, _ = batch
         bs: int = images.shape[0] if len(images.shape) > 3 else 1
-        images = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
 
         with torch.autocast(device_type=self.device.type):
-            masks_proba: torch.Tensor = self.model(
-                images
-            )  # pyright: ignore[reportCallIssue]
+            masks_proba: torch.Tensor = self.forward(images)
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
                 # GUARD: Check that the sizes match.
@@ -255,12 +252,14 @@ class LightningUnetWrapper(L.LightningModule):
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=True,
         )
         self.log(
             f"loss/train/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
 
         if isinstance(self.metrics["train"], GeneralizedDiceScoreVariant) or isinstance(
@@ -306,12 +305,8 @@ class LightningUnetWrapper(L.LightningModule):
             prefix: Prefix for the logger.
         """
         images, masks, _ = batch
-        images = images.to(DEVICE, dtype=torch.float32)  # BS x TS x C x H x W
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        masks = masks.to(DEVICE).long()
-        masks_proba: torch.Tensor = self.model(
-            images
-        )  # pyright: ignore[reportCallIssue]
+        masks_proba = self.forward(images)
 
         if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -319,7 +314,14 @@ class LightningUnetWrapper(L.LightningModule):
                 masks_proba.size() == masks.size()
             ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-        loss_seg = self.alpha * self.loss(masks_proba, masks)
+        # HACK: This ensures that the dimensions to the loss function are correct.
+        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+            self.loss, FocalLoss
+        ):
+            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+        else:
+            loss_seg = self.alpha * self.loss(masks_proba, masks)
+
         loss_all = loss_seg
         self.log(
             f"loss/{prefix}",
@@ -327,18 +329,21 @@ class LightningUnetWrapper(L.LightningModule):
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=False,
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=False,
         )
         self.log(
             f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=False,
         )
 
         if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
