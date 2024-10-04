@@ -45,6 +45,7 @@ class LightningUnetWrapper(L.LightningModule):
         self,
         batch_size: int,
         metric: Metric | None = None,
+        num_frames: int = 30,
         loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
@@ -95,6 +96,7 @@ class LightningUnetWrapper(L.LightningModule):
         self.save_hyperparameters(ignore=["loss"])
         self.batch_size = batch_size
         self.dump_memory_snapshot = dump_memory_snapshot
+        self.num_frames = num_frames
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -491,6 +493,7 @@ class LightningUnetWrapper(L.LightningModule):
 class CineBaselineDataModule(L.LightningDataModule):
     def __init__(
         self,
+        frames: int = 30,
         data_dir: str = "data/train_val/",
         test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
@@ -515,6 +518,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.frames = frames
         self.data_dir = data_dir
         self.test_dir = test_dir
         self.indices_dir = indices_dir
@@ -543,6 +547,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             transform_img=transforms_img,
             transform_mask=transforms_mask,
             transform_together=transforms_together,
+            frames=self.frames,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
@@ -559,6 +564,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             transform_img=transforms_img,
             transform_mask=transforms_mask,
             mode="test",
+            frames=self.frames,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
@@ -586,6 +592,7 @@ class CineBaselineDataModule(L.LightningDataModule):
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
+                frames=self.frames,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
@@ -605,7 +612,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
             persistent_workers=True if self.num_workers > 0 else False,
             shuffle=True,
         )
@@ -655,6 +662,7 @@ class CineCLI(LightningCLI):
             ModelCheckpoint, "model_checkpoint_dice_weighted"
         )
         parser.add_argument("--version", type=Union[str, None], default=None)
+        parser.link_arguments("model.num_frames", "data.frames")
 
         # Sets the checkpoint filename if version is provided.
         parser.link_arguments(
