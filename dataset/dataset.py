@@ -351,6 +351,8 @@ class TwoPlusOneDataset(CineDataset):
             transform_img,
             transform_mask,
             transform_together,
+            frames,
+            select_frame_method,
             batch_size,
             mode,
             classification_mode,
