@@ -308,7 +308,9 @@ class LightningUnetWrapper(L.LightningModule):
         """
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        masks_proba = self.forward(images)
+        images_input = images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
+        masks_proba = self.model(images_input)  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -331,21 +333,21 @@ class LightningUnetWrapper(L.LightningModule):
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
-            sync_dist=False,
+            sync_dist=True,
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
-            sync_dist=False,
+            sync_dist=True,
         )
         self.log(
             f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
-            sync_dist=False,
+            sync_dist=True,
         )
 
         if isinstance(self.metrics[prefix], GeneralizedDiceScoreVariant) or isinstance(
