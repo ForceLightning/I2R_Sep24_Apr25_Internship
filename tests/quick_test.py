@@ -12,6 +12,11 @@ import torch
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 
+from attention_unet import (
+    ResidualAttentionCLI,
+    ResidualAttentionUnetLightning,
+    ResidualTwoPlusOneDataModule,
+)
 from cine import CineBaselineDataModule, CineCLI
 from cine import LightningUnetWrapper as UnmodifiedUnet
 from dataset.dataset import CineDataset, LGEDataset, TwoPlusOneDataset
@@ -481,9 +486,9 @@ class TestAttentionUnetCLI:
 
     def _run_with_args(self, args: list[str]):
         with mock.patch("sys.argv", [self.filename] + args):
-            TwoPlusOneCLI(
-                TwoPlusOneUnet,
-                TwoPlusOneDataModule,
+            ResidualAttentionCLI(
+                ResidualAttentionUnetLightning,
+                ResidualTwoPlusOneDataModule,
                 save_config_callback=None,
                 auto_configure_optimizers=False,
             )
