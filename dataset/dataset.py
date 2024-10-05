@@ -255,11 +255,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
             img = cv2.resize(img, (224, 224))
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(self.frames, 1, 224, 224)
-        if self.loading_mode == LoadingMode.RGB:
-            combined_video = combined_video.repeat(1, 3, 1, 1)
-
-        combined_video = tv_tensors.Video(combined_video)
+        combined_video = combined_video.view(30, 1, 224, 224)
         combined_video = self.transform_img(combined_video)
 
         with Image.open(
@@ -379,10 +375,6 @@ class TwoPlusOneDataset(CineDataset):
             combined_video[i, :, :] = torch.as_tensor(img)
 
         combined_video = combined_video.view(30, 1, 224, 224)
-        if self.loading_mode == LoadingMode.RGB:
-            combined_video = combined_video.repeat(1, 3, 1, 1)
-
-        combined_video = tv_tensors.Video(combined_video)
         combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
@@ -544,10 +536,6 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
             combined_cines[i, :, :] = torch.as_tensor(img)
 
         combined_cines = combined_cines.view(self.num_frames, 1, 224, 224)
-        if self.loading_mode == LoadingMode.RGB:
-            combined_cines = combined_cines.repeat(1, 3, 1, 1)
-
-        combined_cines = tv_tensors.Video(combined_cines)
         combined_cines = self.transform_img(combined_cines)
 
         out_lge.squeeze()
@@ -672,10 +660,6 @@ class ResidualTwoPlusOneDataset(
             combined_video[i, :, :] = torch.as_tensor(img)
 
         combined_video = combined_video.view(30, 1, 224, 224)
-        if self.loading_mode == LoadingMode.RGB:
-            combined_video = combined_video.repeat(1, 3, 1, 1)
-
-        combined_video = tv_tensors.Video(combined_video)
         combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
@@ -702,10 +686,10 @@ class ResidualTwoPlusOneDataset(
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
-            # case _:
-            #     raise NotImplementedError(
-            #         f"The mode {self.classification_mode.name} is not implemented"
-            #     )
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
         assert len(combined_video.shape) == 4, (
