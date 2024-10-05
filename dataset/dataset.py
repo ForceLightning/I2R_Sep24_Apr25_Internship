@@ -7,6 +7,7 @@ import pickle
 import random
 from typing import Literal, Sequence, override
 
+import cv2
 import numpy as np
 import PIL.ImageSequence as ImageSequence
 import torch
@@ -243,22 +244,23 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         img_name: str = self.img_list[index]
         mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
 
-        # PERF(PIL): This reduces the loading and transform time by 60% when compared
-        # to OpenCV.
-        with Image.open(
-            os.path.join(self.img_dir, img_name), formats=["tiff"]
-        ) as img_pil:
-            img_list = ImageSequence.all_frames(
-                img_pil,
-                lambda img: (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.convert("L")
-                ),
-            )
+        # PERF: Initialise the output tensor ahead of time to reduce memory allocation
+        # time.
+        _, img_list = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
+        )
+        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        for i in range(30):
+            img = img_list[i]
+            img = cv2.resize(img, (224, 224))
+            combined_video[i, :, :] = torch.as_tensor(img)
 
-            img_list = self.transform_img(img_list)
-            combined_imgs = tv_tensors.Video(default_collate(img_list))
+        combined_video = combined_video.view(self.frames, 1, 224, 224)
+        if self.loading_mode == LoadingMode.RGB:
+            combined_video = combined_video.repeat(1, 3, 1, 1)
+
+        combined_video = tv_tensors.Video(combined_video)
+        combined_video = self.transform_img(combined_video)
 
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
@@ -288,11 +290,11 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        out_video, out_mask = self.transform_together(combined_imgs, out_mask)
+        out_video, out_mask = self.transform_together(combined_video, out_mask)
         out_video = concatenate_imgs(self.frames, self.select_frame_method, out_video)
 
         f, c, h, w = out_video.shape
-        out_video = out_video.view(f * c, h, w)
+        out_video = out_video.reshape(f * c, h, w)
 
         return out_video, out_mask.squeeze().long(), img_name
 
@@ -365,23 +367,23 @@ class TwoPlusOneDataset(CineDataset):
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
-        # PERF(PIL): This reduces the loading and transform time by 60% when compared
-        # to OpenCV.
-        with Image.open(
-            os.path.join(self.img_dir, img_name), formats=["tiff"]
-        ) as img_pil:
-            img_list = ImageSequence.all_frames(
-                img_pil,
-                lambda img: (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.convert("L")
-                ),
-            )
+        # PERF: Initialise the output tensor ahead of time to reduce memory allocation
+        # time.
+        _, img_list = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
+        )
+        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        for i in range(30):
+            img = img_list[i]
+            img = cv2.resize(img, (224, 224))
+            combined_video[i, :, :] = torch.as_tensor(img)
 
-            img_list = self.transform_img(img_list)
+        combined_video = combined_video.view(30, 1, 224, 224)
+        if self.loading_mode == LoadingMode.RGB:
+            combined_video = combined_video.repeat(1, 3, 1, 1)
 
-            combined_video = tv_tensors.Video(default_collate(img_list))
+        combined_video = tv_tensors.Video(combined_video)
+        combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
         with Image.open(
@@ -425,6 +427,8 @@ class TwoPlusOneDataset(CineDataset):
 
 
 class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]):
+    num_frames: int = 30
+
     def __init__(
         self,
         lge_dir: str,
@@ -524,27 +528,27 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         if not lge_name.endswith(".png"):
             raise ValueError("Invalid image type for file: {lge_name}")
 
-        # PERF(PIL): This reduces the loading and transform time by 60% when compared
-        # to OpenCV.
-
         # Convert LGE to RGB or Greyscale
         with Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"]) as lge:
             out_lge = self.transform_img(lge.convert("L"))
 
-        with Image.open(
-            os.path.join(self.cine_dir, cine_name), formats=["tiff"]
-        ) as cine:
-            img_list = ImageSequence.all_frames(
-                cine,
-                lambda img: (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.convert("L")
-                ),
-            )
-            img_list = self.transform_img(img_list)
+        # PERF: Initialise the output tensor ahead of time to reduce memory allocation
+        # time.
+        _, cine_list = cv2.imreadmulti(
+            os.path.join(self.cine_dir, cine_name), flags=IMREAD_GRAYSCALE
+        )
+        combined_cines = torch.empty((30, 224, 224), dtype=torch.uint8)
+        for i in range(30):
+            img = cine_list[i]
+            img = cv2.resize(img, (224, 224))
+            combined_cines[i, :, :] = torch.as_tensor(img)
 
-            combined_cines = tv_tensors.Video(default_collate(img_list))
+        combined_cines = combined_cines.view(self.num_frames, 1, 224, 224)
+        if self.loading_mode == LoadingMode.RGB:
+            combined_cines = combined_cines.repeat(1, 3, 1, 1)
+
+        combined_cines = tv_tensors.Video(combined_cines)
+        combined_cines = self.transform_img(combined_cines)
 
         out_lge.squeeze()
 
@@ -656,20 +660,23 @@ class ResidualTwoPlusOneDataset(
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
-        with Image.open(
-            os.path.join(self.img_dir, img_name), formats=["tiff"]
-        ) as img_pil:
-            img_list = ImageSequence.all_frames(
-                img_pil,
-                lambda img: (
-                    img.convert("RGB")
-                    if self.loading_mode == LoadingMode.RGB
-                    else img.convert("L")
-                ),
-            )
-            img_list = self.transform_img(img_list)
+        # PERF: Initialise the output tensor ahead of time to reduce memory allocation
+        # time.
+        _, img_list = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
+        )
+        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        for i in range(30):
+            img = img_list[i]
+            img = cv2.resize(img, (224, 224))
+            combined_video[i, :, :] = torch.as_tensor(img)
 
-            combined_video = tv_tensors.Video(default_collate(img_list))
+        combined_video = combined_video.view(30, 1, 224, 224)
+        if self.loading_mode == LoadingMode.RGB:
+            combined_video = combined_video.repeat(1, 3, 1, 1)
+
+        combined_video = tv_tensors.Video(combined_video)
+        combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
         with Image.open(
@@ -695,10 +702,10 @@ class ResidualTwoPlusOneDataset(
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
-            case _:
-                raise NotImplementedError(
-                    f"The mode {self.classification_mode.name} is not implemented"
-                )
+            # case _:
+            #     raise NotImplementedError(
+            #         f"The mode {self.classification_mode.name} is not implemented"
+            #     )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
         assert len(combined_video.shape) == 4, (
