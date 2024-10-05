@@ -54,3 +54,4 @@ model_checkpoint_dice_weighted:
   every_n_epochs: null
   save_on_train_epoch_end: null
   enable_version_counter: true
+eval_classification_mode: MULTICLASS_MODE
