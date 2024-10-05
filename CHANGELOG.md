@@ -1,15 +1,30 @@
+# 2024-10-05 Enhance performance gains from removing for-loops in OpenCV multi-image loading
+[cbfe084](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/cbfe084e24bf2eb9abd2cdedb44189c7b8ed70a9)
+
+Two regressions were found:
+- [52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/52b468b243652c8ec7884b7a687cdf2ab746a4f3): Pillow methods did not load the multi-image CINE .tiff files properly, leading to all frames being the first frame.
+- [db8c37d](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/db8c37dca6bcf0514903de2bd1e765b7b5ed2cbd): Fixes the above regression, but causes a performance regression which resulted in slower loading times.
+
+To address the performance regression in the second commit, we instead instantiate a tensor with the intended output size. Then, we assign batches of the input numpy arrays (from OpenCV) which reduces the memory allocation time to just a single instance at the start.
+
+| Implementation | Time Taken         | Performance Difference |
+| -------------- | ------------------ | ---------------------- |
+| Original       | 79.5 ms ± 2.7 ms   | 00.00%                 |
+| Pillow [db8c37d](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/db8c37dca6bcf0514903de2bd1e765b7b5ed2cbd) | 101 ms ± 1.43 ms  | +27.04%                 |
+| New [cbfe084](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/cbfe084e24bf2eb9abd2cdedb44189c7b8ed70a9)    | 41.6 ms ± 1.31 ms | -47.67%                 |
+
 # 2024-10-02 Deterministic initialisation of modules
-[ae66a9a](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/ae66a9a23d6a21e7dc88280b5fde7e89f9186e0b)
+[ae66a9a](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/ae66a9a23d6a21e7dc88280b5fde7e89f9186e0b)
 
 By using `torch.random.fork_rng()`, we can initialise the modules of similarly structured models like the CINE, 2 + 1, and Attention tasks such that their encoders, skip connections, and decoder layers have the same initial weights.
 
 # 2024-09-26 Attention mechanism in U-Net
-[1880917](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/188091789849554f7b3f012cb883802010ce2de9)
+[1880917](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/188091789849554f7b3f012cb883802010ce2de9)
 
 Implemented the attention mechanism in the U-Net architecture with residual frames.
 
 # 2024-09-23 - Flattened Temporal Convolutions
-[7b0ea7b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/7b0ea7b910b4faa302a7308eb9c050c2b624b154)
+[7b0ea7b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/7b0ea7b910b4faa302a7308eb9c050c2b624b154)
 
 Implemented options to set flat temporal convolutional layers for the 2+1 model. For example, if the original script had a convolutional layer stack of filters with ([input] → kernel 1 → kernel 2 → ... → [output]) ([\30] → 5 → 3 → 2 → [1]) we had instead ([30] → 30 → [1])
 
@@ -19,7 +34,7 @@ Implemented options to set flat temporal convolutional layers for the 2+1 model.
 | Yes                    | 0.3883          | 0.4061            | 0.5203               | 0.6040       | 0.3866       | 0.2276       | 1.009 hr |
 
 # 2024-09-20 - Data augmentation
-[d8c3633](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/d8c3633276a509eea16a940efb57fbf64fad84bd)
+[d8c3633](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/d8c3633276a509eea16a940efb57fbf64fad84bd)
 
 Adding simple image transforms such as `RandomRotation` to be applied to all LGE, Cine, and Masks for each sample together allows the model to be more robust when learning image features. This is facilitated by the `torchvision.transforms.v2` module, with the usage of `tv_tensors` to wrap image and mask tensors for operations. The performance difference for the LGE task is as shown below:
 
@@ -37,7 +52,10 @@ A comparison on the LGE, Cine, and TwoPlusOne tasks are as follows:
 | 2+1  | Yes             | 0.3996          | 0.4011            | 0.4897               | 0.5792       | 0.3646       | 0.2594       |
 
 # 2024-09-20 - Replaced OpenCV dataloading with Pillow methods
-[52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/52b468b243652c8ec7884b7a687cdf2ab746a4f3)
+> [!NOTE]
+> Superceded by [cbfe084](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/cbfe084e24bf2eb9abd2cdedb44189c7b8ed70a9)
+
+[52b468b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/52b468b243652c8ec7884b7a687cdf2ab746a4f3)
 
 The original script used OpenCV methods to load the data, which takes a significant amount of time when loading multi-frame .TIFF files in the Cine task. Instead, we may use Pillow's lazily loaded Image objects which tie-in nicely with `torchvision`'s transform methods. The speedup for the Cine task is as shown below:
 
