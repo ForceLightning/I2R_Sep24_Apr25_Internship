@@ -14,7 +14,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from models.two_plus_one import (
-    RESNET_OUTPUT_SHAPES,
+    ENCODER_OUTPUT_SHAPES,
     DilatedOneD,
     OneD,
     compress_2,
@@ -340,7 +340,7 @@ class ResidualAttentionUnet(SegmentationModel):
         for i, out_channels in enumerate(self.skip_conn_channels):
             # (1): Create the 1D temporal convolutional layer.
             oned: OneD | DilatedOneD
-            c, h, w = RESNET_OUTPUT_SHAPES[self.encoder_name][i]
+            c, h, w = ENCODER_OUTPUT_SHAPES[self.encoder_name][i]
             if self.use_dilations and self.num_frames in [5, 30]:
                 oned = DilatedOneD(
                     1,

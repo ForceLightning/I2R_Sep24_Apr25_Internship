@@ -13,7 +13,7 @@ from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
 
-RESNET_OUTPUT_SHAPES = {
+ENCODER_OUTPUT_SHAPES = {
     "resnet18": [
         (64, 112, 112),
         (64, 56, 56),
@@ -43,6 +43,90 @@ RESNET_OUTPUT_SHAPES = {
         (2048, 7, 7),
     ],
     "resnet152": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnext50_32x4d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnext101_32x4d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnext101_32x8d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnext101_32x16d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnext101_32x32d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "resnext101_32x48d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "senet154": [
+        (128, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "se_resnet50": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "se_resnet101": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "se_resnet152": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "se_resnext50_32x4d": [
+        (64, 112, 112),
+        (256, 56, 56),
+        (512, 28, 28),
+        (1024, 14, 14),
+        (2048, 7, 7),
+    ],
+    "se_resnext101_32x4d": [
         (64, 112, 112),
         (256, 56, 56),
         (512, 28, 28),
@@ -419,7 +503,7 @@ class TwoPlusOneUnet(SegmentationModel):
         for i, out_channels in enumerate(self.skip_conn_channels):
             mod: OneD | DilatedOneD
             if self.use_dilations and self.num_frames in [5, 30]:
-                _resnet_out_channels, h, w = RESNET_OUTPUT_SHAPES[self.encoder_name][i]
+                _resnet_out_channels, h, w = ENCODER_OUTPUT_SHAPES[self.encoder_name][i]
                 mod = DilatedOneD(
                     1,
                     out_channels,
