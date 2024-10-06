@@ -13,9 +13,16 @@ model:
   classes: 4
 data:
   augment: false
-model_checkpoint:
+model_checkpoint_val_loss:
+  save_last: false
+  save_top_k: 0
+model_checkpoint_last:
+  every_n_epochs: null
   save_last: false
   save_top_k: 0
 model_checkpoint_dice_weighted:
+  save_last: false
+  save_top_k: 0
+model_checkpoint_dice_macro_class_2_3:
   save_last: false
   save_top_k: 0

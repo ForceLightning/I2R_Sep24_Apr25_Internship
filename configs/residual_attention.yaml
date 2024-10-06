@@ -16,5 +16,5 @@ data:
   indices_dir: data/indices/
   select_frame_method: specific
 dl_classification_mode: MULTICLASS_MODE
-eval_classification_mode: MULTILABEL_MODE
+eval_classification_mode: MULTICLASS_MODE
 image_loading_mode: RGB

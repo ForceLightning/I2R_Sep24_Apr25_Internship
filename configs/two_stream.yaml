@@ -15,4 +15,4 @@ data:
   test_dir: data/test/
   indices_dir: data/indices/
 dl_classification_mode: MULTICLASS_MODE
-eval_classification_mode: MULTILABEL_MODE
+eval_classification_mode: MULTICLASS_MODE

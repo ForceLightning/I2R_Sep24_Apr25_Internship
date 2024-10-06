@@ -136,6 +136,18 @@ def get_best_weighted_avg_dice_filename(version: str | None) -> str:
     return version + suffix
 
 
+def get_best_macro_avg_dice_class_2_3_filename(version: str | None) -> str:
+    """Gets the filename for the best macro average dice score for class 2 & 3.
+
+    Args:
+        version: The version name of the model.
+    """
+    suffix = "-epoch={epoch}-step={step}-dice_m_avg_2_3={val/dice_macro_class_2_3}"
+    if version is None:
+        return suffix
+    return version + suffix
+
+
 def get_last_checkpoint_filename(version: str | None) -> str | None:
     """Gets the filename for the last checkpoint.
 

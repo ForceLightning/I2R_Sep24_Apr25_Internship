@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
-from typing import Any, Literal, Union, override
+from typing import Any, Literal, override
 
 import lightning as L
 import segmentation_models_pytorch as smp
 import torch
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from segmentation_models_pytorch.losses.focal import FocalLoss
@@ -24,6 +22,7 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
+from cli.common import CommonCLI
 from dataset.dataset import CineDataset, get_trainval_data_subsets
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
@@ -32,7 +31,6 @@ from metrics.logging import (
     shared_metric_logging_epoch_end,
 )
 from utils import utils
-from utils.prediction_writer import MaskImageWriter, get_output_dir_from_ckpt_path
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size
@@ -648,106 +646,22 @@ class CineBaselineDataModule(L.LightningDataModule):
         )
 
 
-class CineCLI(LightningCLI):
-    def before_instantiate_classes(self) -> None:
-        if self.subcommand is not None:
-            if (config := self.config.get(self.subcommand)) is not None:
-                if (version := config.get("version")) is not None:
-                    name = utils.get_last_checkpoint_filename(version)
-                    ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]
-                        name
-                    )
-
+class CineCLI(CommonCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
-        parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint")
-        parser.add_lightning_class_args(
-            ModelCheckpoint, "model_checkpoint_dice_weighted"
-        )
-        parser.add_argument("--version", type=Union[str, None], default=None)
-        parser.link_arguments("model.num_frames", "data.frames")
+        super().add_arguments_to_parser(parser)
 
-        # Sets the checkpoint filename if version is provided.
-        parser.link_arguments(
-            "version",
-            "model_checkpoint.filename",
-            compute_fn=utils.get_checkpoint_filename,
-        )
-        parser.link_arguments(
-            "version",
-            "model_checkpoint_dice_weighted.filename",
-            compute_fn=utils.get_best_weighted_avg_dice_filename,
-        )
-        parser.link_arguments("version", "trainer.logger.init_args.name")
+        defaults = self.default_arguments | {
+            "image_loading_mode": "RGB",
+            "dl_classification_mode": "MULTICLASS_MODE",
+            "eval_classification_mode": "MULTICLASS_MODE",
+            "trainer.max_epochs": 50,
+            "model.encoder_name": "resnet50",
+            "model.encoder_weights": "imagenet",
+            "model.in_channels": 90,
+            "model.classes": 4,
+        }
 
-        # Sets the image color loading mode
-        parser.add_argument("--image_loading_mode", type=Union[str, None], default=None)
-        parser.link_arguments(
-            "image_loading_mode", "data.loading_mode", compute_fn=utils.get_loading_mode
-        )
-        parser.link_arguments(
-            "image_loading_mode",
-            "model.loading_mode",
-            compute_fn=utils.get_loading_mode,
-        )
-
-        parser.link_arguments("trainer.max_epochs", "model.total_epochs")
-
-        # Adds the classification mode argument
-        parser.add_argument("--dl_classification_mode", type=str)
-        parser.add_argument("--eval_classification_mode", type=str)
-        parser.link_arguments(
-            "dl_classification_mode",
-            "model.dl_classification_mode",
-            compute_fn=utils.get_classification_mode,
-        )
-        parser.link_arguments(
-            "eval_classification_mode",
-            "model.eval_classification_mode",
-            compute_fn=utils.get_classification_mode,
-        )
-        parser.link_arguments(
-            "dl_classification_mode",
-            "data.classification_mode",
-            compute_fn=utils.get_classification_mode,
-        )
-
-        # Link data.batch_size and model.batch_size
-        parser.link_arguments(
-            "data.batch_size", "model.batch_size", apply_on="instantiate"
-        )
-
-        # Prediction writer
-        parser.add_lightning_class_args(MaskImageWriter, "prediction_writer")
-        parser.link_arguments("image_loading_mode", "prediction_writer.loading_mode")
-        parser.link_arguments(
-            "model.weights_from_ckpt_path",
-            "prediction_writer.output_dir",
-            compute_fn=get_output_dir_from_ckpt_path,
-        )
-
-        parser.set_defaults(
-            {
-                "image_loading_mode": "RGB",
-                "dl_classification_mode": "MULTICLASS_MODE",
-                "eval_classification_mode": "MULTILABEL_MODE",
-                "trainer.max_epochs": 50,
-                "model.encoder_name": "resnet50",
-                "model.encoder_weights": "imagenet",
-                "model.in_channels": 90,
-                "model.classes": 4,
-                "model_checkpoint.monitor": "loss/val",
-                "model_checkpoint.save_last": True,
-                "model_checkpoint.save_weights_only": True,
-                "model_checkpoint.save_top_k": 1,
-                "model_checkpoint.auto_insert_metric_name": False,
-                "model_checkpoint_dice_weighted.monitor": "val/dice_weighted_avg",
-                "model_checkpoint_dice_weighted.save_top_k": 1,
-                "model_checkpoint_dice_weighted.save_weights_only": True,
-                "model_checkpoint_dice_weighted.save_last": False,
-                "model_checkpoint_dice_weighted.mode": "max",
-                "model_checkpoint_dice_weighted.auto_insert_metric_name": False,
-            }
-        )
+        parser.set_defaults(defaults)
 
 
 if __name__ == "__main__":

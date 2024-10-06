@@ -277,7 +277,7 @@ class TestLGECLI:
         "--config",
         "./configs/no_checkpointing.yaml",
     ]
-    default_senet_args = ["--model.encoder_name=senet154"]
+    default_senet_args = ["--model.encoder_name=senet154", "--data.batch_size=4"]
     default_resnet_args = ["--model.encoder_name=resnet50"]
     default_colour_mode = ["--image_loading_mode=RGB"]
     greyscale_colour_mode = ["--image_loading_mode=GREYSCALE", "--model.in_channels=1"]
