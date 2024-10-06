@@ -1,25 +1,22 @@
 import os
 from itertools import product
 from typing import Literal
-import torch
-import pytest
 
-from models.two_plus_one import (
-    OneD,
-    RESNET_OUTPUT_SHAPES,
-    compress_dilated,
-    DilatedOneD,
-)
+import pytest
+import torch
+
+from models.two_plus_one import ENCODER_OUTPUT_SHAPES, DilatedOneD, OneD
 from models.two_plus_one import compress_2 as _compress2_new
+from models.two_plus_one import compress_dilated
 
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 
 class TestNewCompress:
     batch_size = 2
-    num_channels = 128
-    height = 112
-    width = 112
+    num_channels = 2048
+    height = 7
+    width = 7
 
     def _test_with_num_frames(self, num_frames: int):
         input_original = torch.randn(
@@ -72,7 +69,7 @@ class TestNewOneD:
         torch.backends.cudnn.benchmark = False
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
         torch.use_deterministic_algorithms(True)
-        num_channels, height, width = RESNET_OUTPUT_SHAPES[resnet][layer]
+        num_channels, height, width = ENCODER_OUTPUT_SHAPES[resnet][layer]
         input_original = torch.randn(
             self.batch_size,
             num_frames,
