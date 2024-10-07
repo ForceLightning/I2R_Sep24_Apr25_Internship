@@ -142,7 +142,7 @@ def get_best_macro_avg_dice_class_2_3_filename(version: str | None) -> str:
     Args:
         version: The version name of the model.
     """
-    suffix = "-epoch={epoch}-step={step}-dice_m_avg_2_3={val/dice_macro_class_2_3}"
+    suffix = "-epoch={epoch}-step={step}-dice_m_avg_2_3={val/dice_macro_class_2_3:4f}"
     if version is None:
         return suffix
     return version + suffix

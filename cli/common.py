@@ -13,10 +13,10 @@ from utils.prediction_writer import MaskImageWriter
 
 class CommonCLI(LightningCLI):
     default_arguments: dict[str, Any] = {
-        "model_checkpoint_last.save_last": True,
+        "model_checkpoint_last.save_last": "link",
         "model_checkpoint_last.save_weights_only": True,
         "model_checkpoint_last.auto_insert_metric_name": False,
-        "model_checkpoint_last.every_n_epochs": 1,
+        "model_checkpoint_last.enable_version_counter": False,
         "model_checkpoint_val_loss.monitor": "loss/val",
         "model_checkpoint_val_loss.save_last": False,
         "model_checkpoint_val_loss.save_weights_only": True,
