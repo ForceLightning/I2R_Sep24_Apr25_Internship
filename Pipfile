@@ -20,10 +20,11 @@ torchsummary = "*"
 matplotlib = "*"
 seaborn = "*"
 opencv-contrib-python = "*"
-lightning = {  extras = ["pytorch-extra"] }
+lightning = { extras = ["pytorch-extra"] }
 tensorboard = "*"
 rich = "*"
 deepspeed = "*"
+jsonargparse = {extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"], version = "*"}
 
 [dev-packages]
 autopep8 = "*"
