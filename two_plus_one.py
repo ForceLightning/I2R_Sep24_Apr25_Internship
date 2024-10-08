@@ -298,7 +298,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                     masks_one_hot.detach().cpu(),
                     masks_preds.detach().cpu(),
                     "train",
-                    25,
+                    10,
                 )
             self.train()
 

@@ -247,7 +247,6 @@ lightning_logs/
 
 # Data (handles symlinks)
 data
-
 data/
 
 # Type stubs
@@ -271,3 +270,12 @@ profiling/
 # Loose pickle or checkpoint files
 *.ckpt
 *.pickle
+
+# Non-default configs
+configs/
+
+# Shell scripts to train multiple models
+*.sh
+
+# Custom .ignore for nvim support
+.ignore
