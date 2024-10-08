@@ -30,7 +30,7 @@ from metrics.logging import (
     shared_metric_calculation,
     shared_metric_logging_epoch_end,
 )
-from models.attention import ResidualAttentionUnet
+from models.attention import REDUCE_TYPES, ResidualAttentionUnet
 from utils import utils
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
@@ -67,9 +67,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         dump_memory_snapshot: bool = False,
         flat_conv: bool = False,
         unet_activation: str | None = None,
-        attention_reduction: Literal[
-            "sum", "cat", "weighted", "weighted_learnable"
-        ] = "sum",
+        attention_reduction: REDUCE_TYPES = "sum",
         attention_only: bool = False,
     ):
         super().__init__()

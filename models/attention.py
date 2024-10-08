@@ -16,6 +16,8 @@ from torch.nn import functional as F
 from models.common import ENCODER_OUTPUT_SHAPES
 from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
 
+REDUCE_TYPES = Literal["sum", "prod", "cat", "weighted", "weighted_learnable"]
+
 
 class AttentionLayer(nn.Module):
     def __init__(
@@ -26,7 +28,7 @@ class AttentionLayer(nn.Module):
         key_embed_dim: int | None = None,
         value_embed_dim: int | None = None,
         need_weights: bool = False,
-        reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = "sum",
+        reduce: REDUCE_TYPES = "sum",
     ) -> None:
         """Attention mechanism between spatio-temporal embeddings from raw frames and
         spatial embeddings from residual frames.
@@ -52,7 +54,7 @@ class AttentionLayer(nn.Module):
         self.num_heads = num_heads
         self.need_weights = need_weights
         self.num_frames = num_frames
-        self.reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = reduce
+        self.reduce: REDUCE_TYPES = reduce
 
         # Create a MultiheadAttention module for each frame in the sequence.
         attentions = []
@@ -106,7 +108,7 @@ class AttentionLayer(nn.Module):
 
         # NOTE: Maybe don't sum this here, if we want to do weighted averages.
         match self.reduce:
-            case "sum" | "cat":
+            case "sum" | "cat" | "prod":
                 attn_output_t = (
                     torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
                     .sum(dim=0)  # (H * W, B, C)
@@ -165,7 +167,7 @@ class SpatialAttentionBlock(nn.Module):
         temporal_conv: OneD | DilatedOneD,
         attention: AttentionLayer,
         num_frames: int,
-        reduce: Literal["sum", "cat", "weighted", "weighted_learnable"],
+        reduce: REDUCE_TYPES,
         reduce_dim: int = 0,
         _attention_only: bool = False,
     ):
@@ -184,9 +186,8 @@ class SpatialAttentionBlock(nn.Module):
         self.temporal_conv = temporal_conv
         self.attention = attention
         self._attention_only = _attention_only
+        self._reduce = reduce
         match reduce:
-            case "sum":
-                self.reduce = torch.sum
             case "cat":
                 self.reduce = nn.Identity()
             case "weighted":
@@ -216,12 +217,16 @@ class SpatialAttentionBlock(nn.Module):
             return attention_output
 
         b, c, h, w = compress_output.shape
+        if self._reduce == "prod":
+            res = torch.mul(compress_output, attention_output)
+            return res
+
         compress_output = compress_output.view(1, b, c, h, w)
         attention_output = attention_output.view(-1, b, c, h, w)
         out = torch.cat((compress_output, attention_output), dim=0)
-        if isinstance(self.reduce, (WeightedAverage, nn.Identity)):
-            return self.reduce(out)
-        return self.reduce(input=out, dim=0).view(b, c, h, w)
+        if self._reduce == "sum":
+            return torch.sum(input=out, dim=0).view(b, c, h, w)
+        return self.reduce(out)
 
 
 class ResidualAttentionUnet(SegmentationModel):
@@ -268,7 +273,7 @@ class ResidualAttentionUnet(SegmentationModel):
         flat_conv: bool = False,
         res_conv_activation: str | None = None,
         use_dilations: bool = False,
-        reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = "sum",
+        reduce: REDUCE_TYPES = "sum",
         _attention_only: bool = False,
     ):
         super().__init__()
@@ -278,7 +283,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.use_dilations = use_dilations
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
-        self.reduce: Literal["sum", "cat", "weighted", "weighted_learnable"] = reduce
+        self.reduce: REDUCE_TYPES = reduce
         self.skip_conn_channels = skip_conn_channels
         self._attention_only = _attention_only
 
@@ -299,12 +304,13 @@ class ResidualAttentionUnet(SegmentationModel):
                 weights=encoder_weights,
             )
 
+        encoder_channels = (
+            [x * 2 for x in self.spatial_encoder.out_channels]
+            if self.reduce == "cat"
+            else self.spatial_encoder.out_channels
+        )
         self.decoder = UnetDecoder(
-            encoder_channels=(
-                [x * 2 for x in self.spatial_encoder.out_channels]
-                if self.reduce == "cat"
-                else self.spatial_encoder.out_channels
-            ),
+            encoder_channels=encoder_channels,
             decoder_channels=decoder_channels,
             n_blocks=encoder_depth,
             use_batchnorm=decoder_use_batchnorm,
