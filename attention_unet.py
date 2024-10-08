@@ -214,6 +214,8 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             torch.cuda.memory._dump_snapshot("attention_unet_snapshot.pickle")
 
     def forward(self, x_img: torch.Tensor, x_res: torch.Tensor) -> torch.Tensor:
+        # HACK: This is to get things to work with deepspeed opt level 1 & 2. Level 3
+        # is broken due to the casting of batchnorm to non-fp32 types.
         with torch.autocast(device_type=self.device.type):
             return self.model(x_img, x_res)  # pyright: ignore[reportCallIssue]
 

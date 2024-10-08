@@ -26,10 +26,16 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         weighted_average: bool = False,
         only_for_classes: list[bool] | list[int] | None = None,
         return_type: Literal["weighted_avg", "macro_avg", "per_class"] = "weighted_avg",
+        dist_sync_on_step: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            num_classes, include_background, per_class, weight_type, **kwargs
+            num_classes,
+            include_background,
+            per_class,
+            weight_type,
+            dist_sync_on_step=dist_sync_on_step,
+            **kwargs,
         )
 
         self.num_classes = num_classes if include_background else num_classes - 1

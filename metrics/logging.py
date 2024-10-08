@@ -201,6 +201,12 @@ def _single_generalized_dice_logging(
         module.log(
             f"{prefix}/dice_class_{i}", class_metric.item(), logger=True, sync_dist=True
         )
+        module.log(
+            f"hp/{prefix}/dice_class_{i}",
+            class_metric.item(),
+            logger=True,
+            sync_dist=True,
+        )
     metric_obj.reset()
 
 
