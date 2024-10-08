@@ -200,9 +200,12 @@ class ResidualAttentionUnetLightning(L.LightningModule):
                 {
                     "hp/val_loss": 0,
                     "hp/val/dice_macro_avg": 0,
-                    "hp/val/dice_macro_class_2_3": 0,
                     "hp/val/dice_weighted_avg": 0,
+                    "hp/val/dice_macro_class_2_3": 0,
                     "hp/val/dice_weighted_class_2_3": 0,
+                    "hp/val/dice_class_1": 0,
+                    "hp/val/dice_class_2": 0,
+                    "hp/val/dice_class_3": 0,
                 },
             )
 
@@ -391,7 +394,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         images: torch.Tensor,
         masks_one_hot: torch.Tensor,
         masks_preds: torch.Tensor,
-        prefix: str,
+        prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
         """Logs the images to tensorboard.
@@ -420,6 +423,14 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         if batch_idx % every_interval == 0:
             # This adds images to the tensorboard.
             tensorboard_logger: SummaryWriter = self.logger.experiment
+            match prefix:
+                case "val" | "test":
+                    step = int(
+                        sum(self.trainer.num_val_batches) * self.trainer.current_epoch
+                        + batch_idx
+                    )
+                case _:
+                    step = self.global_step
 
             # NOTE: This will adapt based on the color mode of the images
             if self.loading_mode == LoadingMode.RGB:
@@ -448,13 +459,6 @@ class ResidualAttentionUnetLightning(L.LightningModule):
                     strict=True,
                 )
             ]
-            tensorboard_logger.add_images(
-                tag=f"{prefix}/pred_masks_{batch_idx}",
-                img_tensor=torch.stack(tensors=pred_images_with_masks, dim=0)
-                .detach()
-                .cpu(),
-                global_step=batch_idx if prefix == "test" else self.global_step,
-            )
             gt_images_with_masks = [
                 draw_segmentation_masks(
                     img,
@@ -469,12 +473,14 @@ class ResidualAttentionUnetLightning(L.LightningModule):
                     strict=True,
                 )
             ]
+            combined_images_with_masks = gt_images_with_masks + pred_images_with_masks
+
             tensorboard_logger.add_images(
-                tag=f"{prefix}/gt_masks_{batch_idx}",
-                img_tensor=torch.stack(tensors=gt_images_with_masks, dim=0)
+                tag=f"{prefix}/preds",
+                img_tensor=torch.stack(tensors=combined_images_with_masks, dim=0)
                 .detach()
                 .cpu(),
-                global_step=batch_idx if prefix == "test" else self.global_step,
+                global_step=step,
             )
 
     @torch.no_grad()
