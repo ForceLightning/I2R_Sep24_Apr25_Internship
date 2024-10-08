@@ -19,7 +19,6 @@ from utils import utils
 from utils.utils import ClassificationMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 torch.set_float32_matmul_precision("medium")
 ssl._create_default_https_context = ssl._create_unverified_context
 

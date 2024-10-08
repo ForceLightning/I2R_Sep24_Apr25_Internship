@@ -33,7 +33,6 @@ from utils import utils
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 30  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
 
@@ -103,7 +102,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                             0.058786240529692384,
                             0.925509873021686,
                         ],
-                    ).to(DEVICE)
+                    ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
@@ -143,11 +142,11 @@ class TwoStreamUnetLightning(L.LightningModule):
         self.example_input_array = (
             torch.randn(
                 (self.batch_size, self.in_channels, 224, 224), dtype=torch.float32
-            ).to(DEVICE),
+            ).to(self.device.type),
             torch.randn(
                 (self.batch_size, self.num_frames * self.in_channels, 224, 224),
                 dtype=torch.float32,
-            ).to(DEVICE),
+            ).to(self.device.type),
         )
 
         self.learning_rate = learning_rate

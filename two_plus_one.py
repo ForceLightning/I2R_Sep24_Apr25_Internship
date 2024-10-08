@@ -34,7 +34,6 @@ from utils import utils
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
 
@@ -144,7 +143,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                             0.058786240529692384,
                             0.925509873021686,
                         ],
-                    ).to(DEVICE)
+                    ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
@@ -188,7 +187,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             self.example_input_array = torch.randn(
                 (self.batch_size, self.num_frames, self.in_channels, 224, 224),
                 dtype=torch.float32,
-            ).to(DEVICE)
+            ).to(self.device.type)
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
@@ -251,8 +250,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
     ) -> torch.Tensor:
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
+        images_input = images.to(self.device.type, dtype=torch.float32)
+        masks = masks.to(self.device.type).long()
 
         with torch.autocast(device_type=self.device.type):
             # B x C x H x W
@@ -330,8 +329,8 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         self.eval()
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        images_input = images.to(DEVICE, dtype=torch.float32)
-        masks = masks.to(DEVICE).long()
+        images_input = images.to(self.device.type, dtype=torch.float32)
+        masks = masks.to(self.device.type).long()
         masks_proba: torch.Tensor = self.model(
             images_input
         )  # pyright: ignore[reportCallIssue]

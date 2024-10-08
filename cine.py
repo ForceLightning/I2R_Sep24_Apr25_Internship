@@ -35,7 +35,6 @@ from utils import utils
 from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 torch.set_float32_matmul_precision("medium")
 
 
@@ -91,17 +90,19 @@ class LightningUnetWrapper(L.LightningModule):
             loading_mode: Image loading mode.
             dump_memory_snapshot: Whether to dump a memory snapshot after training.
         """
+        # Trace memory usage
+        self.dump_memory_snapshot = dump_memory_snapshot
+        if self.dump_memory_snapshot:
+            torch.cuda.memory._record_memory_history(
+                enabled="all",
+                context="all",
+                stacks="python" if os.name == "nt" else "all",
+            )
+
         super().__init__()
         self.save_hyperparameters(ignore=["loss"])
         self.batch_size = batch_size
-        self.dump_memory_snapshot = dump_memory_snapshot
         self.num_frames = num_frames
-
-        # Trace memory usage
-        if self.dump_memory_snapshot:
-            torch.cuda.memory._record_memory_history(
-                enabled="all", context="all", stacks="python"
-            )
 
         self.model = smp.Unet(
             encoder_name=encoder_name,
@@ -126,7 +127,7 @@ class LightningUnetWrapper(L.LightningModule):
                             0.058786240529692384,
                             0.925509873021686,
                         ],
-                    ).to(DEVICE)
+                    ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
@@ -166,7 +167,7 @@ class LightningUnetWrapper(L.LightningModule):
         )
         self.example_input_array = torch.randn(
             (self.batch_size, in_channels, 224, 224), dtype=torch.float32
-        ).to(DEVICE)
+        ).to(self.device.type)
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode

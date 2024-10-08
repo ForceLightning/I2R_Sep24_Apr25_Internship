@@ -22,8 +22,6 @@ from torchvision.transforms.v2 import Compose
 
 from utils.utils import ClassificationMode, LoadingMode
 
-SEED_CUS = 1  # RNG seed.
-
 
 class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
     def __init__(
