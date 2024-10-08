@@ -13,13 +13,8 @@ from segmentation_models_pytorch.encoders import get_encoder
 from torch import nn
 from torch.nn import functional as F
 
-from models.two_plus_one import (
-    ENCODER_OUTPUT_SHAPES,
-    DilatedOneD,
-    OneD,
-    compress_2,
-    compress_dilated,
-)
+from models.common import ENCODER_OUTPUT_SHAPES
+from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
 
 
 class AttentionLayer(nn.Module):
@@ -164,7 +159,7 @@ class WeightedAverage(nn.Module):
         return F.linear(x, weighted_values)
 
 
-class AttentionBlock(nn.Module):
+class SpatialAttentionBlock(nn.Module):
     def __init__(
         self,
         temporal_conv: OneD | DilatedOneD,
@@ -371,7 +366,7 @@ class ResidualAttentionUnet(SegmentationModel):
                     c, num_heads=1, num_frames=self.num_frames, need_weights=False
                 )
 
-                res_block = AttentionBlock(
+                res_block = SpatialAttentionBlock(
                     oned,
                     attention,
                     num_frames=self.num_frames,
@@ -419,7 +414,7 @@ class ResidualAttentionUnet(SegmentationModel):
             img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
             res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
-            res_block: AttentionBlock = self.res_layers[
+            res_block: SpatialAttentionBlock = self.res_layers[
                 i - 1
             ]  # pyright: ignore[reportAssignmentType] False positive
 
