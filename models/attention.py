@@ -111,14 +111,14 @@ class AttentionLayer(nn.Module):
 
         # NOTE: Maybe don't sum this here, if we want to do weighted averages.
         match self.reduce:
-            case "sum":
+            case "sum" | "cat":
                 attn_output_t = (
                     torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
                     .sum(dim=0)  # (H * W, B, C)
                     .view(h, w, b, c)
                     .permute(2, 3, 0, 1)  # (B, C, H, W)
                 )
-            case "cat" | "weighted" | "weighted_learnable":
+            case "weighted" | "weighted_learnable":
                 attn_output_t = (
                     torch.stack(attn_outputs, dim=0)  # (F, H * W, B, C)
                     .view(f, h, w, b, c)
@@ -305,7 +305,11 @@ class ResidualAttentionUnet(SegmentationModel):
             )
 
         self.decoder = UnetDecoder(
-            encoder_channels=self.spatial_encoder.out_channels,
+            encoder_channels=(
+                [x * 2 for x in self.spatial_encoder.out_channels]
+                if self.reduce == "cat"
+                else self.spatial_encoder.out_channels
+            ),
             decoder_channels=decoder_channels,
             n_blocks=encoder_depth,
             use_batchnorm=decoder_use_batchnorm,
@@ -422,6 +426,11 @@ class ResidualAttentionUnet(SegmentationModel):
             skip_output = res_block(
                 st_embeddings=img_outputs, res_embeddings=res_outputs
             )
+
+            if self.reduce == "cat":
+                d, b, c, h, w = skip_output.shape
+                skip_output = skip_output.permute(1, 0, 2, 3, 4).reshape(b, d * c, h, w)
+
             residual_outputs.append(skip_output)
 
         decoder_output = self.decoder(*residual_outputs)
