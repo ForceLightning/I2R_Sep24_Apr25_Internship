@@ -21,6 +21,11 @@ trainer:
       log_graph: false
       default_hp_metric: false
   log_every_n_steps: 5
+  plugins:
+  - class_path: lightning.pytorch.plugins.io.AsyncCheckpointIO
+    init_args:
+      checkpoint_io: null
+
 model:
   classes: 4
   scheduler: one_cycle
