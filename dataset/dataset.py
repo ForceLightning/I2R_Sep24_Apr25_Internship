@@ -9,20 +9,13 @@ from typing import Literal, Sequence, override
 
 import cv2
 import numpy as np
-import PIL.ImageSequence as ImageSequence
 import torch
 from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from cv2 import typing as cvt
 from numpy import typing as npt
 from PIL import Image
 from torch.nn import functional as F
-from torch.utils.data import (
-    DataLoader,
-    Dataset,
-    Subset,
-    SubsetRandomSampler,
-    default_collate,
-)
+from torch.utils.data import DataLoader, Dataset, Subset, SubsetRandomSampler
 from torchvision import tv_tensors
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
