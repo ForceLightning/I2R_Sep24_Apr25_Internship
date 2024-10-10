@@ -17,66 +17,133 @@ from utils.utils import InverseNormalize
 
 
 def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
-    video_deque = deque(video)
-    assert (
-        video_deque[0].ndim == 2
-    ), f"video of input shape {video_deque[0].shape} must have 2 dims: (height, width)."
-    frame_1 = video_deque[0]
-    frame_1 = frame_1.reshape(*frame_1.shape, 1)
-    prvs = (
-        cv2.cvtColor(frame_1, cv2.COLOR_BGR2GRAY) if frame_1.shape[2] == 3 else frame_1
-    )
+    """Computes dense optical flow on the CPU (slow).
 
-    hsv = np.zeros_like(frame_1).repeat(3, 2)
-    hsv[..., 1] = 255
+    Args:
+        video: Video frames to calculate optical flow with. Must be greyscale.
+
+    Return:
+        list[cvt.MatLike]: Optical flow.
+
+    Raises:
+        AssertionError: Video is not greyscale.
+    """
+    video = deque(video)
+    assert all(
+        frame.ndim == 2 for frame in video
+    ), f"Video with frame of input shape {video[0].shape} must have only 2 dims: (height, width)."
+    frame_1 = video[0]
+    frame_1 = frame_1.reshape(*frame_1.shape, 1)  # View as (H, W, 1)
+
     flows: list[cvt.MatLike] = []
-    video_deque.rotate(-1)
-    for frame in video_deque:
-        frame = frame.reshape(*frame.shape, 1)
-        next = (
-            cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame_1.shape[2] == 3 else frame
-        )
-        flow = cv2.calcOpticalFlowFarneback(prvs, next, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    video.rotate(-1)
+    for frame in video:
+        next = frame.reshape(*frame.shape, 1)
 
-        # NOTE: For visualisation purposes only
-        mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-        hsv[..., 0] = ang * 180 / np.pi / 2
-        hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-        bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-        flows.append(bgr)
+        # NOTE: The type hints in CV2 seem not to allow NoneType values, while
+        # the documentation clearly shows that they are supported. Thus, static
+        # type checking may throw errors below.
+        flow = cv2.calcOpticalFlowFarneback(  # pyright: ignore[reportCallIssue]
+            frame_1,
+            next,
+            None,  # pyright: ignore[reportArgumentType] False positive
+            0.5,
+            3,
+            15,
+            3,
+            5,
+            1.2,
+            0,
+        )
+        flows.append(flow)
         frame_1 = next
 
     return flows
 
 
-def cuda_optical_flow(video: Sequence[cvt.MatLike]):
-    if not cv2.cuda.getCudaEnabledDeviceCount():
-        raise RuntimeError(f"No CUDA-capable device is detected")
+def cuda_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
+    """Computes dense optical flow with hardware acceleration on NVIDIA cards.
 
-    video_deque = deque(video)
-    assert (
-        video[0].ndim == 2
-    ), f"video frame of input shape {video[0].shape} must have 2 dims: (height, width)"
+    This method computes optical flow between all frames i with i + 1 for up to
+    sequence length n-1, then computes for frame n and frame 0.
 
-    frame_1 = video_deque[0]
-    cu_frame_1 = cv2.cuda_GpuMat(frame_1)
+    Args:
+        video: Video frames to calculate optical flow with. Must be greyscale.
 
-    nvof = cv2.cuda_NvidiaOpticalFlow_1_0.create(
-        (frame_1.shape[1], frame_1.shape[0]), 5, False, False, False, 0
+    Return:
+        list[cvt.MatLike]: Optical flow.
+
+    Raises:
+        AssertionError: CUDA support is not enabled.
+        AssertionError: Video is not greyscale.
+        AssertionError: Video frames are not of the same shape.
+        RuntimeError: Error in calculating optical flow (see stack trace).
+    """
+    num_cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
+    assert num_cuda_devices, (
+        f"Number of enabled cuda devices found: {num_cuda_devices}, must be > 0"
+        + "OpenCV-contrib-python must be built with CUDA support enabled."
     )
 
-    video_deque.rotate(-1)
-    res = []
+    seq_len = len(video)
+    assert all(
+        frame.ndim == 2 for frame in video
+    ), f"Video with frame of input shape {video[0].shape} must have only 2 dims: (height, width)"
+    cv2.cuda.resetDevice()
+    h, w = video[0].shape
 
-    for frame in video_deque:
-        cu_frame_2 = cv2.cuda_GpuMat(frame)
-        flow, _ = nvof.calc(cu_frame_1, cu_frame_2, None)
-        flow_upsampled = nvof.upSampler(
-            flow, (frame_1.shape[1], frame_1.shape[0]), nvof.getGridSize(), None
-        )
-        nvof.collectGarbage()
-        res.append(flow_upsampled)
-        cu_frame_1 = cu_frame_2
+    assert all(
+        frame.shape == video[0].shape and frame.dtype == np.uint8 for frame in video
+    ), f"All frames must have shape: ({h}, {w}) and be of type `numpy.uint8`"
+
+    # TODO: Add more options for optical flow calculation
+
+    # Initialise NVIDIA Optical Flow (SDK 2)
+    nvof = cv2.cuda.NvidiaOpticalFlow_2_0.create(
+        (h, w),
+        perfPreset=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_PERF_LEVEL_SLOW,
+        outputGridSize=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_OUTPUT_VECTOR_GRID_SIZE_1,
+        hintGridSize=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_HINT_VECTOR_GRID_SIZE_1,
+        enableTemporalHints=True,
+    )
+
+    # Allocate GPU memory for the GPU Matrices.
+    cu_frame_1 = cv2.cuda.GpuMat()
+    cu_frame_2 = cv2.cuda.GpuMat()
+
+    res: list[cvt.MatLike] = []
+    for i in range(seq_len):
+
+        # Transfer frames to the GPU.
+        cu_frame_1.upload(video[i])
+        cu_frame_2.upload(video[(i + 1) % seq_len])
+
+        try:
+            # NOTE: The type hints in CV2 seem not to allow NoneType values, while
+            # the documentation clearly shows that they are supported. Thus, static
+            # type checking may throw errors below.
+
+            # Calculate flow.
+            flow, _ = nvof.calc(  # pyright: ignore[reportCallIssue]
+                cu_frame_1, cu_frame_2, None  # pyright: ignore[reportArgumentType]
+            )
+
+            # Convert the value back to float, transfer memory to CPU and append to res
+            res.append(
+                nvof.convertToFloat(  # pyright: ignore[reportCallIssue]
+                    flow, None  # pyright: ignore[reportArgumentType]
+                )
+                .download()
+                .astype(np.float32)
+            )
+
+        except Exception as e:
+            raise RuntimeError(f"Error at iteration {i}") from e
+
+    # Ensure GPU memory is fully released
+    cu_frame_1.release()
+    cu_frame_2.release()
+    nvof.collectGarbage()
 
     return res
 
@@ -101,20 +168,43 @@ def _plot_animated_with_flow(
             ims.append([im])
     else:
         for i in range(len(imgs)):
-            img = np.asarray(
-                v2f.to_pil_image(inv_norm(imgs[i]).clamp(0, 1))
-            )  # (H, W, C)
-            flow = np.asarray(
-                v2f.to_pil_image(inv_norm(flows[i]).clamp(0, 1))
-            )  # (H, W, C)
+            img = imgs[i]
+            flow = flows[i]
+            c, h, w = flow.shape
+            if c == 2:
+                flow = flows[i].permute(1, 2, 0).detach().cpu().numpy()
+                hsv = np.zeros((h, w, 3), dtype=np.uint8)
+                hsv[..., 1] = 255
+                mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+                hsv[..., 0] = ang * 180 / np.pi / 2
 
-            combined_img = cv2.addWeighted(img, 1.0, flow, 0.75, 0)
+                # NOTE: The type hints in CV2 seem not to allow NoneType values, while
+                # the documentation clearly shows that they are supported. Thus, static
+                # type checking may throw errors below.
+                hsv[..., 2] = cv2.normalize(  # pyright: ignore[reportCallIssue]
+                    mag,
+                    None,  # pyright: ignore[reportArgumentType]
+                    0,
+                    255,
+                    cv2.NORM_MINMAX,
+                )
+                flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+                # if i == 14:
+                #     sns.displot(x=hsv[...,0].reshape(-1), kde=True)
+                #     plt.show()
+            else:
+                flow = np.asarray(v2f.to_pil_image(flow))
+
+            img = np.asarray(v2f.to_pil_image(inv_norm(img).clamp(0, 1)))  # (H, W, C)
+            combined_img = cv2.addWeighted(img, 1.0, flow, 0.85, 0)
 
             im = ax.imshow(combined_img, animated=True)
             if i == 0:
-                ax.imshow(np.asarray(v2f.to_pil_image(inv_norm(imgs[i]).clamp(0, 1))))
+                ax.imshow(combined_img)
             ims.append([im])
-    ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True, repeat_delay=0)
+    ani = animation.ArtistAnimation(
+        fig, ims, interval=100 / 3, blit=True, repeat_delay=0
+    )
     if show_plot:
         plt.show()
     return ani
