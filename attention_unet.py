@@ -37,6 +37,7 @@ from utils.utils import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    ResidualMode,
 )
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
@@ -68,6 +69,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         learning_rate: float = 1e-4,
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        residual_mode: ResidualMode = ResidualMode.SUBTRACT_NEXT_FRAME,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
         flat_conv: bool = False,
@@ -94,6 +96,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
+            residual_mode=residual_mode,
             in_channels=in_channels,
             classes=classes,
             num_frames=num_frames,
@@ -103,6 +106,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             reduce=attention_reduction,
             _attention_only=attention_only,
         )
+        self.residual_mode = residual_mode
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
         self.scheduler = scheduler
@@ -165,7 +169,17 @@ class ResidualAttentionUnetLightning(L.LightningModule):
                     dtype=torch.float32,
                 ).to(self.device.type),
                 torch.randn(
-                    (self.batch_size, self.num_frames, self.in_channels, 224, 224),
+                    (
+                        self.batch_size,
+                        self.num_frames,
+                        (
+                            self.in_channels
+                            if self.residual_mode == ResidualMode.SUBTRACT_NEXT_FRAME
+                            else 2
+                        ),
+                        224,
+                        224,
+                    ),
                     dtype=torch.float32,
                 ).to(self.device.type),
             )
@@ -528,6 +542,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         frames: int = NUM_FRAMES,
         select_frame_method: Literal["consecutive", "specific"] = "specific",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        residual_mode: ResidualMode = ResidualMode.SUBTRACT_NEXT_FRAME,
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
@@ -567,6 +582,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
         self.augment = augment
+        self.residual_mode = residual_mode
 
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
@@ -576,8 +592,8 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
 
         # Handle color v. greyscale transforms.
 
-        transforms_img, transforms_mask, transforms_together = utils.get_transforms(
-            self.loading_mode, self.augment
+        transforms_img, transforms_mask, transforms_together, transforms_resize = (
+            utils.get_transforms(self.loading_mode, self.augment)
         )
 
         trainval_dataset = ResidualTwoPlusOneDataset(
@@ -588,10 +604,12 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
+            transform_resize=transforms_resize,
             transform_together=transforms_together,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            residual_mode=self.residual_mode,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -606,10 +624,12 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
+            transform_resize=transforms_resize,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            residual_mode=self.residual_mode,
         )
 
         if self.combine_train_val:
@@ -633,9 +653,11 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
                 select_frame_method=self.select_frame_method,
                 transform_img=transforms_img,
                 transform_mask=transforms_mask,
+                transform_resize=transforms_resize,
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
+                residual_mode=self.residual_mode,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
@@ -693,10 +715,19 @@ class ResidualAttentionCLI(CommonCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         super().add_arguments_to_parser(parser)
 
+        parser.add_argument("--residual_mode", help="Residual calculation mode")
+        parser.link_arguments(
+            "residual_mode", "model.residual_mode", compute_fn=utils.get_residual_mode
+        )
+        parser.link_arguments(
+            "residual_mode", "data.residual_mode", compute_fn=utils.get_residual_mode
+        )
+
         default_arguments = self.default_arguments | {
             "image_loading_mode": "RGB",
             "dl_classification_mode": "MULTICLASS_MODE",
             "eval_classification_mode": "MULTICLASS_MODE",
+            "residual_mode": "SUBTRACT_NEXT_FRAME",
             "trainer.max_epochs": 50,
             "model.encoder_name": "resnet50",
             "model.encoder_weights": "imagenet",

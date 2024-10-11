@@ -96,6 +96,31 @@ def get_classification_mode(mode: str) -> ClassificationMode:
     return ClassificationMode[mode]
 
 
+class ResidualMode(Enum):
+    """The residual frame calculation mode for the model.
+
+    SUBTRACT_NEXT_FRAME: Subtracts the next frame from the current frame.
+    OPTICAL_FLOW_CPU: Calculates the optical flow using the CPU.
+    OPTICAL_FLOW_GPU: Calculates the optical flow using the GPU.
+    """
+
+    SUBTRACT_NEXT_FRAME = auto()
+    OPTICAL_FLOW_CPU = auto()
+    OPTICAL_FLOW_GPU = auto()
+
+
+def get_residual_mode(mode: str) -> ResidualMode:
+    """Gets the residual calculation mode from a string input.
+
+    Args:
+        mode: The residual calculation mode.
+
+    Raises:
+        KeyError: If the mode is not an implemented mode.
+    """
+    return ResidualMode[mode]
+
+
 class LoadingMode(Enum):
     """Determines the image loading mode for the dataset.
 
@@ -255,7 +280,7 @@ def configure_optimizers(module: L.LightningModule):
 
 def get_transforms(
     loading_mode: LoadingMode, augment: bool = False
-) -> tuple[Compose, Compose, Compose]:
+) -> tuple[Compose, Compose, Compose, Compose]:
     """Gets default transformations for all datasets.
 
     The default implementation resizes the images to (224, 224), casts them to float32,
@@ -266,13 +291,12 @@ def get_transforms(
         augment: Whether to augment the images and masks together.
 
     Returns:
-        tuple: The image, mask, and combined transformations
+        tuple: The image, mask, combined, and final resize transformations
     """
     # Sets the image transforms
     transforms_img = Compose(
         [
             v2.ToImage(),
-            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
@@ -283,7 +307,6 @@ def get_transforms(
     transforms_mask = Compose(
         [
             v2.ToImage(),
-            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.long, scale=False),
         ]
     )
@@ -303,7 +326,9 @@ def get_transforms(
         else [v2.Identity()]
     )
 
-    return transforms_img, transforms_mask, transforms_together
+    transforms_resize = Compose([v2.Resize(224)])
+
+    return transforms_img, transforms_mask, transforms_together, transforms_resize
 
 
 def get_accumulate_grad_batches(batch_size: int):

@@ -15,6 +15,7 @@ from torch.nn import functional as F
 
 from models.common import ENCODER_OUTPUT_SHAPES
 from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
+from utils.utils import ResidualMode
 
 REDUCE_TYPES = Literal["sum", "prod", "cat", "weighted", "weighted_learnable"]
 
@@ -261,6 +262,7 @@ class ResidualAttentionUnet(SegmentationModel):
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
+        residual_mode: ResidualMode = ResidualMode.SUBTRACT_NEXT_FRAME,
         decoder_use_batchnorm: bool = True,
         decoder_channels: list[int] = _default_decoder_channels,
         decoder_attention_type: Literal["scse"] | None = None,
@@ -286,6 +288,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.reduce: REDUCE_TYPES = reduce
         self.skip_conn_channels = skip_conn_channels
         self._attention_only = _attention_only
+        self.residual_mode = residual_mode
 
         # Define encoder, decoder, segmentation head, and classification head.
         self.spatial_encoder = get_encoder(
@@ -299,7 +302,11 @@ class ResidualAttentionUnet(SegmentationModel):
         with torch.random.fork_rng(devices=("cpu", "cuda:0")):
             self.residual_encoder = get_encoder(
                 encoder_name,
-                in_channels=in_channels,
+                in_channels=(
+                    in_channels
+                    if residual_mode == ResidualMode.SUBTRACT_NEXT_FRAME
+                    else 2
+                ),
                 depth=encoder_depth,
                 weights=encoder_weights,
             )

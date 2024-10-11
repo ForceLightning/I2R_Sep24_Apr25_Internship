@@ -575,8 +575,8 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
         # Get transforms for the CINE images, masks, and combined transforms.
-        transforms_img, transforms_mask, transforms_together = utils.get_transforms(
-            self.loading_mode, self.augment
+        transforms_img, transforms_mask, transforms_together, transforms_resize = (
+            utils.get_transforms(self.loading_mode, self.augment)
         )
 
         trainval_dataset = TwoPlusOneDataset(
@@ -587,6 +587,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
+            transform_resize=transforms_resize,
             transform_together=transforms_together,
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
@@ -605,6 +606,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             select_frame_method=self.select_frame_method,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
+            transform_resize=transforms_resize,
             mode="test",
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
@@ -632,6 +634,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
                 select_frame_method=self.select_frame_method,
                 transform_img=transforms_img,
                 transform_mask=transforms_mask,
+                transform_resize=transforms_resize,
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
