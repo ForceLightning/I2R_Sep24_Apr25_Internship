@@ -8,12 +8,12 @@ import numpy as np
 import PIL.ImageSequence as ImageSequence
 import torch
 from cv2 import typing as cvt
-from matplotlib import animation
+from matplotlib import animation, colors
 from matplotlib import pyplot as plt
 from PIL import Image
 from torchvision.transforms.v2 import functional as v2f
 
-from utils.utils import InverseNormalize
+from utils.utils import INV_NORM_RGB_DEFAULT, InverseNormalize
 
 
 def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
@@ -61,7 +61,9 @@ def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
     return flows
 
 
-def cuda_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
+def cuda_optical_flow(
+    video: Sequence[cvt.MatLike], threshold: float | None = None
+) -> tuple[list[cvt.MatLike], list[cvt.MatLike] | None]:
     """Computes dense optical flow with hardware acceleration on NVIDIA cards.
 
     This method computes optical flow between all frames i with i + 1 for up to
@@ -71,7 +73,7 @@ def cuda_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
         video: Video frames to calculate optical flow with. Must be greyscale.
 
     Return:
-        list[cvt.MatLike]: Optical flow.
+        Optical flow, and cost buffer (if threshold is set)
 
     Raises:
         AssertionError: CUDA support is not enabled.
@@ -79,22 +81,31 @@ def cuda_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
         AssertionError: Video frames are not of the same shape.
         RuntimeError: Error in calculating optical flow (see stack trace).
     """
+    # GUARD: Check CUDA availability.
     num_cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
     assert num_cuda_devices, (
         f"Number of enabled cuda devices found: {num_cuda_devices}, must be > 0"
         + "OpenCV-contrib-python must be built with CUDA support enabled."
     )
 
+    # GUARD: Video frame shape and dtype.
     seq_len = len(video)
     assert all(
-        frame.ndim == 2 for frame in video
-    ), f"Video with frame of input shape {video[0].shape} must have only 2 dims: (height, width)"
-    cv2.cuda.resetDevice()
-    h, w = video[0].shape
+        frame.ndim == 2 and frame.shape == video[0].shape and frame.dtype == np.uint8
+        for frame in video
+    ), (
+        f"Video with frame of input shape {video[0].shape} must have only 2 dims: "
+        + "(height, width), be all of the same shape, and be of type `numpy.uint8`"
+    )
 
-    assert all(
-        frame.shape == video[0].shape and frame.dtype == np.uint8 for frame in video
-    ), f"All frames must have shape: ({h}, {w}) and be of type `numpy.uint8`"
+    if isinstance(threshold, float):
+        assert 0.0 <= threshold and threshold <= 1.0, (
+            "If threshold is set, must be of value 0.0 <= x <= 1.0, but is "
+            + f"{threshold:.2f} instead"
+        )
+
+    cv2.cuda.resetDevice()
+    h, w, *_ = video[0].shape
 
     # TODO: Add more options for optical flow calculation
 
@@ -102,18 +113,34 @@ def cuda_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
     nvof = cv2.cuda.NvidiaOpticalFlow_2_0.create(
         (h, w),
         perfPreset=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_PERF_LEVEL_SLOW,
-        outputGridSize=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_OUTPUT_VECTOR_GRID_SIZE_1,
-        hintGridSize=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_HINT_VECTOR_GRID_SIZE_1,
+        outputGridSize=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_OUTPUT_VECTOR_GRID_SIZE_4,
+        hintGridSize=cv2.cuda.NvidiaOpticalFlow_2_0_NV_OF_HINT_VECTOR_GRID_SIZE_4,
         enableTemporalHints=True,
+        enableCostBuffer=threshold is not None,
     )
 
     # Allocate GPU memory for the GPU Matrices.
-    cu_frame_1 = cv2.cuda.GpuMat()
-    cu_frame_2 = cv2.cuda.GpuMat()
+    cu_frame_1 = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+    cu_frame_2 = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+    cu_flow_raw = cv2.cuda.GpuMat(h, w, cv2.CV_16SC2)
+    cu_flow_float = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+
+    # Optionals if threshold is set.
+    cu_cost: cv2.cuda.GpuMat | None = None
+    cu_flow_threshed: cv2.cuda.GpuMat | None = None
+    cu_cost_threshed: cv2.cuda.GpuMat | None = None
+    if threshold is not None:
+        cu_cost = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+        cu_flow_threshed = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+        cu_cost_threshed = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+    cu_stream = cv2.cuda.Stream()
 
     res: list[cvt.MatLike] = []
-    for i in range(seq_len):
+    res_cost: list[cvt.MatLike] | None = None
+    if threshold is not None:
+        res_cost = []
 
+    for i in range(seq_len):
         # Transfer frames to the GPU.
         cu_frame_1.upload(video[i])
         cu_frame_2.upload(video[(i + 1) % seq_len])
@@ -124,47 +151,73 @@ def cuda_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
             # type checking may throw errors below.
 
             # Calculate flow.
-            flow, _ = nvof.calc(  # pyright: ignore[reportCallIssue]
-                cu_frame_1, cu_frame_2, None  # pyright: ignore[reportArgumentType]
+            flow, cu_cost = nvof.calc(
+                cu_frame_1,
+                cu_frame_2,
+                cu_flow_raw,
+                stream=cu_stream,
+                hint=None,
+                cost=cu_cost,
             )
 
-            # Convert the value back to float, transfer memory to CPU and append to res
-            res.append(
-                nvof.convertToFloat(  # pyright: ignore[reportCallIssue]
-                    flow, None  # pyright: ignore[reportArgumentType]
+            cu_flow_float = nvof.convertToFloat(flow, cu_flow_float)
+            if threshold is not None and res_cost is not None:
+                _, cu_cost_threshed = cv2.cuda.threshold(
+                    cu_cost,
+                    threshold * 255,
+                    255.0,
+                    cv2.THRESH_TOZERO,
+                    dst=cu_cost_threshed,
+                    stream=cu_stream,
                 )
-                .download()
-                .astype(np.float32)
-            )
 
+                cu_flow_threshed = cu_flow_float.copyTo(
+                    dst=cu_flow_threshed, mask=cu_cost_threshed, stream=cu_stream
+                )
+
+                res.append(cu_flow_threshed.download().astype(np.float32))
+                res_cost.append(cu_cost.download().astype(np.uint8))
+            else:
+                res.append(cu_flow_float.download().astype(np.float32))
         except Exception as e:
             raise RuntimeError(f"Error at iteration {i}") from e
 
+    cu_stream.waitForCompletion()
+
     # Ensure GPU memory is fully released
+    if cu_cost and cu_cost_threshed and cu_flow_threshed:
+        cu_cost.release()
+        cu_cost_threshed.release()
+        cu_flow_threshed.release()
+
     cu_frame_1.release()
     cu_frame_2.release()
+    cu_flow_raw.release()
+    cu_flow_float.release()
     nvof.collectGarbage()
 
-    return res
+    return res, res_cost
 
 
 # TODO: Remove this when done, for debugging purposes.
 def _plot_animated_with_flow(
     imgs,
     flows,
-    inv_norm: InverseNormalize = InverseNormalize(
-        mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
-    ),
+    inv_norm: InverseNormalize = INV_NORM_RGB_DEFAULT,
     show_plot: bool = True,
+    title: str | None = None,
 ):
-    fig, ax = plt.subplots()
+    fig = plt.figure(figsize=(8, 4))
+    ax1 = plt.subplot(121)
+    ax2 = plt.subplot(122, projection="polar")
+    ax2.set_theta_zero_location("N")
 
     ims = []
     if isinstance(imgs, Image.Image):
         for i, image in enumerate(ImageSequence.Iterator(imgs)):
-            im = ax.imshow(image, animated=True)
+            im = ax1.imshow(image, animated=True)
             if i == 0:
-                ax.imshow(image)
+                ax1.imshow(image)
             ims.append([im])
     else:
         for i in range(len(imgs)):
@@ -177,10 +230,6 @@ def _plot_animated_with_flow(
                 hsv[..., 1] = 255
                 mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
                 hsv[..., 0] = ang * 180 / np.pi / 2
-
-                # NOTE: The type hints in CV2 seem not to allow NoneType values, while
-                # the documentation clearly shows that they are supported. Thus, static
-                # type checking may throw errors below.
                 hsv[..., 2] = cv2.normalize(  # pyright: ignore[reportCallIssue]
                     mag,
                     None,  # pyright: ignore[reportArgumentType]
@@ -189,22 +238,37 @@ def _plot_animated_with_flow(
                     cv2.NORM_MINMAX,
                 )
                 flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-                # if i == 14:
-                #     sns.displot(x=hsv[...,0].reshape(-1), kde=True)
-                #     plt.show()
             else:
                 flow = np.asarray(v2f.to_pil_image(flow))
 
             img = np.asarray(v2f.to_pil_image(inv_norm(img).clamp(0, 1)))  # (H, W, C)
-            combined_img = cv2.addWeighted(img, 1.0, flow, 0.85, 0)
+            combined_img = cv2.addWeighted(img, 1.0, flow, 0.9, 0)
 
-            im = ax.imshow(combined_img, animated=True)
+            im = ax1.imshow(combined_img, animated=True)
             if i == 0:
-                ax.imshow(combined_img)
+                ax1.imshow(combined_img)
             ims.append([im])
     ani = animation.ArtistAnimation(
         fig, ims, interval=100 / 3, blit=True, repeat_delay=0
     )
+    ax1.grid(False)
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+
+    # Colorwheel
+    x_val = np.arange(0, 2 * np.pi, 0.01)
+    y_val = np.ones_like(x_val)
+
+    colormap = plt.get_cmap("hsv")
+    norm = colors.Normalize(0.0, 2 * np.pi)
+    ax2.scatter(x_val, y_val, c=x_val, s=300, cmap=colormap, norm=norm, linewidths=0)
+    ax2.set_yticks([])
+
+    if title:
+        fig.suptitle(title)
+    else:
+        fig.suptitle("Optical Flow")
+
     if show_plot:
         plt.show()
     return ani
@@ -215,7 +279,7 @@ if __name__ == "__main__":
     CINE_PATH = "data/train_val/Cine/4_1_0000.nii.tiff"
 
     _, cine_list = cv2.imreadmulti(CINE_PATH, flags=cv2.IMREAD_GRAYSCALE)
-    flow_list = cuda_optical_flow(cine_list)
+    flow_list, cost_list = cuda_optical_flow(cine_list)
 
     combined_video = torch.empty((30, 512, 512), dtype=torch.uint8)
     for i in range(30):

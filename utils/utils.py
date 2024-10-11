@@ -33,6 +33,12 @@ class InverseNormalize(v2.Normalize):
         return super().__call__(tensor.clone())
 
 
+INV_NORM_RGB_DEFAULT = InverseNormalize(
+    mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+)
+INV_NORM_GREYSCALE_DEFAULT = InverseNormalize(mean=[0.449], std=[0.226])
+
+
 class LightningGradualWarmupScheduler(LRScheduler):
     def __init__(
         self,
