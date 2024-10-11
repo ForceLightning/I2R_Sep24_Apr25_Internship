@@ -11,7 +11,7 @@ from torchvision.transforms.v2 import functional as v2f
 from torchvision.utils import draw_segmentation_masks
 from tqdm.auto import tqdm
 
-from utils.utils import InverseNormalize, LoadingMode
+from utils.utils import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
 
 
 class MaskImageWriter(BasePredictionWriter):
@@ -24,16 +24,12 @@ class MaskImageWriter(BasePredictionWriter):
         loading_mode: The loading mode of the images.
     """
 
-    default_inv_transform = InverseNormalize(
-        mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
-    )
-
     def __init__(
         self,
         loading_mode: LoadingMode,
         output_dir: str | None = None,
         write_interval: Literal["batch", "epoch", "batch_and_epoch"] = "epoch",
-        inv_transform: InverseNormalize = default_inv_transform,
+        inv_transform: InverseNormalize = INV_NORM_RGB_DEFAULT,
         format: Literal["apng", "tiff", "gif", "webp"] = "tiff",
     ):
         super().__init__(write_interval)

@@ -31,7 +31,12 @@ from metrics.logging import (
 )
 from models.two_plus_one import TwoPlusOneUnet
 from utils import utils
-from utils.utils import ClassificationMode, InverseNormalize, LoadingMode
+from utils.utils import (
+    INV_NORM_GREYSCALE_DEFAULT,
+    INV_NORM_RGB_DEFAULT,
+    ClassificationMode,
+    LoadingMode,
+)
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
@@ -171,16 +176,14 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         self.multiplier = multiplier
         self.total_epochs = total_epochs
         self.alpha = alpha
-        self.de_transform = (
-            Compose(
-                [
-                    InverseNormalize(
-                        mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
-                    )
-                ]
-            )
-            if loading_mode == LoadingMode.RGB
-            else Compose([InverseNormalize(mean=[0.449], std=[0.226])])
+        self.de_transform = Compose(
+            [
+                (
+                    INV_NORM_RGB_DEFAULT
+                    if loading_mode == LoadingMode.RGB
+                    else INV_NORM_GREYSCALE_DEFAULT
+                )
+            ]
         )
         # NOTE: This is to help with reproducibility
         with torch.random.fork_rng(devices=("cpu", "cuda:0")):
