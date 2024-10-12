@@ -64,6 +64,22 @@ Install the dependencies from `Pipfile.lock`.
 pipenv sync
 ```
 
+## CUDA-accelerated Optical Flow support
+For CUDA-accelerated optical flow calculations, OpenCV must be built from source with CUDA support. See [OpenCV-Python](https://github.com/opencv/opencv-python?tab=readme-ov-file#manual-builds) manual build docs for detailed instructions.
+
+For reference, the build command used in this project was:
+```sh
+LD_LIBRARY_PATH=/usr/lib/wsl/lib ENABLE_HEADLESS=1 ENABLE_CONTRIB=1 CMAKE_ARGS="-DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DWITH_CUDA=ON -DWITH_CUDNN=ON -DWITH_CUBLAS=ON -DWITH_MKL=ON -DMKL_USE_MULTITHREAD=ON -DPYTHON3_NUMPY_INCLUDE_DIRS=<PATH TO VIRTUAL ENV>/lib/python3.12/site-packages/numpy/_core/include" MAKEFLAGS="-j <DISCRETE CPU CORES>" pip wheel . --verbose
+```
+Set the path to the virutal env to find numpy header files and the number of discrete cpu cores for faster build times.
+
+> [!NOTE]
+> On Windows Subsystem for Linux (WSL) environments, ensure that the path to WSL libraries (after installing CUDA toolkit drivers and CUDNN libraries are in the `$PATH` and `$LD_LIBRARY_PATH` environment variables. This may be set in `~/.bashrc` or `~/.zshrc` configurations.
+> ```sh
+> export PATH="/usr/lib/wsl/lib:$PATH"
+> export LD_LIBRARY_PATH="/usr/lib/wsl/lib:$LD_LIBRARY_PATH"
+> ```
+
 # Usage
 Some default configurations are included in the `./configs/` directory, which will be used as modular pieces to construct the complete training/validation configuration.
 ## Description of config modules

@@ -1,3 +1,13 @@
+# 2024-10-12 Optical Flow for residual frame calculation [EXPERIMENTAL]
+[3cd2866](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/3cd28666d35d0c9cf16f72d7891107ffe417f448)
+
+Optical flow was implemented to calculate residual frame information, with support for both CPU and GPU-accelerated calculations with the use of OpenCV built with CUDA support enabled. See the `README` for more information.
+
+# 2024-10-08 Using `torch.mul` as a reduction option for attention
+[6d134d8](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/6d134d84511987dad40b194c0bc12017ece6d2e7)
+
+Significant performance gains came after using `torch.mul` as the reduction function between regular frame output embeddings and the QKV attention calculated on residual frame embeddings as compared to `torch.sum`.
+
 # 2024-10-05 Enhance performance gains from removing for-loops in OpenCV multi-image loading
 [cbfe084](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/cbfe084e24bf2eb9abd2cdedb44189c7b8ed70a9)
 
