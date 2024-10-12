@@ -712,6 +712,25 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
 
 
 class ResidualAttentionCLI(CommonCLI):
+    def before_instantiate_classes(self) -> None:
+        # GUARD: Check for subcommand
+        if (subcommand := self.config.get("subcommand")) is not None:
+            # GUARD: Check that residual_mode is set
+            if (
+                residual_mode := self.config.get(subcommand).get("residual_mode")
+            ) is not None:
+                # Set mp mode to `spawn` for OPTICAL_FLOW_GPU.
+                if ResidualMode[residual_mode] == ResidualMode.OPTICAL_FLOW_GPU:
+                    try:
+                        torch.multiprocessing.set_start_method("spawn")
+                        print("Multiprocessing mode set to `spawn`")
+                        return
+                    except RuntimeError as e:
+                        raise RuntimeError(
+                            "Cannot set multiprocessing mode to spawn"
+                        ) from e
+        print("Multiprocessing mode set as default.")
+
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         super().add_arguments_to_parser(parser)
 

@@ -119,11 +119,14 @@ def cuda_optical_flow(
         enableCostBuffer=threshold is not None,
     )
 
-    # Allocate GPU memory for the GPU Matrices.
+    # OPTIM: Preallocate GPU memory for the GpuMats.
     cu_frame_1 = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
     cu_frame_2 = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
     cu_flow_raw = cv2.cuda.GpuMat(h, w, cv2.CV_16SC2)
     cu_flow_float = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+
+    # Track all GPU allocated GpuMats for destruction.
+    all_cu_frames = [cu_frame_1, cu_frame_2, cu_flow_raw, cu_flow_float]
 
     # Optionals if threshold is set.
     cu_cost: cv2.cuda.GpuMat | None = None
@@ -133,6 +136,9 @@ def cuda_optical_flow(
         cu_cost = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
         cu_flow_threshed = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
         cu_cost_threshed = cv2.cuda.GpuMat(h, w, cv2.CV_8UC1)
+        all_cu_frames += [cu_cost, cu_flow_threshed, cu_cost_threshed]
+
+    # OPTIM: Possible to use a BufferPool here?
     cu_stream = cv2.cuda.Stream()
 
     res: list[cvt.MatLike] = []
@@ -180,23 +186,23 @@ def cuda_optical_flow(
             else:
                 res.append(cu_flow_float.download().astype(np.float32))
         except Exception as e:
+            _cleanup(nvof, *all_cu_frames)
             raise RuntimeError(f"Error at iteration {i}") from e
 
     cu_stream.waitForCompletion()
 
     # Ensure GPU memory is fully released
-    if cu_cost and cu_cost_threshed and cu_flow_threshed:
-        cu_cost.release()
-        cu_cost_threshed.release()
-        cu_flow_threshed.release()
-
-    cu_frame_1.release()
-    cu_frame_2.release()
-    cu_flow_raw.release()
-    cu_flow_float.release()
+    _cleanup(nvof, *all_cu_frames)
     nvof.collectGarbage()
 
     return res, res_cost
+
+
+def _cleanup(nvof: cv2.cuda.NvidiaHWOpticalFlow, *cu_frames: cv2.cuda.GpuMat):
+    # NOTE: If a BufferPool is used, deallocation must be done in a LIFO order.
+    for cu_frame in cu_frames:
+        cu_frame.release()
+    nvof.collectGarbage()
 
 
 # TODO: Remove this when done, for debugging purposes.

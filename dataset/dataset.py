@@ -758,9 +758,6 @@ class ResidualTwoPlusOneDataset(
                 if self.residual_mode == ResidualMode.OPTICAL_FLOW_CPU:
                     out_residuals = dense_optical_flow(in_video)
                 else:
-                    raise NotImplementedError(
-                        "CUDA calculations for optical flow on multiprocessed dataloaders is broken"
-                    )
                     out_residuals, _ = cuda_optical_flow(in_video)
 
                 # (F, H, W, 2) -> (F, 2, H, W)
