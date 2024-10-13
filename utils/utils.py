@@ -152,7 +152,7 @@ def get_checkpoint_filename(version: str | None) -> str | None:
     """
     if version is None:
         return None
-    return version + "-epoch={epoch}-step={step}"
+    return version + "-epoch={epoch}-step={step}-val_loss={val/loss:.4f}"
 
 
 def get_best_weighted_avg_dice_filename(version: str | None) -> str:
