@@ -21,6 +21,13 @@ REDUCE_TYPES = Literal["sum", "prod", "cat", "weighted", "weighted_learnable"]
 
 
 class AttentionLayer(nn.Module):
+    """Attention mechanism between spatio-temporal and spatial embeddings.
+
+    As the spatial dimensions of the image can be considered the sequence to be
+    processed, the channel dimension must be the embedding dimension for each part
+    of Q, K, and V tensors.
+    """
+
     def __init__(
         self,
         embed_dim: int,
@@ -31,8 +38,7 @@ class AttentionLayer(nn.Module):
         need_weights: bool = False,
         reduce: REDUCE_TYPES = "sum",
     ) -> None:
-        """Attention mechanism between spatio-temporal embeddings from raw frames and
-        spatial embeddings from residual frames.
+        """Initialise the attention mechanism.
 
         As the spatial dimensions of the image can be considered the sequence to be
         processed, the channel dimension must be the embedding dimension for each part
@@ -47,6 +53,8 @@ class AttentionLayer(nn.Module):
             value_embed_dim: The dimension of the value embeddings. If None, it is the
                 same as the embedding dimension.
             need_weights: Whether to return the attention weights. (Not functional).
+            reduce: How to reduce the attention outputs.
+
         """
         super().__init__()
         self.embed_dim = embed_dim
@@ -71,6 +79,7 @@ class AttentionLayer(nn.Module):
 
         self.attentions = nn.ModuleList(attentions)
 
+    @override
     def forward(
         self, q: torch.Tensor, ks: torch.Tensor, vs: torch.Tensor
     ) -> torch.Tensor:
@@ -127,15 +136,16 @@ class AttentionLayer(nn.Module):
 
 
 class WeightedAverage(nn.Module):
-    """A weighted average module that can have a learnable parameter for the
-        weights.
-
-    Args:
-        in_features: Number of features to reduce.
-        learnable: Whether the parameter should store gradients.
-    """
+    """A weighted average module."""
 
     def __init__(self, in_features: int, learnable: bool = False):
+        """Initialise the weighted average module.
+
+        Args:
+            in_features: Number of features to reduce.
+            learnable: Whether the parameter should store gradients.
+
+        """
         super().__init__()
         self.in_features = in_features
         self.learnable = learnable
@@ -150,6 +160,7 @@ class WeightedAverage(nn.Module):
                 requires_grad=False,
             )
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         assert x.shape[-1] == self.in_features, (
             f"Input of shape {x.shape} does not have last dimension "
@@ -163,6 +174,8 @@ class WeightedAverage(nn.Module):
 
 
 class SpatialAttentionBlock(nn.Module):
+    """Residual block with attention mechanism between spatio-temporal embeddings."""
+
     def __init__(
         self,
         temporal_conv: OneD | DilatedOneD,
@@ -172,8 +185,7 @@ class SpatialAttentionBlock(nn.Module):
         reduce_dim: int = 0,
         _attention_only: bool = False,
     ):
-        """Residual block with attention mechanism between spatio-temporal embeddings
-        from raw frames and spatial embeddings from residual frames.
+        """Initialise the residual block.
 
         Args:
             temporal_conv: Temporal convolutional layer to compress the spatial
@@ -182,6 +194,7 @@ class SpatialAttentionBlock(nn.Module):
             num_frames: Number of frames per input.
             reduce: The reduction method to apply to the concatenated embeddings.
             reduce_dim: The dimension to reduce the concatenated embeddings.
+
         """
         super().__init__()
         self.temporal_conv = temporal_conv
@@ -202,6 +215,7 @@ class SpatialAttentionBlock(nn.Module):
         Args:
             st_embeddings: Spatio-temporal embeddings from raw frames.
             res_embeddings: Spatial embeddings from residual frames.
+
         """
         # Output is of shape (B, C, H, W)
         if isinstance(self.temporal_conv, OneD):
@@ -231,28 +245,7 @@ class SpatialAttentionBlock(nn.Module):
 
 
 class ResidualAttentionUnet(SegmentationModel):
-    """U-Net with Attention mechanism on residual frames.
-
-    Args:
-        encoder_name: Name of the encoder.
-        encoder_depth: Depth of the encoder.
-        encoder_weights: Weights of the encoder.
-        decoder_use_batchnorm: Whether to use batch normalization in the decoder.
-        decoder_channels: Number of channels in the decoder.
-        decoder_attention_type: Type of attention in the decoder.
-        in_channels: Number of channels in the input image.
-        classes: Number of classes in the output mask.
-        activation: Activation function to use.
-        skip_conn_channels: Number of channels in each skip connection's temporal
-            convolutions.
-        num_frames: Number of frames in the sequence.
-        aux_params: Auxiliary parameters for the classification head.
-        flat_conv: Whether to use flat convolutions.
-        res_conv_activation: Activation function to use in the residual
-            convolutions.
-        use_dilations: Whether to use dilated conv
-        reduce: How to reduce the post-attention features and the original features.
-    """
+    """U-Net with Attention mechanism on residual frames."""
 
     _default_decoder_channels = [256, 128, 64, 32, 16]
     _default_skip_conn_channels = [2, 5, 10, 20, 40]
@@ -278,6 +271,31 @@ class ResidualAttentionUnet(SegmentationModel):
         reduce: REDUCE_TYPES = "sum",
         _attention_only: bool = False,
     ):
+        """Initialise the model.
+
+        Args:
+            encoder_name: Name of the encoder.
+            encoder_depth: Depth of the encoder.
+            encoder_weights: Weights of the encoder.
+            residual_mode: Mode of the residual frames calculation.
+            decoder_use_batchnorm: Whether to use batch normalization in the decoder.
+            decoder_channels: Number of channels in the decoder.
+            decoder_attention_type: Type of attention in the decoder.
+            in_channels: Number of channels in the input image.
+            classes: Number of classes in the output mask.
+            activation: Activation function to use.
+            skip_conn_channels: Number of channels in each skip connection's temporal
+                convolutions.
+            num_frames: Number of frames in the sequence.
+            aux_params: Auxiliary parameters for the classification head.
+            flat_conv: Whether to use flat convolutions.
+            res_conv_activation: Activation function to use in the residual
+                convolutions.
+            use_dilations: Whether to use dilated conv
+            reduce: How to reduce the post-attention features and the original features.
+            _attention_only: Whether to return only the attention output.
+
+        """
         super().__init__()
         self.num_frames = num_frames
         self.flat_conv = flat_conv
@@ -392,6 +410,7 @@ class ResidualAttentionUnet(SegmentationModel):
 
     @property
     def encoder(self):
+        """Get the encoder of the model."""
         # NOTE: Necessary for the decoder.
         return self.spatial_encoder
 
@@ -404,8 +423,8 @@ class ResidualAttentionUnet(SegmentationModel):
         Args:
             regular_frames: Regular frames from the sequence.
             residual_frames: Residual frames from the sequence.
-        """
 
+        """
         # Output features by batch and then by encoder layer.
         img_features_list: list[list[torch.Tensor]] = []
         res_features_list: list[list[torch.Tensor]] = []

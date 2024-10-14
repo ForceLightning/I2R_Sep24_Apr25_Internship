@@ -5,6 +5,7 @@ Taken from https://github.com/Lightning-AI/pytorch-lightning/issues/3009
 """
 import re
 from datetime import datetime, timedelta
+from typing import override
 
 from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBar
 from rich.progress import ProgressColumn
@@ -13,16 +14,18 @@ from rich.text import Text
 
 
 class RemainingTimeColumn(ProgressColumn):
-    """Show total remaining time in training"""
+    """Show total remaining time in training."""
 
     max_refresh = 1.0
 
+    @override
     def __init__(self, style: str | Style) -> None:
         self.style = style
         self.estimated_time_per_epoch = None
         self.start_time = datetime.now()
         super().__init__()
 
+    @override
     def render(self, task) -> Text:
         if "Epoch" in task.description:
             # Fetch current epoch number from task description.
@@ -66,6 +69,9 @@ class RemainingTimeColumn(ProgressColumn):
 
 
 class BetterProgressBar(RichProgressBar):
+    """A progress bar that estimates the total time remaining."""
+
+    @override
     def configure_columns(self, trainer) -> list:
         columns = super().configure_columns(trainer)
         columns.insert(4, RemainingTimeColumn(style=self.theme.time))

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""LGE Baseline model training script.
-"""
+"""LGE Baseline model training script."""
 from __future__ import annotations
 
 import os
@@ -24,6 +23,8 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 
 class LGEBaselineDataModule(L.LightningDataModule):
+    """LGE MRI image data module."""
+
     def __init__(
         self,
         data_dir: str = "data/train_val/",
@@ -36,7 +37,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ):
-        """LGE MRI image data module.
+        """Initialise the LGE MRI data module.
 
         Args:
             data_dir: Path to the training and validation data.
@@ -47,8 +48,9 @@ class LGEBaselineDataModule(L.LightningDataModule):
             num_workers: Number of workers for data loading.
             loading_mode: Image loading mode for the dataset.
             combine_train_val: Whether to combine train/val sets.
-        """
+            augment: Whether to augment the data during training.
 
+        """
         super().__init__()
         self.save_hyperparameters()
         self.data_dir = data_dir
@@ -135,9 +137,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             self.val = valid_set
             self.test = test_dataset
 
-    def on_exception(self, exception):
-        raise exception
-
+    @override
     def train_dataloader(self):
         return DataLoader(
             self.train,
@@ -149,6 +149,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             shuffle=True,
         )
 
+    @override
     def val_dataloader(self):
         return DataLoader(
             self.val,
@@ -159,6 +160,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def test_dataloader(self):
         return DataLoader(
             self.test,
@@ -168,6 +170,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def predict_dataloader(self):
         return DataLoader(
             self.test,
@@ -179,8 +182,11 @@ class LGEBaselineDataModule(L.LightningDataModule):
 
 
 class LGECLI(CommonCLI):
+    """CLI for LGE MRI model training."""
+
     multi_frame = False
 
+    @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         super().add_arguments_to_parser(parser)
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Union
+from typing import Any, Union, override
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
@@ -12,6 +12,8 @@ from utils.prediction_writer import MaskImageWriter
 
 
 class CommonCLI(LightningCLI):
+    """Common CLI functionality between models."""
+
     default_arguments: dict[str, Any] = {
         "model_checkpoint_last.save_last": True,
         "model_checkpoint_last.save_weights_only": True,
@@ -37,10 +39,13 @@ class CommonCLI(LightningCLI):
     }
     multi_frame: bool = True
 
+    @override
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
+    @override
     def before_instantiate_classes(self) -> None:
+        """Set the last checkpoint name."""
         if self.subcommand is not None:
             if (config := self.config.get(self.subcommand)) is not None:
                 if (version := config.get("version")) is not None:
@@ -49,7 +54,9 @@ class CommonCLI(LightningCLI):
                         name
                     )
 
+    @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
+        """Set the default arguments and add the arguments to the parser."""
         # NOTE: Subclasses should inherit this method and set defaults as necessary.
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint_last")
         parser.add_lightning_class_args(ModelCheckpoint, "model_checkpoint_val_loss")

@@ -1,3 +1,5 @@
+"""Common definitions for the models module."""
+
 ENCODER_OUTPUT_SHAPES = {
     "resnet18": [
         (64, 112, 112),

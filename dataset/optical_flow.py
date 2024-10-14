@@ -1,3 +1,5 @@
+"""Optical flow calculation methods for video data."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -17,7 +19,7 @@ from utils.utils import INV_NORM_RGB_DEFAULT, InverseNormalize
 
 
 def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
-    """Computes dense optical flow on the CPU (slow).
+    """Compute dense optical flow on the CPU (slow).
 
     Args:
         video: Video frames to calculate optical flow with. Must be greyscale.
@@ -27,6 +29,7 @@ def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
 
     Raises:
         AssertionError: Video is not greyscale.
+
     """
     video = deque(video)
     assert all(
@@ -64,13 +67,15 @@ def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
 def cuda_optical_flow(
     video: Sequence[cvt.MatLike], threshold: float | None = None
 ) -> tuple[list[cvt.MatLike], list[cvt.MatLike] | None]:
-    """Computes dense optical flow with hardware acceleration on NVIDIA cards.
+    """Compute dense optical flow with hardware acceleration on NVIDIA cards.
 
     This method computes optical flow between all frames i with i + 1 for up to
     sequence length n-1, then computes for frame n and frame 0.
 
     Args:
         video: Video frames to calculate optical flow with. Must be greyscale.
+        threshold: Threshold to apply to the cost buffer. If set, the cost buffer
+            will be returned as well.
 
     Return:
         Optical flow, and cost buffer (if threshold is set)
@@ -80,6 +85,7 @@ def cuda_optical_flow(
         AssertionError: Video is not greyscale.
         AssertionError: Video frames are not of the same shape.
         RuntimeError: Error in calculating optical flow (see stack trace).
+
     """
     # GUARD: Check CUDA availability.
     num_cuda_devices = cv2.cuda.getCudaEnabledDeviceCount()
@@ -216,7 +222,7 @@ def _plot_animated_with_flow(
     fig = plt.figure(figsize=(8, 4))
     ax1 = plt.subplot(121)
     ax2 = plt.subplot(122, projection="polar")
-    ax2.set_theta_zero_location("N")
+    ax2.set_theta_zero_location("N")  # pyright: ignore[reportAttributeAccessIssue]
 
     ims = []
     if isinstance(imgs, Image.Image):

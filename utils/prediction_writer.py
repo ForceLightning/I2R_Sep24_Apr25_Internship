@@ -1,3 +1,5 @@
+"""Module for writing the predicted images with masks to the output directory."""
+
 from __future__ import annotations
 
 import os
@@ -15,14 +17,7 @@ from utils.utils import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
 
 
 class MaskImageWriter(BasePredictionWriter):
-    """Writes the predicted images with masks to the output directory.
-
-    Args:
-        output_dir: The directory to save the images with masks.
-        write_interval: The interval to write the images with masks.
-        inv_transform: The inverse transform to apply to the images.
-        loading_mode: The loading mode of the images.
-    """
+    """Writes the predicted images with masks to the output directory."""
 
     def __init__(
         self,
@@ -32,6 +27,16 @@ class MaskImageWriter(BasePredictionWriter):
         inv_transform: InverseNormalize = INV_NORM_RGB_DEFAULT,
         format: Literal["apng", "tiff", "gif", "webp"] = "tiff",
     ):
+        """Initialise the MaskImageWriter.
+
+        Args:
+            output_dir: The directory to save the images with masks.
+            write_interval: The interval to write the images with masks.
+            inv_transform: The inverse transform to apply to the images.
+            loading_mode: The loading mode of the images.
+            format: Output format of the images.
+
+        """
         super().__init__(write_interval)
         self.output_dir = output_dir
         self.inv_transform = inv_transform
@@ -48,13 +53,14 @@ class MaskImageWriter(BasePredictionWriter):
         predictions: Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]],
         batch_indices: Sequence[Any],
     ) -> None:
-        """Saves the predicted images with masks to the output directory.
+        """Save the predicted images with masks to the output directory.
 
         Args:
             trainer: The trainer object.
             pl_module: The lightning module.
             predictions: The predictions from the model.
             batch_indices: The indices of the batch.
+
         """
         if not self.output_dir:
             return
@@ -118,6 +124,7 @@ class MaskImageWriter(BasePredictionWriter):
 
 
 def get_output_dir_from_ckpt_path(ckpt_path: str | None):
+    """Get the output directory from the checkpoint path."""
     # Checkpoint paths are in the format:
     # ./checkpoints/<model type>/lightning_logs/<experiment name>/<version>/checkpoints/
     # <ckpt name>.ckpt
@@ -145,6 +152,7 @@ def _draw_masks(
 
     Return:
         Image: The image with the masks drawn on it.
+
     """
     if loading_mode == LoadingMode.GREYSCALE:
         norm_img = inv_transform(img.repeat(3, 1, 1)).clamp(0, 1)

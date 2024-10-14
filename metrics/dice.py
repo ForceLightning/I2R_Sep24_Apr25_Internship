@@ -5,11 +5,15 @@ from typing import Any, Literal, override
 import torch
 from torch import Tensor
 from torchmetrics.segmentation import GeneralizedDiceScore
-from torchmetrics.segmentation.generalized_dice import _generalized_dice_update
+from torchmetrics.segmentation.generalized_dice import (
+    _generalized_dice_update,  # pyright: ignore[reportPrivateImportUsage]
+)
 from torchmetrics.utilities.compute import _safe_divide
 
 
 class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
+    """Generalized Dice score metric with additional options."""
+
     class_occurrences: torch.Tensor
     score_running: torch.Tensor
     macro_avg_metric: torch.Tensor
@@ -29,6 +33,20 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         dist_sync_on_step: bool = False,
         **kwargs: Any,
     ) -> None:
+        """Initialise the Generalized Dice score metric.
+
+        Args:
+            num_classes: Number of classes.
+            include_background: Whether to include the background class.
+            per_class: Whether to compute the per-class score.
+            weight_type: Type of weighting to apply.
+            weighted_average: Whether to compute the weighted average.
+            only_for_classes: Whether to compute the score only for specific classes.
+            return_type: Type of score to return.
+            dist_sync_on_step: Whether to synchronise on step.
+            kwargs: Additional keyword arguments.
+
+        """
         super().__init__(
             num_classes,
             include_background,
@@ -167,7 +185,14 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
 def _generalized_dice_compute(
     numerator: Tensor, denominator: Tensor, per_class: bool = True
 ) -> Tensor:
-    """Overrides the default computation by setting undefined behaviour to return `1.0`"""
+    """Override the default computation by setting undefined behaviour to return `1.0`.
+
+    Args:
+        numerator: The numerator tensor.
+        denominator: The denominator tensor.
+        per_class: Whether to compute the per-class score.
+
+    """
     if not per_class:
         numerator = torch.sum(numerator, 1)
         denominator = torch.sum(denominator, 1)

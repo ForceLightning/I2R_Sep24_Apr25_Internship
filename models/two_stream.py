@@ -19,6 +19,8 @@ from segmentation_models_pytorch.encoders import get_encoder
 
 
 class TwoStreamUnet(SegmentationModel):
+    """Two Stream U-Net model with LGE and Cine inputs."""
+
     def __init__(
         self,
         encoder_name: str = "resnet34",
@@ -33,7 +35,7 @@ class TwoStreamUnet(SegmentationModel):
         num_frames: int = 30,
         aux_params: dict[str, Any] | None = None,
     ) -> None:
-        """Two Stream U-Net model with LGE and Cine inputs.
+        """Init the Two Stream U-Net model with LGE and Cine inputs.
 
         Args:
             encoder_name: Name of the encoder.
@@ -48,6 +50,7 @@ class TwoStreamUnet(SegmentationModel):
             instantiation.
             num_frames: Number of frames in the Cine input.
             aux_params: Auxiliary parameters.
+
         """
         super().__init__()
 
@@ -100,7 +103,7 @@ class TwoStreamUnet(SegmentationModel):
 
     @override
     def initialize(self):
-        """Initializes the model's decoder, segmentation head, and classification head."""
+        """Initialise the model's decoder, segmentation head, and classification head."""
         initialize_decoder(self.decoder)
         initialize_head(self.segmentation_head)
         if self.classification_head is not None:
@@ -115,6 +118,7 @@ class TwoStreamUnet(SegmentationModel):
         Args:
             lge: Late gadolinium enhanced image tensor.
             cine: Cine image tensor.
+
         """
         added_features = []
 

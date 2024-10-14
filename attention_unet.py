@@ -46,6 +46,8 @@ torch.set_float32_matmul_precision("medium")
 
 
 class ResidualAttentionUnetLightning(L.LightningModule):
+    """Attention mechanism-based U-Net."""
+
     def __init__(
         self,
         batch_size: int,
@@ -77,6 +79,39 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         attention_reduction: REDUCE_TYPES = "sum",
         attention_only: bool = False,
     ):
+        """Initialise the Attention mechanism-based U-Net.
+
+        Args:
+            batch_size: Mini-batch size.
+            metric: Metric to use for evaluation.
+            loss: Loss function to use for training.
+            encoder_name: Name of the encoder.
+            encoder_depth: Depth of the encoder.
+            encoder_weights: Weights to use for the encoder.
+            in_channels: Number of input channels.
+            classes: Number of classes.
+            num_frames: Number of frames to use.
+            weights_from_ckpt_path: Path to checkpoint file.
+            optimizer: Optimizer to use.
+            optimizer_kwargs: Optimizer keyword arguments.
+            scheduler: Learning rate scheduler to use.
+            scheduler_kwargs: Scheduler keyword arguments.
+            multiplier: Multiplier for the model.
+            total_epochs: Total number of epochs.
+            alpha: Weight for the loss.
+            _beta: (Unused) Weight for the loss.
+            learning_rate: Learning rate.
+            dl_classification_mode: Classification mode for the dataloader.
+            eval_classification_mode: Classification mode for evaluation.
+            residual_mode: Residual calculation mode.
+            loading_mode: Loading mode for the images.
+            dump_memory_snapshot: Whether to dump memory snapshot.
+            flat_conv: Whether to use flat convolutions.
+            unet_activation: Activation function for the U-Net.
+            attention_reduction: Attention reduction type.
+            attention_only: Whether to use attention only.
+
+        """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
         self.batch_size = batch_size
@@ -208,6 +243,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
                     raise e
 
     def on_train_start(self):
+        """Call at the beginning of training after sanity check."""
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
                 self.hparams,  # pyright: ignore[reportArgumentType]
@@ -224,22 +260,27 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             )
 
     def on_train_end(self) -> None:
+        """Call at the end of training before logger experiment is closed."""
         if self.dump_memory_snapshot:
             torch.cuda.memory._dump_snapshot("attention_unet_snapshot.pickle")
 
     def forward(self, x_img: torch.Tensor, x_res: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the model."""
         # HACK: This is to get things to work with deepspeed opt level 1 & 2. Level 3
         # is broken due to the casting of batchnorm to non-fp32 types.
         with torch.autocast(device_type=self.device.type):
             return self.model(x_img, x_res)  # pyright: ignore[reportCallIssue]
 
     def on_train_epoch_end(self) -> None:
+        """Call in the training loop at the very end of the epoch."""
         shared_metric_logging_epoch_end(self, "train")
 
     def on_validation_epoch_end(self) -> None:
+        """Call in the validation loop at the very end of the epoch."""
         shared_metric_logging_epoch_end(self, "val")
 
     def on_test_epoch_end(self) -> None:
+        """Call in the test loop at the very end of the epoch."""
         shared_metric_logging_epoch_end(self, "test")
 
     def training_step(
@@ -247,6 +288,19 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
         batch_idx: int,
     ):
+        """Forward pass for the model with dataloader batches.
+
+        Args:
+            batch: Batch of frames, residual frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+
+        Return:
+            torch.tensor: Training loss.
+
+        Raises:
+            AssertionError: Prediction shape and ground truth mask shapes are different.
+
+        """
         images, res_images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
         images_input = images.to(self.device.type)
@@ -314,6 +368,13 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
         batch_idx: int,
     ):
+        """Forward pass for the model for one minibatch of a validation epoch.
+
+        Args:
+            batch: Batch of frames, residual frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+
+        """
         self._shared_eval(batch, batch_idx, "val")
 
     def test_step(
@@ -321,6 +382,13 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
         batch_idx: int,
     ):
+        """Forward pass for the model for one minibatch of a test epoch.
+
+        Args:
+            batch: Batch of frames, residual frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+
+        """
         self._shared_eval(batch, batch_idx, "test")
 
     @torch.no_grad()
@@ -336,6 +404,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             batch: The batch of images and masks.
             batch_idx: The batch index.
             prefix: The runtime mode (val, test).
+
         """
         self.eval()
         images, res_images, masks, _ = batch
@@ -413,7 +482,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
-        """Logs the images to tensorboard.
+        """Log the images to tensorboard.
 
         Args:
             batch_idx: The batch index.
@@ -423,13 +492,14 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
 
-        Returns:
-            None.
+        Return:
+            None
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
             TensorboardLogger.
             ValueError: If any of `images`, `masks`, or `masks_preds` are malformed.
+
         """
         assert self.logger is not None, "No logger detected!"
         assert isinstance(
@@ -506,6 +576,18 @@ class ResidualAttentionUnetLightning(L.LightningModule):
         batch_idx: int,
         dataloader_idx: int = 0,
     ):
+        """Forward pass for the model for one minibatch of a test epoch.
+
+        Args:
+            batch: Batch of frames, residual frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+            dataloader_idx: Index of the dataloader.
+
+        Return:
+            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
+                and filename.
+
+        """
         self.eval()
         images, res_images, masks, fn = batch
         images_input = images.to(self.device.type)
@@ -528,11 +610,10 @@ class ResidualAttentionUnetLightning(L.LightningModule):
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
 
-    def on_exception(self, exception: BaseException):
-        raise exception
-
 
 class ResidualTwoPlusOneDataModule(L.LightningDataModule):
+    """Datamodule for the Residual TwoPlusOne dataset."""
+
     def __init__(
         self,
         data_dir: str = "data/train_val/",
@@ -548,8 +629,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ):
-        """Datamodule for the Residual TwoPlusOne dataset for PyTorch Lightning
-        compatibility.
+        """Initialise the Residual TwoPlusOne dataset.
 
         Args:
             data_dir: Path to train data directory containing Cine and masks
@@ -562,10 +642,12 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
             frames: Number of frames from the original dataset to use.
             select_frame_method: How frames < 30 are selected for training.
             classification_mode: The classification mode for the dataloader.
+            residual_mode: Residual calculation mode.
             num_workers: The number of workers for the DataLoader.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine train/val sets.
             augment: Whether to augment images and masks together.
+
         """
         super().__init__()
         self.save_hyperparameters()
@@ -585,6 +667,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         self.residual_mode = residual_mode
 
     def setup(self, stage):
+        """Set up datamodule components."""
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
 
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
@@ -668,10 +751,8 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
             self.val = valid_set
             self.test = test_dataset
 
-    def on_exception(self, exception):
-        raise exception
-
     def train_dataloader(self):
+        """Get the training dataloader."""
         return DataLoader(
             self.train,
             batch_size=self.batch_size,
@@ -683,6 +764,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         )
 
     def val_dataloader(self):
+        """Get the validation dataloader."""
         return DataLoader(
             self.val,
             batch_size=self.batch_size,
@@ -693,6 +775,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         )
 
     def test_dataloader(self):
+        """Get the test dataloader."""
         return DataLoader(
             self.test,
             batch_size=self.batch_size,
@@ -702,6 +785,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         )
 
     def predict_dataloader(self):
+        """Get the predict dataloader."""
         return DataLoader(
             self.test,
             batch_size=self.batch_size,
@@ -712,7 +796,13 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
 
 
 class ResidualAttentionCLI(CommonCLI):
+    """CLI class for Residual Attention task."""
+
     def before_instantiate_classes(self) -> None:
+        """Run some code before instantiating the classes.
+
+        Sets the torch multiprocessing mode depending on the optical flow method.
+        """
         # GUARD: Check for subcommand
         if (subcommand := self.config.get("subcommand")) is not None:
             # GUARD: Check that residual_mode is set
@@ -732,6 +822,7 @@ class ResidualAttentionCLI(CommonCLI):
         print("Multiprocessing mode set as default.")
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
+        """Add extra arguments to CLI parser."""
         super().add_arguments_to_parser(parser)
 
         parser.add_argument("--residual_mode", help="Residual calculation mode")

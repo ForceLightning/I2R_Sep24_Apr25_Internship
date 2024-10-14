@@ -20,7 +20,7 @@ def shared_metric_calculation(
     masks_proba: torch.Tensor,
     prefix: Literal["train", "val", "test"] = "train",
 ):
-    """Calculates the metrics for the model.
+    """Calculate the metrics for the model.
 
     Args:
         module: The LightningModule instance.
@@ -28,6 +28,7 @@ def shared_metric_calculation(
         masks: The ground truth masks.
         masks_proba: The predicted masks.
         prefix: The runtime mode (train, val, test).
+
     """
     masks_one_hot = F.one_hot(masks.squeeze(dim=1), num_classes=4).permute(0, -1, 1, 2)
 
@@ -53,14 +54,14 @@ def shared_metric_calculation(
 
 
 def setup_metrics(module: L.LightningModule, metric: Metric | None, classes: int):
-    """Sets up the metrics (dice scores) for the model.
+    """Set up the metrics (dice scores) for the model.
 
     Args:
         module: The LightningModule instance.
         metric: The metric to use. If None, the default is the GeneralizedDiceScoreVariant.
         classes: The number of classes in the dataset.
-    """
 
+    """
     # Create the metrics for the model.
     for stage in ["train", "val", "test"]:
         metric_weighted = (
@@ -145,13 +146,14 @@ def setup_metrics(module: L.LightningModule, metric: Metric | None, classes: int
 
 
 def shared_metric_logging_epoch_end(module: L.LightningModule, prefix: str):
-    """Logs the metrics for the model. This is called at the end of the epoch.
+    """Log the metrics for the model. This is called at the end of the epoch.
 
     This method only handles the logging of Dice scores.
 
     Args:
         module: The LightningModule instance.
         prefix: The runtime mode (train, val, test).
+
     """
     metric_obj = module.metrics[prefix]
 
@@ -166,12 +168,13 @@ def shared_metric_logging_epoch_end(module: L.LightningModule, prefix: str):
 def _single_generalized_dice_logging(
     module: L.LightningModule, metric_obj: GeneralizedDiceScoreVariant, prefix: str
 ):
-    """Logs the metrics for the model for a single GeneralizedDiceScoreVariant.
+    """Log the metrics for the model for a single GeneralizedDiceScoreVariant.
 
     Args:
         module: The LightningModule instance.
         metric_obj: The metric object.
         prefix: The runtime mode (train, val, test).
+
     """
     weighted_avg = metric_obj.compute()
     macro_avg = metric_obj.macro_avg_metric
@@ -213,13 +216,13 @@ def _single_generalized_dice_logging(
 def _grouped_generalized_dice_logging(
     module: L.LightningModule, metric_obj: MetricCollection, prefix: str
 ):
-    """Logs the metrics for the model for a MetricCollection of
-    GeneralizedDiceScoreVariant.
+    """Log the metrics for the model for a MetricCollection of Dice metrics.
 
     Args:
         module: The LightningModule instance.
         metric_obj: The metric object.
         prefix: The runtime mode (train, val, test).
+
     """
     if all(
         isinstance(metric, GeneralizedDiceScoreVariant)

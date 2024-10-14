@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Utility functions for the project."""
 from enum import Enum, auto
-from typing import Sequence
+from typing import Sequence, override
 
 import lightning as L
 import torch
@@ -23,12 +23,20 @@ class InverseNormalize(v2.Normalize):
         mean: Sequence[float | int],
         std: Sequence[float | int],
     ):
+        """Initialise the InverseNormalize class.
+
+        Args:
+            mean: The mean value for the normalisation.
+            std: The standard deviation value for the normalisation.
+
+        """
         mean_tensor = torch.as_tensor(mean)
         std_tensor = torch.as_tensor(std)
         std_inv = 1 / (std_tensor + 1e-7)
         mean_inv = -mean_tensor * std_inv
         super().__init__(mean=mean_inv.tolist(), std=std_inv.tolist())
 
+    @override
     def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
         return super().__call__(tensor.clone())
 
@@ -40,6 +48,8 @@ INV_NORM_GREYSCALE_DEFAULT = InverseNormalize(mean=[0.449], std=[0.226])
 
 
 class LightningGradualWarmupScheduler(LRScheduler):
+    """Gradually warm-up(increasing) learning rate in optimizer."""
+
     def __init__(
         self,
         optimizer: Optimizer,
@@ -48,8 +58,7 @@ class LightningGradualWarmupScheduler(LRScheduler):
         T_max=50,
         after_scheduler=None,
     ):
-        """Gradually warm-up(increasing) learning rate in optimizer then run
-        after_scheduler.
+        """Init the scheduler.
 
         Args:
             optimizer: Wrapped optimizer.
@@ -57,6 +66,7 @@ class LightningGradualWarmupScheduler(LRScheduler):
             total_epoch: The total number of epochs for the warm-up phase.
             T_max: The maximum number of epochs for the cosine annealing scheduler.
             after_scheduler: The scheduler to run after the warm-up phase.
+
         """
         self.optimizer = optimizer
         after_scheduler = (
@@ -69,6 +79,7 @@ class LightningGradualWarmupScheduler(LRScheduler):
             after_scheduler=after_scheduler,
         )
 
+    @override
     def step(self, epoch=None, metrics=None):
         return self.scheduler.step(epoch, metrics)
 
@@ -85,13 +96,14 @@ class ClassificationMode(Enum):
 
 
 def get_classification_mode(mode: str) -> ClassificationMode:
-    """Gets the classification mode from a string input.
+    """Get the classification mode from a string input.
 
     Args:
         mode: The classification mode
 
     Raises:
         KeyError: If the mode is not an implemented mode.
+
     """
     return ClassificationMode[mode]
 
@@ -110,13 +122,14 @@ class ResidualMode(Enum):
 
 
 def get_residual_mode(mode: str) -> ResidualMode:
-    """Gets the residual calculation mode from a string input.
+    """Get the residual calculation mode from a string input.
 
     Args:
         mode: The residual calculation mode.
 
     Raises:
         KeyError: If the mode is not an implemented mode.
+
     """
     return ResidualMode[mode]
 
@@ -133,22 +146,24 @@ class LoadingMode(Enum):
 
 
 def get_loading_mode(mode: str) -> LoadingMode:
-    """Gets the classification mode from a string input.
+    """Get the classification mode from a string input.
 
     Args:
         mode: The classification mode
 
     Raises:
         KeyError: If the mode is not an implemented mode.
+
     """
     return LoadingMode[mode]
 
 
 def get_checkpoint_filename(version: str | None) -> str | None:
-    """Gets the checkpoint filename with the version name if it exists.
+    """Get the checkpoint filename with the version name if it exists.
 
     Args:
         version: The version name of the model.
+
     """
     if version is None:
         return None
@@ -156,10 +171,11 @@ def get_checkpoint_filename(version: str | None) -> str | None:
 
 
 def get_best_weighted_avg_dice_filename(version: str | None) -> str:
-    """Gets the filename for the best weighted average dice score.
+    """Get the filename for the best weighted average dice score.
 
     Args:
         version: The version name of the model.
+
     """
     suffix = "-epoch={epoch}-step={step}-dice_w_avg={val/dice_weighted_avg:.4f}"
     if version is None:
@@ -168,10 +184,11 @@ def get_best_weighted_avg_dice_filename(version: str | None) -> str:
 
 
 def get_best_macro_avg_dice_class_2_3_filename(version: str | None) -> str:
-    """Gets the filename for the best macro average dice score for class 2 & 3.
+    """Get the filename for the best macro average dice score for class 2 & 3.
 
     Args:
         version: The version name of the model.
+
     """
     suffix = "-epoch={epoch}-step={step}-dice_m_avg_2_3={val/dice_macro_class_2_3:.4f}"
     if version is None:
@@ -180,10 +197,11 @@ def get_best_macro_avg_dice_class_2_3_filename(version: str | None) -> str:
 
 
 def get_last_checkpoint_filename(version: str | None) -> str | None:
-    """Gets the filename for the last checkpoint.
+    """Get the filename for the last checkpoint.
 
     Args:
         version: The version name of the model.
+
     """
     if version is not None:
         return version + "-last"
@@ -192,10 +210,11 @@ def get_last_checkpoint_filename(version: str | None) -> str | None:
 
 
 def get_version_name(ckpt_path: str | None) -> str | None:
-    """Gets the version name from the checkpoint path.
+    """Get the version name from the checkpoint path.
 
     Args:
         ckpt_path: The path to the checkpoint.
+
     """
     if ckpt_path is not None:
         version = ckpt_path.split("-")[0]
@@ -204,10 +223,11 @@ def get_version_name(ckpt_path: str | None) -> str | None:
 
 
 def configure_optimizers(module: L.LightningModule):
-    """Configures the optimizer and learning rate scheduler for the model.
+    """Configure the optimizer and learning rate scheduler for the model.
 
     Args:
         module: The LightningModule instance.
+
     """
     module.optimizer_kwargs.update({"lr": module.learning_rate})
     match module.optimizer:
@@ -281,7 +301,7 @@ def configure_optimizers(module: L.LightningModule):
 def get_transforms(
     loading_mode: LoadingMode, augment: bool = False
 ) -> tuple[Compose, Compose, Compose, Compose]:
-    """Gets default transformations for all datasets.
+    """Get default transformations for all datasets.
 
     The default implementation resizes the images to (224, 224), casts them to float32,
     normalises them, and sets them to greyscale if the loading mode is not RGB.
@@ -292,6 +312,7 @@ def get_transforms(
 
     Returns:
         tuple: The image, mask, combined, and final resize transformations
+
     """
     # Sets the image transforms
     transforms_img = Compose(
@@ -332,6 +353,15 @@ def get_transforms(
 
 
 def get_accumulate_grad_batches(batch_size: int):
+    """Get the number of batches to accumulate the gradients.
+
+    Args:
+        batch_size: The batch size for training.
+
+    Returns:
+        int: The number of batches to accumulate the gradients
+
+    """
     if batch_size >= 8:
         return 1
     else:

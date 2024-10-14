@@ -44,6 +44,8 @@ torch.set_float32_matmul_precision("medium")
 
 
 class LightningUnetWrapper(L.LightningModule):
+    """LightningModule wrapper for U-Net model."""
+
     def __init__(
         self,
         batch_size: int,
@@ -70,10 +72,12 @@ class LightningUnetWrapper(L.LightningModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
     ):
-        """Wrapper for the UNet model.
+        """Init the UNet model.
 
         Args:
+            batch_size: Mini-batch size.
             metric: Metric to use for evaluation.
+            num_frames: Number of frames to process.
             loss: Loss function to use for training.
             encoder_name: Name of the encoder to use.
             encoder_depth: The depth of the encoder.
@@ -94,6 +98,7 @@ class LightningUnetWrapper(L.LightningModule):
             eval_classification_mode: Classification mode for evaluation.
             loading_mode: Image loading mode.
             dump_memory_snapshot: Whether to dump a memory snapshot after training.
+
         """
         # Trace memory usage
         self.dump_memory_snapshot = dump_memory_snapshot
@@ -196,6 +201,7 @@ class LightningUnetWrapper(L.LightningModule):
 
         self.loading_mode = loading_mode
 
+    @override
     def on_train_start(self):
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
@@ -212,26 +218,44 @@ class LightningUnetWrapper(L.LightningModule):
                 },
             )
 
+    @override
     def on_train_end(self) -> None:
         if self.dump_memory_snapshot:
             torch.cuda.memory._dump_snapshot("unet_snapshot.pickle")
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=self.device.type):
             return self.model(x)  # pyright: ignore[reportCallIssue]
 
+    @override
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
 
+    @override
     def on_validation_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "val")
 
+    @override
     def on_test_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "test")
 
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ) -> torch.Tensor:
+        """Forward pass for the model with dataloader batches.
+
+        Args:
+            batch: Batch of frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+
+        Return:
+            torch.tensor: Training loss.
+
+        Raises:
+            AssertionError: Prediction shape and ground truth mask shapes are different.
+
+        """
         images, masks, _ = batch
         bs: int = images.shape[0] if len(images.shape) > 3 else 1
 
@@ -288,11 +312,13 @@ class LightningUnetWrapper(L.LightningModule):
                 )
         return loss_all
 
+    @override
     def validation_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ):
         self._shared_eval(batch, batch_idx, "val")
 
+    @override
     def test_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ) -> None:
@@ -311,6 +337,7 @@ class LightningUnetWrapper(L.LightningModule):
             batch: Batch of data.
             batch_idx: Index of the batch.
             prefix: Prefix for the logger.
+
         """
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
@@ -383,7 +410,7 @@ class LightningUnetWrapper(L.LightningModule):
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
-        """Logs images to tensorboard.
+        """Log images to tensorboard.
 
         Args:
             batch_idx: Index of the batch.
@@ -400,6 +427,7 @@ class LightningUnetWrapper(L.LightningModule):
             AssertionError: If the logger is not detected or is not an instance of
             TensorboardLogger.
             ValueError: If any of `images`, `masks`, or `masks_preds` are malformed.
+
         """
         assert self.logger is not None, "No logger detected!"
         assert isinstance(
@@ -466,6 +494,7 @@ class LightningUnetWrapper(L.LightningModule):
                 global_step=step,
             )
 
+    @override
     @torch.no_grad()
     def predict_step(
         self,
@@ -473,6 +502,18 @@ class LightningUnetWrapper(L.LightningModule):
         batch_idx: int,
         dataloader_idx: int = 0,
     ):
+        """Forward pass for the model for one minibatch of a test epoch.
+
+        Args:
+            batch: Batch of frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+            dataloader_idx: Index of the dataloader.
+
+        Return:
+            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
+                and filename.
+
+        """
         self.eval()
         images, masks, fn = batch
         images_input = images.to(self.device.type)
@@ -503,6 +544,8 @@ class LightningUnetWrapper(L.LightningModule):
 
 
 class CineBaselineDataModule(L.LightningDataModule):
+    """DataModule for the Cine baseline implementation."""
+
     def __init__(
         self,
         frames: int = 30,
@@ -516,9 +559,10 @@ class CineBaselineDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ):
-        """DataModule for the Cine baseline implementation.
+        """Init the Cine baseline datamodule.
 
         Args:
+            frames: Number of frames to use.
             data_dir: Path to the directory containing the training and validation data.
             test_dir: Path to the directory containing the test data.
             indices_dir: Path to the directory containing the indices.
@@ -527,6 +571,8 @@ class CineBaselineDataModule(L.LightningDataModule):
             num_workers: Number of workers for the data loader.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine train/val sets.
+            augment: Whether to perform data augmentation during training.
+
         """
         super().__init__()
         self.save_hyperparameters()
@@ -618,10 +664,8 @@ class CineBaselineDataModule(L.LightningDataModule):
             self.val = valid_set
             self.test = test_dataset
 
-    def on_exception(self, exception):
-        raise exception
-
     def train_dataloader(self):
+        """Get the training dataloader."""
         return DataLoader(
             self.train,
             batch_size=self.batch_size,
@@ -632,6 +676,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             shuffle=True,
         )
 
+    @override
     def val_dataloader(self):
         return DataLoader(
             self.val,
@@ -642,6 +687,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def test_dataloader(self):
         return DataLoader(
             self.test,
@@ -651,6 +697,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def predict_dataloader(self):
         return DataLoader(
             self.test,
@@ -662,6 +709,9 @@ class CineBaselineDataModule(L.LightningDataModule):
 
 
 class CineCLI(CommonCLI):
+    """CLI class for cine CMR task."""
+
+    @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         super().add_arguments_to_parser(parser)
 

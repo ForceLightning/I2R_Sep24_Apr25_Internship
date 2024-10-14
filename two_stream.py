@@ -43,6 +43,8 @@ torch.set_float32_matmul_precision("medium")
 
 
 class TwoStreamUnetLightning(L.LightningModule):
+    """Two stream U-Net for LGE & cine CMR."""
+
     def __init__(
         self,
         batch_size: int,
@@ -69,6 +71,34 @@ class TwoStreamUnetLightning(L.LightningModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
     ) -> None:
+        """Initialise the 2-stream U-Net.
+
+        Args:
+            batch_size: The batch size.
+            metric: The metric to use.
+            loss: The loss function to use.
+            encoder_name: The encoder name.
+            encoder_depth: The encoder depth.
+            encoder_weights: The encoder weights.
+            in_channels: The number of input channels.
+            classes: The number of classes.
+            num_frames: The number of frames.
+            weights_from_ckpt_path: The path to the checkpoint.
+            optimizer: The optimizer to use.
+            optimizer_kwargs: The optimizer keyword arguments.
+            scheduler: The learning rate scheduler.
+            scheduler_kwargs: The learning rate scheduler keyword arguments.
+            multiplier: The multiplier.
+            total_epochs: The total number of epochs.
+            alpha: The alpha loss scaling value.
+            _beta: (Unused) The beta loss scaling value.
+            learning_rate: The learning rate.
+            dl_classification_mode: The classification mode for the dataloader.
+            eval_classification_mode: The classification mode for evaluation.
+            loading_mode: The loading mode.
+            dump_memory_snapshot: Whether to dump memory snapshot.
+
+        """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
         self.batch_size = batch_size
@@ -175,6 +205,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 except RuntimeError as e:
                     raise e
 
+    @override
     def on_train_start(self):
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
@@ -191,28 +222,47 @@ class TwoStreamUnetLightning(L.LightningModule):
                 },
             )
 
+    @override
     def on_train_end(self) -> None:
         if self.dump_memory_snapshot:
             torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
 
+    @override
     def forward(self, lge: torch.Tensor, cine: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=self.device.type):
             return self.model(lge, cine)  # pyright: ignore[reportCallIssue]
 
+    @override
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
 
+    @override
     def on_validation_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "val")
 
+    @override
     def on_test_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "test")
 
+    @override
     def training_step(
         self,
         batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
         batch_idx: int,
     ) -> torch.Tensor:
+        """Forward pass for the model with dataloader batches.
+
+        Args:
+            batch: Batch of LGE images, cine frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+
+        Return:
+            torch.tensor: Training loss.
+
+        Raises:
+            AssertionError: Prediction shape and ground truth mask shapes are different.
+
+        """
         lges, cines, masks, _names = batch
         bs = lges.shape[0] if len(lges.shape) > 3 else 1
         lges = lges.to(device=self.device, dtype=torch.float32)
@@ -270,6 +320,7 @@ class TwoStreamUnetLightning(L.LightningModule):
 
         return loss_all
 
+    @override
     def validation_step(
         self,
         batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
@@ -277,6 +328,7 @@ class TwoStreamUnetLightning(L.LightningModule):
     ):
         self._shared_eval(batch, batch_idx, "val")
 
+    @override
     def test_step(
         self,
         batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
@@ -365,7 +417,7 @@ class TwoStreamUnetLightning(L.LightningModule):
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
-        """Logs the images to tensorboard.
+        """Log the images to tensorboard.
 
         Args:
             batch_idx: The batch index.
@@ -382,6 +434,7 @@ class TwoStreamUnetLightning(L.LightningModule):
             AssertionError: If the logger is not detected or is not an instance of
             TensorboardLogger.
             ValueError: If any of `images`, `masks`, or `masks_preds` are malformed.
+
         """
         assert self.logger is not None, "No logger detected!"
         assert isinstance(
@@ -448,6 +501,7 @@ class TwoStreamUnetLightning(L.LightningModule):
                 global_step=step,
             )
 
+    @override
     @torch.no_grad()
     def predict_step(
         self,
@@ -484,11 +538,10 @@ class TwoStreamUnetLightning(L.LightningModule):
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
 
-    def on_exception(self, exception: BaseException):
-        raise exception
-
 
 class TwoStreamDataModule(L.LightningDataModule):
+    """Two stream datamodule for LGE & cine CMR."""
+
     def __init__(
         self,
         data_dir: str = "data/train_val/",
@@ -502,6 +555,21 @@ class TwoStreamDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ) -> None:
+        """Initialise the TwoStreamDataModule.
+
+        Args:
+            data_dir: The data directory.
+            test_dir: The test directory.
+            indices_dir: The indices directory.
+            batch_size: The batch size.
+            frames: The number of frames.
+            classification_mode: The classification mode.
+            num_workers: The number of workers.
+            loading_mode: The loading mode.
+            combine_train_val: Whether to combine the training and validation sets.
+            augment: Whether to augment the data during training.
+
+        """
         super().__init__()
         self.save_hyperparameters()
         self.data_dir = data_dir
@@ -515,6 +583,7 @@ class TwoStreamDataModule(L.LightningDataModule):
         self.combine_train_val = combine_train_val
         self.augment = augment
 
+    @override
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
 
@@ -596,9 +665,7 @@ class TwoStreamDataModule(L.LightningDataModule):
             self.val = valid_set
             self.test = test_dataset
 
-    def on_exception(self, exception):
-        raise exception
-
+    @override
     def train_dataloader(self):
         return DataLoader(
             self.train,
@@ -610,6 +677,7 @@ class TwoStreamDataModule(L.LightningDataModule):
             shuffle=True,
         )
 
+    @override
     def val_dataloader(self):
         return DataLoader(
             self.val,
@@ -620,6 +688,7 @@ class TwoStreamDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def test_dataloader(self):
         return DataLoader(
             self.test,
@@ -629,6 +698,7 @@ class TwoStreamDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def predict_dataloader(self):
         return DataLoader(
             self.test,
@@ -640,6 +710,9 @@ class TwoStreamDataModule(L.LightningDataModule):
 
 
 class TwoStreamCLI(CommonCLI):
+    """Two stream CLI for LGE & cine CMR."""
+
+    @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         super().add_arguments_to_parser(parser)
 

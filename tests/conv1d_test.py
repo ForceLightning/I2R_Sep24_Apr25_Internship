@@ -13,6 +13,8 @@ DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("
 
 
 class TestNewCompress:
+    """Test the new compress function."""
+
     batch_size = 2
     num_channels = 2048
     height = 7
@@ -51,6 +53,8 @@ class TestNewCompress:
 
 
 class TestNewOneD:
+    """Test the new OneD model."""
+
     batch_size = 2
     resnets = ["resnet18", "resnet34", "resnet50"]
     num_frames = range(5, 35, 5)
@@ -64,6 +68,16 @@ class TestNewOneD:
         resnet: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
         layer: int,
     ):
+        """Test the DilatedOneD model with different approaches to compressing the input.
+
+        This test is performed for frames in range 5 to 30, with a step of 5.
+
+        Args:
+            num_frames: Number of frames.
+            resnet: ResNet model name.
+            layer: Layer index.
+
+        """
         # Set deterministic mode so that the results are reproducible
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
@@ -120,6 +134,7 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
     Return:
         Compressed output tensor.
+
     """
     # Input shape is (n_frames, batch_size, channels, n, n). Ensure that block has an
     # in_channels of one and and out_channels of n*n
@@ -170,14 +185,15 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
 
 def _compress_wrapper(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
-    """Wrapper function for compress2.
+    """Wrap function for compress2.
 
     Args:
         stacked_outputs: Input tensor of shape (B, F, C, H, W).
         block: One dimensional block.
 
-    Return
+    Return:
         Compressed output tensor.
+
     """
     # Incoming tensor of shape (B, F, C, H, W)
     # Input to compress2 must be of shape (F, B, C, H, W)

@@ -17,6 +17,8 @@ from models.common import ENCODER_OUTPUT_SHAPES
 
 
 class OneD(nn.Module):
+    """1D Temporal Convolutional Block."""
+
     def __init__(
         self,
         in_channels: int,
@@ -25,7 +27,7 @@ class OneD(nn.Module):
         flat: bool = False,
         activation: str | type[nn.Module] | None = None,
     ) -> None:
-        """1D Temporal Convolutional Block.
+        """Init the 1D Temporal Convolutional Block.
 
         Args:
             in_channels: Number of input channels.
@@ -39,6 +41,7 @@ class OneD(nn.Module):
 
         Note:
             The number of frames must be one of 5, 10, 15, 20, or 30.
+
         """
         super().__init__()
         self.activation: type[nn.Module]
@@ -116,6 +119,8 @@ class OneD(nn.Module):
 
 
 class DilatedOneD(nn.Module):
+    """1D Temporal Convolutional Block with dilations."""
+
     def __init__(
         self,
         in_channels: int,
@@ -125,7 +130,7 @@ class DilatedOneD(nn.Module):
         flat: bool = False,
         activation: str | type[nn.Module] | None = None,
     ):
-        """1D Temporal Convolutional Block with dilations.
+        """Init the 1D Temporal Convolutional Block with dilations.
 
         Args:
             in_channels: Number of input channels.
@@ -140,6 +145,7 @@ class DilatedOneD(nn.Module):
 
         Note:
             The number of frames must be one of 5, 10, 15, 20, or 30.
+
         """
         super().__init__()
         if isinstance(activation, type):
@@ -227,6 +233,7 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
 
     Return:
         torch.Tensor: 4D tensor of shape (batch_size, num_channels, h, w).
+
     """
     # Input shape: (B, F, C, H, W).
     b, f, c, h, w = stacked_outputs.shape
@@ -253,6 +260,7 @@ def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch
 
     Return:
         torch.Tensor: 4D tensor of shape (batch_size, num_channels, h, w).
+
     """
     # Input shape: (B, F, C, H, W).
     b, f, c, h, w = stacked_outputs.shape
@@ -272,6 +280,8 @@ def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch
 
 
 class TwoPlusOneUnet(SegmentationModel):
+    """2+1D U-Net model."""
+
     _default_decoder_channels = [256, 128, 64, 32, 16]
     _default_skip_conn_channels = [2, 5, 10, 20, 40]
 
@@ -293,7 +303,7 @@ class TwoPlusOneUnet(SegmentationModel):
         res_conv_activation: str | None = None,
         use_dilations: bool = False,
     ) -> None:
-        """2+1D U-Net model.
+        """Init the 2+1D U-Net model.
 
         Args:
             encoder_name: Name of the encoder.
@@ -311,7 +321,10 @@ class TwoPlusOneUnet(SegmentationModel):
             num_frames: Number of frames in the input tensor.
             aux_params: Auxiliary parameters for the model.
             flat_conv: If True, only one convolutional layer is used.
-            unet_activation: Activation function to use in the U-Net.
+            res_conv_activation: Activation function to use in the U-Net.
+            use_dilations: If True, use dilated convolutions in the temporal
+                convolutions.
+
         """
         super().__init__()
         self.num_frames = num_frames
@@ -412,6 +425,7 @@ class TwoPlusOneUnet(SegmentationModel):
 
         Return:
             torch.Tensor: 4D tensor of shape (batch_size, classes, height, width).
+
         """
         # The first layer of the skip connection gets ignored, but in order for the
         # indexing later on to work, the feature output needs an empty first output.
@@ -457,8 +471,7 @@ class TwoPlusOneUnet(SegmentationModel):
     @override
     @torch.no_grad()
     def predict(self, x):
-        """Inference method. Switch model to `eval` mode, call `.forward(x)` with
-        `torch.no_grad()`.
+        """Inference method.
 
         Args:
             x: 4D torch tensor with shape (batch_size, channels, height, width)
@@ -466,6 +479,7 @@ class TwoPlusOneUnet(SegmentationModel):
         Return:
             torch.Tensor: 4D torch tensor with shape (batch_size, classes, height,
             width).
+
         """
         if self.training:
             self.eval()

@@ -44,6 +44,8 @@ torch.set_float32_matmul_precision("medium")
 
 
 class TwoPlusOneUnetLightning(L.LightningModule):
+    """A LightningModule wrapper for the modified 2+1 U-Net architecture."""
+
     def __init__(
         self,
         batch_size: int,
@@ -72,10 +74,10 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         flat_conv: bool = False,
         unet_activation: str | None = None,
     ):
-        """A LightningModule wrapper for the modified Unet for the two-plus-one
-        architecture.
+        """Init the 2+1 U-Net LightningModule.
 
         Args:
+            batch_size: Mini-batch size.
             metric: The metric to use for evaluation.
             loss: The loss function to use for training.
             encoder_name: The encoder name to use for the Unet.
@@ -95,7 +97,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             _beta: The beta value for the loss function (Unused).
             learning_rate: The learning rate.
             dl_classification_mode: The classification mode for the dataloader.
-            eval_classifiation_mode: The classification mode for evaluation.
+            eval_classification_mode: The classification mode for evaluation.
             loading_mode: Image loading mode.
             dump_memory_snapshot: Whether to dump a memory snapshot after training.
             flat_conv: Whether to use a flat temporal convolutional layer.
@@ -104,6 +106,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         Raises:
             NotImplementedError: If the loss type is not implemented.
             RuntimeError: If the checkpoint is not loaded correctly.
+
         """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -216,6 +219,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                     raise e
 
     def on_train_start(self):
+        """Call at the beginning of training after sanity check."""
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
                 self.hparams,  # pyright: ignore[reportArgumentType]
@@ -231,26 +235,45 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                 },
             )
 
+    @override
     def on_train_end(self) -> None:
         if self.dump_memory_snapshot:
             torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=self.device.type):
             return self.model(x)  # pyright: ignore[reportCallIssue]
 
+    @override
     def on_train_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "train")
 
+    @override
     def on_validation_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "val")
 
+    @override
     def on_test_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "test")
 
+    @override
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ) -> torch.Tensor:
+        """Forward pass for the model with dataloader batches.
+
+        Args:
+            batch: Batch of frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+
+        Return:
+            torch.tensor: Training loss.
+
+        Raises:
+            AssertionError: Prediction shape and ground truth mask shapes are different.
+
+        """
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
         images_input = images.to(self.device.type, dtype=torch.float32)
@@ -307,11 +330,13 @@ class TwoPlusOneUnetLightning(L.LightningModule):
 
         return loss_all
 
+    @override
     def validation_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ):
         self._shared_eval(batch, batch_idx, "val")
 
+    @override
     def test_step(self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int):
         self._shared_eval(batch, batch_idx, "test")
 
@@ -328,6 +353,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             batch: The batch of images and masks.
             batch_idx: The batch index.
             prefix: The runtime mode (val, test).
+
         """
         self.eval()
         images, masks, _ = batch
@@ -400,7 +426,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
-        """Logs the images to tensorboard.
+        """Log the images to tensorboard.
 
         Args:
             batch_idx: The batch index.
@@ -417,6 +443,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
             AssertionError: If the logger is not detected or is not an instance of
             TensorboardLogger.
             ValueError: If any of `images`, `masks`, or `masks_preds` are malformed.
+
         """
         assert self.logger is not None, "No logger detected!"
         assert isinstance(
@@ -487,6 +514,7 @@ class TwoPlusOneUnetLightning(L.LightningModule):
                 global_step=step,
             )
 
+    @override
     @torch.no_grad()
     def predict_step(
         self,
@@ -494,6 +522,18 @@ class TwoPlusOneUnetLightning(L.LightningModule):
         batch_idx: int,
         dataloader_idx: int = 0,
     ):
+        """Forward pass for the model for one minibatch of a test epoch.
+
+        Args:
+            batch: Batch of frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+            dataloader_idx: Index of the dataloader.
+
+        Return:
+            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
+                and filename.
+
+        """
         self.eval()
         images, masks, fn = batch
         images_input = images.to(self.device.type)
@@ -515,11 +555,10 @@ class TwoPlusOneUnetLightning(L.LightningModule):
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return utils.configure_optimizers(self)
 
-    def on_exception(self, exception: BaseException):
-        raise exception
-
 
 class TwoPlusOneDataModule(L.LightningDataModule):
+    """Datamodule for the TwoPlusOne dataset for PyTorch Lightning compatibility."""
+
     def __init__(
         self,
         data_dir: str = "data/train_val/",
@@ -534,7 +573,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ):
-        """Datamodule for the TwoPlusOne dataset for PyTorch Lightning compatibility.
+        """Init the 2+1 datamodule.
 
         Args:
             data_dir: Path to train data directory containing Cine and masks
@@ -551,6 +590,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine train/val sets.
             augment: Whether to augment images and masks together.
+
         """
         super().__init__()
         self.save_hyperparameters()
@@ -568,6 +608,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         self.combine_train_val = combine_train_val
         self.augment = augment
 
+    @override
     def setup(self, stage):
         indices_dir = os.path.join(os.getcwd(), self.indices_dir)
 
@@ -648,9 +689,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             self.val = valid_set
             self.test = test_dataset
 
-    def on_exception(self, exception):
-        raise exception
-
+    @override
     def train_dataloader(self):
         return DataLoader(
             self.train,
@@ -662,6 +701,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             shuffle=True,
         )
 
+    @override
     def val_dataloader(self):
         return DataLoader(
             self.val,
@@ -672,6 +712,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def test_dataloader(self):
         return DataLoader(
             self.test,
@@ -681,6 +722,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def predict_dataloader(self):
         return DataLoader(
             self.test,
@@ -692,6 +734,9 @@ class TwoPlusOneDataModule(L.LightningDataModule):
 
 
 class TwoPlusOneCLI(CommonCLI):
+    """CLI class for cine CMR 2+1 task."""
+
+    @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         super().add_arguments_to_parser(parser)
 
