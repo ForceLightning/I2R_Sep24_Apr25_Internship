@@ -19,7 +19,7 @@ To address the performance regression in the second commit, we instead instantia
 
 | Implementation | Time Taken         | Performance Difference |
 | -------------- | ------------------ | ---------------------- |
-| Original       | 79.5 ms ± 2.7 ms   | 00.00%                 |
+| Original       | 79.5 ms ± 2.7 ms   |                        |
 | Pillow [db8c37d](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/db8c37dca6bcf0514903de2bd1e765b7b5ed2cbd) | 101 ms ± 1.43 ms  | +27.04%                 |
 | New [cbfe084](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/cbfe084e24bf2eb9abd2cdedb44189c7b8ed70a9)    | 41.6 ms ± 1.31 ms | -47.67%                 |
 
@@ -33,10 +33,20 @@ By using `torch.random.fork_rng()`, we can initialise the modules of similarly s
 
 Implemented the attention mechanism in the U-Net architecture with residual frames.
 
+# 2024-09-24 Dilated 1D Temporal Convolutions
+[714c791](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/714c79192d8f41fe51ad4f4838812872034226ad)
+
+Implemented dilated 1D temporal convolutions to reduce computational cost in reshaping tensors for input. Provides a minor improvement to compute performance.
+
+| Convolution Type | Time taken        | Performance difference |
+| ---------------- | ----------------- | ---------------------- |
+| Regular          | 2.06 ms ± 17.7 μs |                        |
+| Dilated          | 1.02 ms ± 29.3 μs | -50.49%                |
+
 # 2024-09-23 - Flattened Temporal Convolutions
 [7b0ea7b](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/7b0ea7b910b4faa302a7308eb9c050c2b624b154)
 
-Implemented options to set flat temporal convolutional layers for the 2+1 model. For example, if the original script had a convolutional layer stack of filters with ([input] → kernel 1 → kernel 2 → ... → [output]) ([\30] → 5 → 3 → 2 → [1]) we had instead ([30] → 30 → [1])
+Implemented options to set flat temporal convolutional layers for the 2+1 model. For example, if the original script had a convolutional layer stack of filters with ([input] → kernel 1 → kernel 2 → ... → [output]) ([30] → 5 → 3 → 2 → [1]) we had instead ([30] → 30 → [1])
 
 | Flattened Conv layers? | Validation Loss | Dice (Macro Avg.) | Dice (Weighted Avg.) | Dice Class 1 | Dice Class 2 | Dice Class 3 | Runtime  |
 | ---------------------- | --------------- | ----------------- | -------------------- | ------------ | ------------ | ------------ | -------- |
@@ -69,10 +79,10 @@ A comparison on the LGE, Cine, and TwoPlusOne tasks are as follows:
 
 The original script used OpenCV methods to load the data, which takes a significant amount of time when loading multi-frame .TIFF files in the Cine task. Instead, we may use Pillow's lazily loaded Image objects which tie-in nicely with `torchvision`'s transform methods. The speedup for the Cine task is as shown below:
 
-| Implementation | `__getitem__` time | Time saved |
-| -------------- | ---------------- | ---------- |
-| Original       | 171 ms ± 786 μs  |            |
-| Pillow         | 67.9 ms ± 600 μs | -39.70%    |
+| Implementation | `__getitem__` time | Performance difference |
+| -------------- | ---------------- | ---------------------- |
+| Original       | 171 ms ± 786 μs  |                        |
+| Pillow         | 67.9 ms ± 600 μs | -39.70%                |
 
 This includes image transformations, where the Pillow implementation includes an additional transform on the combined Cine images and mask, so that transformations like rotations and elastic transform can be applied together.
 
