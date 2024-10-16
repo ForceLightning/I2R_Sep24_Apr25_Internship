@@ -71,6 +71,7 @@ class MaskImageWriter(BasePredictionWriter):
             for mask_pred, image, fn in zip(
                 batched_mask_preds, batched_images, batched_fns, strict=True
             ):
+                num_frames = image.shape[0]
 
                 masked_frames: list[Image] = []
                 for frame in image:
@@ -97,7 +98,7 @@ class MaskImageWriter(BasePredictionWriter):
                             save_path,
                             append_images=masked_frames[1:],
                             save_all=True,
-                            duration=1000 / 30,
+                            duration=1000 / num_frames,
                             default_image=False,
                             disposal=1,
                             loop=0,
@@ -107,7 +108,7 @@ class MaskImageWriter(BasePredictionWriter):
                             save_path,
                             append_images=masked_frames[1:],
                             save_all=True,
-                            duration=1000 / 30,
+                            duration=1000 / num_frames,
                             disposal=2,
                             loop=0,
                         )
@@ -116,7 +117,7 @@ class MaskImageWriter(BasePredictionWriter):
                             save_path,
                             append_images=masked_frames[1:],
                             save_all=True,
-                            duration=1000 / 30,
+                            duration=1000 / num_frames,
                             loop=0,
                             background=(0, 0, 0, 0),
                             allow_mixed=True,
@@ -162,7 +163,7 @@ def _draw_masks(
     return v2f.to_pil_image(
         draw_segmentation_masks(
             norm_img,
-            mask_one_hot,
+            mask_one_hot.bool(),
             colors=["black", "red", "blue", "green"],
             alpha=0.5,
         ),
