@@ -270,6 +270,7 @@ profiling/
 # Loose pickle or checkpoint files
 *.ckpt
 *.pickle
+*.out
 
 # Non-default configs
 configs/
