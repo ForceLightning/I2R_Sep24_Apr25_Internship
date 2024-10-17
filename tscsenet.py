@@ -579,10 +579,10 @@ if __name__ == "__main__":
         save_config_callback=None,
         auto_configure_optimizers=False,
         parser_kwargs={
-            "fit": {"default_config_files": ["./configs/two_plus_one.yaml"]},
+            "fit": {"default_config_files": ["./configs/tscsenet.yaml.yaml"]},
             "predict": {
                 "default_config_files": [
-                    "./configs/two_plus_one.yaml",
+                    "./configs/tscsenet.yaml",
                     "./configs/predict.yaml",
                 ]
             },
