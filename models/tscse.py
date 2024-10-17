@@ -535,7 +535,7 @@ class Encoder3DMixin(EncoderMixin):
     def output_stride(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
     ) -> _size_3_t:
-
+        """Get the output stride of the encoder."""
         if isinstance(self._output_stride, int):
             return min(self._output_stride, 2**self._depth)
         hw = min(max(self._output_stride[1:]), 2**self._depth)
