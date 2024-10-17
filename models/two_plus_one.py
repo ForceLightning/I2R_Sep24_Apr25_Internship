@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import Any, Callable, Literal, override
+from typing import Any, Callable, Literal, Type, override
 
 import torch
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
@@ -25,7 +25,7 @@ class OneD(nn.Module):
         out_channels: int,
         num_frames: int,
         flat: bool = False,
-        activation: str | type[nn.Module] | None = None,
+        activation: str | Type[nn.Module] | None = None,
     ) -> None:
         """Init the 1D Temporal Convolutional Block.
 
