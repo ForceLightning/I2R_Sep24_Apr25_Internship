@@ -70,9 +70,9 @@ class TSCSEModule(nn.Module):
 
     @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        cSE = self.cSE(x)
-        sSE = self.sSE(x)
-        tSE = self.tSE(x)
+        cSE = self.cSE(x).sigmoid()
+        sSE = self.sSE(x).sigmoid()
+        tSE = self.tSE(x).sigmoid()
         return x * cSE + x * sSE + x * tSE
 
 
