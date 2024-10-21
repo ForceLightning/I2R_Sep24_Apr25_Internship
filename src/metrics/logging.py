@@ -255,6 +255,7 @@ def _grouped_generalized_dice_logging(
                 if i == 0:
                     continue  # NOTE: Skips background class.
                 results[f"{prefix}/dice_class_{i}"] = class_metric
+                results[f"hp/{prefix}/dice_class_{i}"] = class_metric
 
             # Remove the per_class metric from the results.
             del results[f"{prefix}/dice_per_class"]
