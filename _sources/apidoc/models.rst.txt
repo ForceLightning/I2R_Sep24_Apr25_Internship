@@ -1,0 +1,61 @@
+models package
+==============
+
+Submodules
+----------
+
+models.attention module
+-----------------------
+
+.. automodule:: models.attention
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.common module
+--------------------
+
+.. automodule:: models.common
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.p3d module
+-----------------
+
+.. automodule:: models.p3d
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.tscse module
+-------------------
+
+.. automodule:: models.tscse
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.two\_plus\_one module
+----------------------------
+
+.. automodule:: models.two_plus_one
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.two\_stream module
+-------------------------
+
+.. automodule:: models.two_stream
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: models
+   :members:
+   :undoc-members:
+   :show-inheritance:

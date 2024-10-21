@@ -1,0 +1,29 @@
+metrics package
+===============
+
+Submodules
+----------
+
+metrics.dice module
+-------------------
+
+.. automodule:: metrics.dice
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+metrics.logging module
+----------------------
+
+.. automodule:: metrics.logging
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: metrics
+   :members:
+   :undoc-members:
+   :show-inheritance:
