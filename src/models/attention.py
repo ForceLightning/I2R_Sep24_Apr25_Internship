@@ -14,6 +14,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from models.common import ENCODER_OUTPUT_SHAPES
+from models.tscse import TSCSENetEncoder
 from models.tscse import get_encoder as tscse_get_encoder
 from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
 from utils.utils import ResidualMode
@@ -387,6 +388,29 @@ class ResidualAttentionUnet(SegmentationModel):
         self.initialize()
 
     @override
+    def check_input_shape(self, x):
+        if isinstance(self.encoder, TSCSENetEncoder):
+            self._check_input_shape_tscse(x)
+        else:
+            super().check_input_shape(x)
+
+    def _check_input_shape_tscse(self, x):
+        h, w = x.shape[-2:]
+        output_stride = self.encoder.output_stride
+        if isinstance(output_stride, tuple):
+            hs, ws = output_stride[1:]
+        else:
+            hs = ws = output_stride
+
+        if h % hs != 0 or w % ws != 0:
+            new_h = (h // hs + 1) * hs if h % hs != 0 else h
+            new_w = (w // ws + 1) * ws if w % ws != 0 else w
+            raise RuntimeError(
+                f"Wrong input shape height={h}, width={w}. Expected image height and width "
+                f"divisible by {(hs, ws)}. Consider pad your images to shape ({new_h}, {new_w})."
+            )
+
+    @override
     def initialize(self) -> None:
         super().initialize()
 
@@ -451,25 +475,42 @@ class ResidualAttentionUnet(SegmentationModel):
 
         """
         # Output features by batch and then by encoder layer.
-        img_features_list: list[list[torch.Tensor]] = []
-        res_features_list: list[list[torch.Tensor]] = []
+        img_features_list: list[torch.Tensor] = []
+        res_features_list: list[torch.Tensor] = []
 
         # Go through by batch and get the results for each layer of the encoder.
-        for imgs, r_imgs in zip(regular_frames, residual_frames, strict=False):
-            self.check_input_shape(imgs)
-            self.check_input_shape(r_imgs)
+        if isinstance(self.encoder, TSCSENetEncoder):
+            for imgs, r_imgs in zip(regular_frames, residual_frames, strict=False):
+                self.check_input_shape(imgs)
+                self.check_input_shape(r_imgs)
 
-            img_features = self.spatial_encoder(imgs)
-            img_features_list.append(img_features)
-            res_features = self.residual_encoder(r_imgs)
-            res_features_list.append(res_features)
+            # (B, F, C, H, W) -> (B, C, F, H, W)
+            img_reshaped = regular_frames.permute(0, 2, 1, 3, 4)
+            res_reshaped = residual_frames.permute(0, 2, 1, 3, 4)
+
+            img_features_list = self.spatial_encoder(img_reshaped)
+            res_features_list = self.residual_encoder(res_reshaped)
+        else:
+            for imgs, r_imgs in zip(regular_frames, residual_frames, strict=False):
+                self.check_input_shape(imgs)
+                self.check_input_shape(r_imgs)
+
+                img_features = self.spatial_encoder(imgs)
+                img_features_list.append(img_features)
+                res_features = self.residual_encoder(r_imgs)
+                res_features_list.append(res_features)
 
         residual_outputs: list[torch.Tensor | list[str]] = [["EMPTY"]]
 
         for i in range(1, 6):
-            # Now inputs to the attn block are stacked by batch dimension first.
-            img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
-            res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
+            if isinstance(self.encoder, TSCSENetEncoder):
+                # (B, C, F, H, W) -> (B, F, C, H, W)
+                img_outputs = img_features_list[i].permute(0, 2, 1, 3, 4)
+                res_outputs = res_features_list[i].permute(0, 2, 1, 3, 4)
+            else:
+                # Now inputs to the attn block are stacked by batch dimension first.
+                img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
+                res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
             res_block: SpatialAttentionBlock = self.res_layers[
                 i - 1

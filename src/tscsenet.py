@@ -50,7 +50,7 @@ class TSCSEUnetLightning(L.LightningModule):
         batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
-        encoder_name: str = "resnet34",
+        encoder_name: str = "tscse_resnet50",
         encoder_depth: int = 5,
         in_channels: int = 3,
         classes: int = 1,
@@ -564,7 +564,7 @@ class TSCSECLI(CommonCLI):
             "dl_classification_mode": "MULTICLASS_MODE",
             "eval_classification_mode": "MULTILABEL_MODE",
             "trainer.max_epochs": 50,
-            "model.encoder_name": "resnet50",
+            "model.encoder_name": "tscse_resnet50",
             "model.in_channels": 3,
             "model.classes": 4,
         }
