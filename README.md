@@ -82,6 +82,15 @@ Set the path to the virutal env to find numpy header files and the number of dis
 
 # Usage
 Some default configurations are included in the `./configs/` directory, which will be used as modular pieces to construct the complete training/validation configuration.
+
+> [!NOTE]
+> Ensure that the environment variable `PYTHONPATH` is set to `./src/`.
+> This can be done with:
+> ```sh
+> export PYTHONPATH=./src/
+> ```
+> Alternatively, set it in a `.env` file if using pipenv.
+
 ## Description of config modules
 - `cine.yaml`, `lge.yaml`, `two_stream.yaml`, `two_plus_one.yaml`, `residual_attention.yaml`: Incomplete defaults for initialisation.
 - `training.yaml`, `testing.yaml`, `no_checkpointing.yaml`: Overrides for training or validation/testing/quick run modes. This must be the last config file loaded in.
@@ -99,34 +108,34 @@ Some default configurations are included in the `./configs/` directory, which wi
 
 See the help descriptions for more info.
 ```sh
-python <script_name>.py --help
+python -m <script_name> --help
 ```
 
 ## LGE
 The example below runs a U-Net with a ResNet50 backbone and RGB image loading.
 ```sh
-python lge.py fit --config ./configs/lge.yaml --config ./configs/lge_rgb.yaml --configs ./configs/training.yaml --version default
+python -m lge fit --config ./configs/lge.yaml --config ./configs/lge_rgb.yaml --configs ./configs/training.yaml --version default
 ```
 
 ## CINE
 The example below runs a U-Net with a ResNet50 backbone and RGB image loading.
 ```sh
-python cine.py fit --config ./configs/cine.yaml --config ./configs/cine_rgb.yaml --configs ./configs/cine_tpo_resnet50.yaml --configs ./configs/training.yaml --version default
+python -m cine --config ./configs/cine.yaml --config ./configs/cine_rgb.yaml --configs ./configs/cine_tpo_resnet50.yaml --configs ./configs/training.yaml --version default
 ```
 
 ## Two Stream
 The example below runs a U-Net with a Resnet50 backbone and RGB image loading.
 ```sh
-python two_stream.py fit --config ./configs/two_stream.yaml --config ./configs/two_stream_rgb.yaml --config ./configs/cine_tpo_resnet50.yaml --configs ./configs/training.yaml --version default
+python -m two_stream fit --config ./configs/two_stream.yaml --config ./configs/two_stream_rgb.yaml --config ./configs/cine_tpo_resnet50.yaml --configs ./configs/training.yaml --version default
 ```
 
 ## 2 + 1
 The example below runs a U-Net with 2 + 1 temporal convolution residual connections and a ResNet50 backbone and RGB image loading.
 ```sh
-python two_plus_one.py fit --config ./configs/two_plus_one.yaml --config ./configs/two_plus_one_rgb.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/training.yaml --model.num_frames 5 --version default
+python -m two_plus_one fit --config ./configs/two_plus_one.yaml --config ./configs/two_plus_one_rgb.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/training.yaml --model.num_frames 5 --version default
 ```
 ## Attention U-Net
 The example below runs a U-Net with 2 + 1 temporal convolution residual connections and attention mechanism on residual frames using a ResNet50 backbone and Greyscale image loading.
 ```sh
-python attention_unet.py fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 15 --data.batch_size 1 --version default
+python -m attention_unet fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 15 --data.batch_size 1 --version default
 ```

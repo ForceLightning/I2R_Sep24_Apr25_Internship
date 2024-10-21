@@ -259,7 +259,7 @@ temp/
 I2R_Summer_Internship_Code/
 
 # Profiling tests
-profiling/
+src/profiling/
 
 # Local debug setup
 .vscode/
@@ -280,3 +280,7 @@ configs/
 
 # Custom .ignore for nvim support
 .ignore
+
+# Documentation
+docs/source/apidoc
+docs/build/**
