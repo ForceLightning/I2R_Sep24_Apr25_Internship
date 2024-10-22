@@ -53,6 +53,16 @@ class CommonCLI(LightningCLI):
                     ModelCheckpoint.CHECKPOINT_NAME_LAST = (  # pyright: ignore[reportAttributeAccessIssue]
                         name
                     )
+                if (trainer := config.get("trainer")) is not None:
+                    if (num_devices := trainer.get("devices")) is not None and (
+                        accum_batches := trainer.get("accumulate_grad_batches")
+                    ) is not None:
+                        if isinstance(num_devices, int) and isinstance(
+                            accum_batches, int
+                        ):
+                            trainer["accumulate_grad_batches"] = (
+                                accum_batches // num_devices
+                            )
 
     @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser):

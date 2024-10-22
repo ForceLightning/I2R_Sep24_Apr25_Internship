@@ -798,11 +798,13 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
 class ResidualAttentionCLI(CommonCLI):
     """CLI class for Residual Attention task."""
 
+    @override
     def before_instantiate_classes(self) -> None:
         """Run some code before instantiating the classes.
 
         Sets the torch multiprocessing mode depending on the optical flow method.
         """
+        super().before_instantiate_classes()
         # GUARD: Check for subcommand
         if (subcommand := self.config.get("subcommand")) is not None:
             # GUARD: Check that residual_mode is set
