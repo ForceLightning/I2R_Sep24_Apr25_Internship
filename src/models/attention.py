@@ -478,7 +478,6 @@ class ResidualAttentionUnet(SegmentationModel):
         img_features_list: list[torch.Tensor] = []
         res_features_list: list[torch.Tensor] = []
 
-        # Go through by batch and get the results for each layer of the encoder.
         if isinstance(self.encoder, TSCSENetEncoder):
             for imgs, r_imgs in zip(regular_frames, residual_frames, strict=False):
                 self.check_input_shape(imgs)
@@ -491,6 +490,7 @@ class ResidualAttentionUnet(SegmentationModel):
             img_features_list = self.spatial_encoder(img_reshaped)
             res_features_list = self.residual_encoder(res_reshaped)
         else:
+            # Go through by batch and get the results for each layer of the encoder.
             for imgs, r_imgs in zip(regular_frames, residual_frames, strict=False):
                 self.check_input_shape(imgs)
                 self.check_input_shape(r_imgs)

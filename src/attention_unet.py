@@ -131,7 +131,7 @@ class ResidualAttentionUnetLightning(L.LightningModule):
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
-            residual_mode=residual_mode,
+            # residual_mode=residual_mode,
             in_channels=in_channels,
             classes=classes,
             num_frames=num_frames,
@@ -676,7 +676,9 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         # Handle color v. greyscale transforms.
 
         transforms_img, transforms_mask, transforms_together, transforms_resize = (
-            utils.get_transforms(self.loading_mode, self.augment)
+            ResidualTwoPlusOneDataset.get_default_transforms(
+                self.loading_mode, self.residual_mode, self.augment
+            )
         )
 
         trainval_dataset = ResidualTwoPlusOneDataset(

@@ -594,8 +594,8 @@ class CineBaselineDataModule(L.LightningDataModule):
         trainval_img_dir = os.path.join(os.getcwd(), self.data_dir, "Cine")
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
-        transforms_img, transforms_mask, transforms_together, transforms_resize = (
-            utils.get_transforms(self.loading_mode, self.augment)
+        transforms_img, transforms_mask, transforms_together = (
+            CineDataset.get_default_transforms(self.loading_mode, self.augment)
         )
 
         trainval_dataset = CineDataset(
@@ -604,7 +604,6 @@ class CineBaselineDataModule(L.LightningDataModule):
             indices_dir,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_resize=transforms_resize,
             transform_together=transforms_together,
             frames=self.frames,
             classification_mode=self.classification_mode,
@@ -622,7 +621,6 @@ class CineBaselineDataModule(L.LightningDataModule):
             indices_dir,
             transform_img=transforms_img,
             transform_mask=transforms_mask,
-            transform_resize=transforms_resize,
             mode="test",
             frames=self.frames,
             classification_mode=self.classification_mode,
@@ -649,7 +647,6 @@ class CineBaselineDataModule(L.LightningDataModule):
                 indices_dir,
                 transform_img=transforms_img,
                 transform_mask=transforms_mask,
-                transform_resize=transforms_resize,
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,

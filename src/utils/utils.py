@@ -300,7 +300,7 @@ def configure_optimizers(module: L.LightningModule):
 
 def get_transforms(
     loading_mode: LoadingMode, augment: bool = False
-) -> tuple[Compose, Compose, Compose, Compose]:
+) -> tuple[Compose, Compose, Compose]:
     """Get default transformations for all datasets.
 
     The default implementation resizes the images to (224, 224), casts them to float32,
@@ -318,6 +318,7 @@ def get_transforms(
     transforms_img = Compose(
         [
             v2.ToImage(),
+            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
@@ -328,6 +329,7 @@ def get_transforms(
     transforms_mask = Compose(
         [
             v2.ToImage(),
+            v2.Resize(224, antialias=True),
             v2.ToDtype(torch.long, scale=False),
         ]
     )
@@ -347,9 +349,7 @@ def get_transforms(
         else [v2.Identity()]
     )
 
-    transforms_resize = Compose([v2.Resize(224)])
-
-    return transforms_img, transforms_mask, transforms_together, transforms_resize
+    return transforms_img, transforms_mask, transforms_together
 
 
 def get_accumulate_grad_batches(batch_size: int):

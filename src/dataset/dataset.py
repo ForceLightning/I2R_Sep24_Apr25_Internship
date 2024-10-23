@@ -37,7 +37,67 @@ from utils.utils import (
 SEED_CUS = 1
 
 
-class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
+class DefaultTransformsMixin:
+    """Mixin class for getting default transforms."""
+
+    @classmethod
+    def get_default_transforms(
+        cls, loading_mode: LoadingMode, augment: bool = False
+    ) -> tuple[Compose, Compose, Compose]:
+        """Get default transformations for the dataset.
+
+        The default implementation resizes the images to (224, 224), casts them to float32,
+        normalises them, and sets them to greyscale if the loading mode is not RGB.
+
+        Args:
+            loading_mode: The loading mode for the images.
+            augment: Whether to augment the images and masks together.
+
+        Returns:
+            tuple: The image, mask, combined, and final resize transformations
+
+        """
+        # Sets the image transforms
+        transforms_img = Compose(
+            [
+                v2.ToImage(),
+                v2.Resize(224, antialias=True),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
+            ]
+        )
+
+        # Sets the mask transforms
+        transforms_mask = Compose(
+            [
+                v2.ToImage(),
+                v2.Resize(224, antialias=True),
+                v2.ToDtype(torch.long, scale=False),
+            ]
+        )
+
+        # Randomly rotates +/- 180 deg and warps the image.
+        transforms_together = Compose(
+            [
+                v2.RandomHorizontalFlip(),
+                v2.RandomVerticalFlip(),
+                v2.RandomRotation(
+                    180.0,  # pyright: ignore[reportArgumentType]
+                    v2.InterpolationMode.BILINEAR,
+                ),
+                v2.ElasticTransform(alpha=33.0),
+            ]
+            if augment
+            else [v2.Identity()]
+        )
+
+        return transforms_img, transforms_mask, transforms_together
+
+
+class LGEDataset(
+    Dataset[tuple[torch.Tensor, torch.Tensor, str]], DefaultTransformsMixin
+):
     """LGE dataset for the cardiac LGE MRI images."""
 
     def __init__(
@@ -47,7 +107,6 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         idxs_dir: str,
         transform_img: Compose,
         transform_mask: Compose,
-        transform_resize: Compose | v2.Resize,
         transform_together: Compose | None = None,
         batch_size: int = 8,
         mode: Literal["train", "val", "test"] = "train",
@@ -88,7 +147,6 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
-        self.transform_resize = transform_resize
         self.transform_together = (
             transform_together if transform_together else Compose([v2.Identity()])
         )
@@ -169,9 +227,7 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        out_img, out_mask = self.transform_resize(
-            *self.transform_together(out_img, out_mask)
-        )
+        out_img, out_mask = self.transform_together(out_img, out_mask)
 
         return out_img, out_mask.squeeze().long(), img_name
 
@@ -180,7 +236,9 @@ class LGEDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         return len(self.img_list)
 
 
-class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
+class CineDataset(
+    Dataset[tuple[torch.Tensor, torch.Tensor, str]], DefaultTransformsMixin
+):
     """Cine cardiac magnetic resonance imagery dataset."""
 
     def __init__(
@@ -190,7 +248,6 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         idxs_dir: str,
         transform_img: Compose,
         transform_mask: Compose,
-        transform_resize: Compose,
         transform_together: Compose | None = None,
         frames: int = 30,
         select_frame_method: Literal["consecutive", "specific"] = "consecutive",
@@ -234,7 +291,6 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
-        self.transform_resize = transform_resize
         self.transform_together = (
             transform_together if transform_together else Compose([v2.Identity()])
         )
@@ -272,14 +328,13 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
         )
-        h, w, *_ = img_list[0].shape
-        combined_video = torch.empty((30, h, w), dtype=torch.uint8)
+        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, (h, w))
+            img = cv2.resize(img, (224, 224))
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(30, 1, h, w)
+        combined_video = combined_video.view(30, 1, 224, 224)
         combined_video = self.transform_img(combined_video)
 
         with Image.open(
@@ -310,9 +365,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        out_video, out_mask = self.transform_resize(
-            *self.transform_together(combined_video, out_mask)
-        )
+        out_video, out_mask = self.transform_together(combined_video, out_mask)
         out_video = concatenate_imgs(self.frames, self.select_frame_method, out_video)
 
         f, c, h, w = out_video.shape
@@ -325,7 +378,7 @@ class CineDataset(Dataset[tuple[torch.Tensor, torch.Tensor, str]]):
         return len(self.img_list)
 
 
-class TwoPlusOneDataset(CineDataset):
+class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
     """Cine CMR dataset."""
 
     def __init__(
@@ -337,7 +390,6 @@ class TwoPlusOneDataset(CineDataset):
         select_frame_method: Literal["consecutive", "specific"],
         transform_img: Compose,
         transform_mask: Compose,
-        transform_resize: Compose,
         transform_together: Compose | None = None,
         batch_size: int = 2,
         mode: Literal["train", "val", "test"] = "train",
@@ -380,7 +432,6 @@ class TwoPlusOneDataset(CineDataset):
             idxs_dir,
             transform_img,
             transform_mask,
-            transform_resize,
             transform_together,
             frames,
             select_frame_method,
@@ -401,14 +452,13 @@ class TwoPlusOneDataset(CineDataset):
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
         )
-        h, w, *_ = img_list[0].shape
-        combined_video = torch.empty((30, h, w), dtype=torch.uint8)
+        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, (h, w))
+            img = cv2.resize(img, (224, 224))
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(30, 1, h, w)
+        combined_video = combined_video.view(30, 1, 224, 224)
         combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
@@ -440,9 +490,8 @@ class TwoPlusOneDataset(CineDataset):
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
-        combined_video, out_mask = self.transform_resize(
-            *self.transform_together(combined_video, out_mask)
-        )
+        combined_video, out_mask = self.transform_together(combined_video, out_mask)
+
         assert (
             len(combined_video.shape) == 4
         ), f"Combined images must be of shape: (F, C, H, W) but is {combined_video.shape} instead."
@@ -454,7 +503,10 @@ class TwoPlusOneDataset(CineDataset):
         return out_video, out_mask.squeeze().long(), img_name
 
 
-class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]):
+class TwoStreamDataset(
+    Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]],
+    DefaultTransformsMixin,
+):
     """Two stream dataset with LGE and cine cardiac magnetic resonance imagery."""
 
     num_frames: int = 30
@@ -467,7 +519,6 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         idxs_dir: str,
         transform_img: Compose,
         transform_mask: Compose,
-        transform_resize: Compose,
         transform_together: Compose | None = None,
         batch_size: int = 8,
         mode: Literal["train", "val", "test"] = "train",
@@ -511,7 +562,6 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
-        self.transform_resize = transform_resize
         self.transform_together = (
             transform_together if transform_together else Compose([v2.Identity()])
         )
@@ -572,14 +622,13 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
         _, cine_list = cv2.imreadmulti(
             os.path.join(self.cine_dir, cine_name), flags=IMREAD_GRAYSCALE
         )
-        h, w, *_ = cine_list[0].shape
-        combined_cines = torch.empty((30, h, w), dtype=torch.uint8)
+        combined_cines = torch.empty((30, 224, 224), dtype=torch.uint8)
         for i in range(30):
             img = cine_list[i]
-            img = cv2.resize(img, (h, w))
+            img = cv2.resize(img, (224, 224))
             combined_cines[i, :, :] = torch.as_tensor(img)
 
-        combined_cines = combined_cines.view(self.num_frames, 1, h, w)
+        combined_cines = combined_cines.view(self.num_frames, 1, 224, 224)
         combined_cines = self.transform_img(combined_cines)
 
         out_lge.squeeze()
@@ -613,8 +662,8 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
                 )
 
         # Perform transforms which must occur on all inputs together.
-        out_lge, combined_cines, out_mask = self.transform_resize(
-            *self.transform_together(out_lge, combined_cines, mask_t)
+        out_lge, combined_cines, out_mask = self.transform_together(
+            out_lge, combined_cines, mask_t
         )
 
         f, c, h, w = combined_cines.shape
@@ -629,7 +678,8 @@ class TwoStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, s
 
 
 class ResidualTwoPlusOneDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]]
+    Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]],
+    DefaultTransformsMixin,
 ):
     """Two stream dataset with cine images and residual frames."""
 
@@ -642,7 +692,7 @@ class ResidualTwoPlusOneDataset(
         select_frame_method: Literal["consecutive", "specific"],
         transform_img: Compose,
         transform_mask: Compose,
-        transform_resize: Compose | v2.Resize,
+        transform_resize: Compose | v2.Resize | None = None,
         transform_together: Compose | None = None,
         transform_residual: Compose | None = None,
         batch_size: int = 2,
@@ -725,8 +775,69 @@ class ResidualTwoPlusOneDataset(
         """Get the length of the dataset."""
         return len(self.img_list)
 
-    @override
-    def __getitem__(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def _get_regular(
+        self, index: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+        img_name = self.img_list[index]
+        mask_name = self.img_list[index].split(".")[0] + ".nii.png"
+
+        # PERF: Initialise the output tensor ahead of time to reduce memory allocation
+        # time.
+        _, img_list = cv2.imreadmulti(
+            os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
+        )
+        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        for i in range(30):
+            img = img_list[i]
+            img = cv2.resize(img, (224, 224))
+            combined_video[i, :, :] = torch.as_tensor(img)
+
+        combined_video = combined_video.view(30, 1, 224, 224)
+        combined_video = self.transform_img(combined_video)
+
+        # Perform necessary operations on the mask
+        with Image.open(
+            os.path.join(self.mask_dir, mask_name), formats=["png"]
+        ) as mask:
+            out_mask = tv_tensors.Mask(self.transform_mask(mask))
+
+        match self.classification_mode:
+            case ClassificationMode.MULTILABEL_MODE:
+                # NOTE: This turns the problem into a multilabel segmentation problem.
+                # As label_3 ⊂ label_2 and label_2 ⊂ label_1, we need to essentially apply
+                # bitwise or operations to adhere to those conditions.
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
+                lab_mask_one_hot[:, :, 2] = lab_mask_one_hot[:, :, 2].bitwise_or(
+                    lab_mask_one_hot[:, :, 3]
+                )
+                lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
+                    lab_mask_one_hot[:, :, 2]
+                )
+                out_mask = lab_mask_one_hot.bool().permute(-1, 0, 1)
+
+            case ClassificationMode.MULTICLASS_MODE:
+                pass
+            case _:
+                raise NotImplementedError(
+                    f"The mode {self.classification_mode.name} is not implemented"
+                )
+
+        combined_video, out_mask = self.transform_together(combined_video, out_mask)
+        assert len(combined_video.shape) == 4, (
+            "Combined images must be of shape: (F, C, H, W) but is "
+            + f"{combined_video.shape}"
+        )
+
+        out_video = concatenate_imgs(
+            self.frames, self.select_frame_method, combined_video
+        )
+        out_residuals = out_video - torch.roll(out_video, -1, 0)
+
+        return out_video, out_residuals, out_mask.squeeze().long(), img_name
+
+    def _get_opticalflow(
         self, index: int
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
         img_name = self.img_list[index]
@@ -789,45 +900,119 @@ class ResidualTwoPlusOneDataset(
         )
 
         # Calculate residual frames after initial transformations are complete.
-        match self.residual_mode:
-            case ResidualMode.SUBTRACT_NEXT_FRAME:
-                out_residuals = out_video - torch.roll(out_video, -1, 0)
-            case ResidualMode.OPTICAL_FLOW_CPU | ResidualMode.OPTICAL_FLOW_GPU:
-                # (F, C, H, W) -> (F, H, W)
-                in_video = (
-                    v2f.to_grayscale(
-                        INV_NORM_GREYSCALE_DEFAULT(out_video).clamp(0, 1)
-                    ).view(self.frames, h, w)
-                    * 255
-                )
-                in_video = list(in_video.numpy().astype(np.uint8))
+        # (F, C, H, W) -> (F, H, W)
+        in_video = (
+            v2f.to_grayscale(INV_NORM_GREYSCALE_DEFAULT(out_video).clamp(0, 1)).view(
+                self.frames, h, w
+            )
+            * 255
+        )
+        in_video = list(in_video.numpy().astype(np.uint8))
 
-                # Expects input (F, H, W).
-                if self.residual_mode == ResidualMode.OPTICAL_FLOW_CPU:
-                    out_residuals = dense_optical_flow(in_video)
-                else:
-                    out_residuals, _ = cuda_optical_flow(in_video)
+        # Expects input (F, H, W).
+        if self.residual_mode == ResidualMode.OPTICAL_FLOW_CPU:
+            out_residuals = dense_optical_flow(in_video)
+        else:
+            out_residuals, _ = cuda_optical_flow(in_video)
 
-                # (F, H, W, 2) -> (F, 2, H, W)
-                out_residuals = (
-                    default_collate(out_residuals)
-                    .view(self.frames, h, w, 2)
-                    .permute(0, 3, 1, 2)
-                )
+        # (F, H, W, 2) -> (F, 2, H, W)
+        out_residuals = (
+            default_collate(out_residuals)
+            .view(self.frames, h, w, 2)
+            .permute(0, 3, 1, 2)
+        )
 
-                # NOTE: This may not be the best way of normalising the optical flow
-                # vectors.
+        # NOTE: This may not be the best way of normalising the optical flow
+        # vectors.
 
-                # Normalise the channel dimensions with l2 norm (Euclidean distance)
-                out_residuals = F.normalize(out_residuals, 2.0, 3)
+        # Normalise the channel dimensions with l2 norm (Euclidean distance)
+        out_residuals = F.normalize(out_residuals, 2.0, 3)
 
-                out_residuals = self.transform_residual(out_residuals)
+        out_residuals = self.transform_residual(out_residuals)
+
+        assert (
+            self.transform_resize is not None
+        ), "transforms_resize must be set for optical flow methods."
 
         out_video, out_residuals, out_mask = self.transform_resize(
             tv_tensors.Image(out_video), tv_tensors.Image(out_residuals), out_mask
         )
 
         return out_video, out_residuals, out_mask.squeeze().long(), img_name
+
+    @override
+    def __getitem__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, index: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+        match self.residual_mode:
+            case ResidualMode.SUBTRACT_NEXT_FRAME:
+                return self._get_regular(index)
+            case ResidualMode.OPTICAL_FLOW_CPU | ResidualMode.OPTICAL_FLOW_GPU:
+                return self._get_opticalflow(index)
+
+    @classmethod
+    @override
+    def get_default_transforms(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls,
+        loading_mode: LoadingMode,
+        residual_mode: ResidualMode,
+        augment: bool = False,
+    ) -> tuple[Compose, Compose, Compose, Compose | None]:
+        match residual_mode:
+            case ResidualMode.SUBTRACT_NEXT_FRAME:
+                transforms_img, transforms_mask, transforms_together = (
+                    DefaultTransformsMixin.get_default_transforms(loading_mode, augment)
+                )
+                return transforms_img, transforms_mask, transforms_together, None
+
+            case _:
+                # Sets the image transforms
+                transforms_img = Compose(
+                    [
+                        v2.ToImage(),
+                        v2.ToDtype(torch.float32, scale=True),
+                        v2.Normalize(
+                            mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+                        ),
+                        (
+                            v2.Identity()
+                            if loading_mode == LoadingMode.RGB
+                            else v2.Grayscale(1)
+                        ),
+                    ]
+                )
+
+                # Sets the mask transforms
+                transforms_mask = Compose(
+                    [
+                        v2.ToImage(),
+                        v2.ToDtype(torch.long, scale=False),
+                    ]
+                )
+
+                # Randomly rotates +/- 180 deg and warps the image.
+                transforms_together = Compose(
+                    [
+                        v2.RandomHorizontalFlip(),
+                        v2.RandomVerticalFlip(),
+                        v2.RandomRotation(
+                            180.0,  # pyright: ignore[reportArgumentType]
+                            v2.InterpolationMode.BILINEAR,
+                        ),
+                        v2.ElasticTransform(alpha=33.0),
+                    ]
+                    if augment
+                    else [v2.Identity()]
+                )
+
+                transforms_resize = Compose([v2.Resize(224, antialias=True)])
+
+                return (
+                    transforms_img,
+                    transforms_mask,
+                    transforms_together,
+                    transforms_resize,
+                )
 
 
 def concatenate_imgs(
