@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 from PIL import Image
 from torchvision.transforms.v2 import functional as v2f
 
-from utils.utils import INV_NORM_RGB_DEFAULT, InverseNormalize
+from utils.types import INV_NORM_RGB_DEFAULT, InverseNormalize
 
 
 def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:

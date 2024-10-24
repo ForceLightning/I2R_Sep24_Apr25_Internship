@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Utility functions for the project."""
-from enum import Enum, auto
-from typing import Sequence, override
+from typing import override
 
 import lightning as L
 import torch
@@ -14,37 +13,7 @@ from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 from warmup_scheduler import GradualWarmupScheduler
 
-
-class InverseNormalize(v2.Normalize):
-    """Inverses the normalization and returns the reconstructed images in the input."""
-
-    def __init__(
-        self,
-        mean: Sequence[float | int],
-        std: Sequence[float | int],
-    ):
-        """Initialise the InverseNormalize class.
-
-        Args:
-            mean: The mean value for the normalisation.
-            std: The standard deviation value for the normalisation.
-
-        """
-        mean_tensor = torch.as_tensor(mean)
-        std_tensor = torch.as_tensor(std)
-        std_inv = 1 / (std_tensor + 1e-7)
-        mean_inv = -mean_tensor * std_inv
-        super().__init__(mean=mean_inv.tolist(), std=std_inv.tolist())
-
-    @override
-    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
-        return super().__call__(tensor.clone())
-
-
-INV_NORM_RGB_DEFAULT = InverseNormalize(
-    mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
-)
-INV_NORM_GREYSCALE_DEFAULT = InverseNormalize(mean=[0.449], std=[0.226])
+from utils.types import ClassificationMode, LoadingMode, ResidualMode
 
 
 class LightningGradualWarmupScheduler(LRScheduler):
@@ -84,17 +53,6 @@ class LightningGradualWarmupScheduler(LRScheduler):
         return self.scheduler.step(epoch, metrics)
 
 
-class ClassificationMode(Enum):
-    """The classification mode for the model.
-
-    MULTICLASS_MODE: The model is trained to predict a single class for each pixel.
-    MULTILABEL_MODE: The model is trained to predict multiple classes for each pixel.
-    """
-
-    MULTICLASS_MODE = auto()
-    MULTILABEL_MODE = auto()
-
-
 def get_classification_mode(mode: str) -> ClassificationMode:
     """Get the classification mode from a string input.
 
@@ -108,19 +66,6 @@ def get_classification_mode(mode: str) -> ClassificationMode:
     return ClassificationMode[mode]
 
 
-class ResidualMode(Enum):
-    """The residual frame calculation mode for the model.
-
-    SUBTRACT_NEXT_FRAME: Subtracts the next frame from the current frame.
-    OPTICAL_FLOW_CPU: Calculates the optical flow using the CPU.
-    OPTICAL_FLOW_GPU: Calculates the optical flow using the GPU.
-    """
-
-    SUBTRACT_NEXT_FRAME = auto()
-    OPTICAL_FLOW_CPU = auto()
-    OPTICAL_FLOW_GPU = auto()
-
-
 def get_residual_mode(mode: str) -> ResidualMode:
     """Get the residual calculation mode from a string input.
 
@@ -132,17 +77,6 @@ def get_residual_mode(mode: str) -> ResidualMode:
 
     """
     return ResidualMode[mode]
-
-
-class LoadingMode(Enum):
-    """Determines the image loading mode for the dataset.
-
-    RGB: The images are loaded in RGB mode.
-    GREYSCALE: The images are loaded in greyscale mode.
-    """
-
-    RGB = auto()
-    GREYSCALE = auto()
 
 
 def get_loading_mode(mode: str) -> LoadingMode:

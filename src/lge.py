@@ -11,10 +11,10 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cine import LightningUnetWrapper
 from cli.common import CommonCLI
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
-from utils.utils import ClassificationMode, LoadingMode
+from models.default_unet import LightningUnetWrapper
+from utils.types import ClassificationMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 torch.set_float32_matmul_precision("medium")

@@ -27,12 +27,8 @@ from torchvision.transforms.v2 import Compose
 from torchvision.transforms.v2 import functional as v2f
 
 from dataset.optical_flow import cuda_optical_flow, dense_optical_flow
-from utils.utils import (
-    INV_NORM_GREYSCALE_DEFAULT,
-    ClassificationMode,
-    LoadingMode,
-    ResidualMode,
-)
+from utils.types import INV_NORM_GREYSCALE_DEFAULT
+from utils.utils import ClassificationMode, LoadingMode, ResidualMode
 
 SEED_CUS = 1
 

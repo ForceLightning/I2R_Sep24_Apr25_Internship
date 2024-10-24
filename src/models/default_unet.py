@@ -1,24 +1,16 @@
-# -*- coding: utf-8 -*-
-"""Two Stream U-Net model with LGE and Cine inputs."""
+"""Contains the default U-Net implementation LightningModule wrapper."""
+
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, OrderedDict, Sequence, override
+import os
+from collections import OrderedDict
+from typing import Any, Literal, override
 
 import segmentation_models_pytorch as smp
 import torch
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
-from segmentation_models_pytorch.base import (
-    ClassificationHead,
-    SegmentationHead,
-    SegmentationModel,
-)
-from segmentation_models_pytorch.base.initialization import (
-    initialize_decoder,
-    initialize_head,
-)
-from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
-from segmentation_models_pytorch.encoders import get_encoder
-from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
+from segmentation_models_pytorch.losses.dice import DiceLoss
+from segmentation_models_pytorch.losses.focal import FocalLoss
 from torch import nn
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
@@ -44,150 +36,20 @@ from utils.types import (
 )
 
 
-class TwoStreamUnet(SegmentationModel):
-    """Two Stream U-Net model with LGE and Cine inputs."""
-
-    def __init__(
-        self,
-        encoder_name: str = "resnet34",
-        encoder_depth: int = 5,
-        encoder_weights: str | None = "imagenet",
-        decoder_use_batchnorm: bool = True,
-        decoder_channels: list[int] | None = None,
-        decoder_attention_type: Literal["scse"] | None = None,
-        in_channels: int = 3,
-        classes: int = 1,
-        activation: str | Callable[..., None] | None = None,
-        num_frames: int = 30,
-        aux_params: dict[str, Any] | None = None,
-    ) -> None:
-        """Init the Two Stream U-Net model with LGE and Cine inputs.
-
-        Args:
-            encoder_name: Name of the encoder.
-            encoder_depth: Depth of the encoder.
-            encoder_weights: Pretrained weights for the encoder.
-            decoder_use_batchnorm: Whether to use batch normalization in the decoder.
-            decoder_channels: Number of channels in the decoder.
-            decoder_attention_type: Type of attention in the decoder.
-            in_channels: Number of input channels.
-            classes: Number of classes.
-            activation: Activation function. Can be a string or a class for
-            instantiation.
-            num_frames: Number of frames in the Cine input.
-            aux_params: Auxiliary parameters.
-
-        """
-        super().__init__()
-
-        # Defaults
-        init_decoder_channels: list[int] = (
-            decoder_channels if decoder_channels else [256, 128, 64, 32, 16]
-        )
-
-        self.lge_encoder = get_encoder(
-            encoder_name,
-            in_channels=in_channels,
-            depth=encoder_depth,
-            weights=encoder_weights,
-        )
-
-        self.cine_encoder = get_encoder(
-            encoder_name,
-            in_channels=in_channels * num_frames,
-            depth=encoder_depth,
-            weights=encoder_weights,
-        )
-
-        self.decoder = UnetDecoder(
-            encoder_channels=self.lge_encoder.out_channels,
-            decoder_channels=init_decoder_channels,
-            n_blocks=encoder_depth,
-            use_batchnorm=decoder_use_batchnorm,
-            center=True if encoder_name.startswith("vgg") else False,
-            attention_type=decoder_attention_type,
-        )
-
-        self.segmentation_head = SegmentationHead(
-            in_channels=init_decoder_channels[-1],
-            out_channels=classes,
-            activation=activation,
-            kernel_size=3,
-        )
-
-        if aux_params is not None:
-            self.classification_head = ClassificationHead(
-                in_channels=self.lge_encoder.out_channels[-1],
-                **aux_params,
-            )
-
-        else:
-            self.classification_head = None
-
-        self.name = f"u-{encoder_name}"
-        self.initialize()
-
-    @override
-    def initialize(self):
-        """Initialise the model's decoder, segmentation head, and classification head."""
-        initialize_decoder(self.decoder)
-        initialize_head(self.segmentation_head)
-        if self.classification_head is not None:
-            initialize_head(self.classification_head)
-
-    @override
-    def forward(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, lge: torch.Tensor, cine: torch.Tensor
-    ) -> torch.Tensor:
-        """Forward pass for the Two Stream U-Net model.
-
-        Args:
-            lge: Late gadolinium enhanced image tensor.
-            cine: Cine image tensor.
-
-        """
-        added_features = []
-
-        # The first layer of the skip connection gets ignored, but in order for the
-        # indexing later on to work, the feature output needs an empty first output.
-        added_features.append(["EMPTY"])
-
-        # Go through each frame of the image and add the output features to a list.
-        lge_features: Sequence[torch.Tensor] = self.lge_encoder(lge)
-
-        cine_features: Sequence[torch.Tensor] = self.cine_encoder(cine)
-
-        # Goes through each layer and gets the LGE and Cine output from that layer then
-        # adds them element-wise.
-        # PERF: Maybe this can be done in parallel?
-        for index in range(1, 6):
-            lge_output = lge_features[index]
-            cine_output = cine_features[index]
-
-            added_output = torch.add(cine_output, lge_output)
-            added_features.append(added_output)
-
-        # Send the added features up the decoder.
-        decoder_output = self.decoder(*added_features)
-        masks = self.segmentation_head(decoder_output)
-
-        return masks
-
-
-class TwoStreamUnetLightning(CommonModelMixin):
-    """Two stream U-Net for LGE & cine CMR."""
+class LightningUnetWrapper(CommonModelMixin):
+    """LightningModule wrapper for U-Net model."""
 
     def __init__(
         self,
         batch_size: int,
         metric: Metric | None = None,
+        num_frames: int = 30,
         loss: nn.Module | str | None = None,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
-        in_channels: int = 3,
-        classes: int = 1,
-        num_frames: int = 30,
+        in_channels: int = 90,
+        classes: int = 4,
         weights_from_ckpt_path: str | None = None,
         optimizer: Optimizer | str = "adamw",
         optimizer_kwargs: dict[str, Any] | None = None,
@@ -199,64 +61,63 @@ class TwoStreamUnetLightning(CommonModelMixin):
         _beta: float = 0.0,
         learning_rate: float = 1e-4,
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
-        eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
+        eval_classification_mode: ClassificationMode = ClassificationMode.MULTILABEL_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
-    ) -> None:
-        """Initialise the 2-stream U-Net.
+    ):
+        """Init the UNet model.
 
         Args:
-            batch_size: The batch size.
-            metric: The metric to use.
-            loss: The loss function to use.
-            encoder_name: The encoder name.
-            encoder_depth: The encoder depth.
-            encoder_weights: The encoder weights.
-            in_channels: The number of input channels.
-            classes: The number of classes.
-            num_frames: The number of frames.
-            weights_from_ckpt_path: The path to the checkpoint.
-            optimizer: The optimizer to use.
-            optimizer_kwargs: The optimizer keyword arguments.
-            scheduler: The learning rate scheduler.
-            scheduler_kwargs: The learning rate scheduler keyword arguments.
-            multiplier: The multiplier.
-            total_epochs: The total number of epochs.
-            alpha: The alpha loss scaling value.
-            _beta: (Unused) The beta loss scaling value.
-            learning_rate: The learning rate.
-            dl_classification_mode: The classification mode for the dataloader.
-            eval_classification_mode: The classification mode for evaluation.
-            loading_mode: The loading mode.
-            dump_memory_snapshot: Whether to dump memory snapshot.
+            batch_size: Mini-batch size.
+            metric: Metric to use for evaluation.
+            num_frames: Number of frames to process.
+            loss: Loss function to use for training.
+            encoder_name: Name of the encoder to use.
+            encoder_depth: The depth of the encoder.
+            encoder_weights: Weights to use for the encoder.
+            in_channels: Number of input channels.
+            classes: Number of classes.
+            weights_from_ckpt_path: Path to the checkpoint to load weights from.
+            optimizer: Optimizer to use.
+            optimizer_kwargs: Optimizer keyword arguments.
+            scheduler: Learning rate scheduler to use.
+            scheduler_kwargs: Learning rate scheduler keyword arguments.
+            multiplier: Multiplier for the learning rate.
+            total_epochs: Total number of epochs to train.
+            alpha: Alpha value for the loss function.
+            _beta: Beta value for the loss function.
+            learning_rate: Learning rate for the optimizer.
+            dl_classification_mode: Classification mode for the dataloader.
+            eval_classification_mode: Classification mode for evaluation.
+            loading_mode: Image loading mode.
+            dump_memory_snapshot: Whether to dump a memory snapshot after training.
 
         """
-        super().__init__()
-        self.save_hyperparameters(ignore=["metric", "loss"])
-        self.batch_size = batch_size
-        self.in_channels = in_channels
-        self.classes = classes
-        self.num_frames = num_frames
+        # Trace memory usage
         self.dump_memory_snapshot = dump_memory_snapshot
-
         if self.dump_memory_snapshot:
             torch.cuda.memory._record_memory_history(
-                enabled="all", context="all", stacks="python"
+                enabled="all",
+                context="all",
+                stacks="python" if os.name == "nt" else "all",
             )
 
-        self.model = TwoStreamUnet(
+        super().__init__()
+        self.save_hyperparameters(ignore=["loss"])
+        self.batch_size = batch_size
+        self.num_frames = num_frames
+
+        self.model = smp.Unet(
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
             in_channels=in_channels,
             classes=classes,
-            num_frames=num_frames,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
-        self.loading_mode = loading_mode
 
         # Sets loss if it's a string
         if isinstance(loss, str):
@@ -301,25 +162,19 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 )
             ]
         )
-        self.example_input_array = (
-            torch.randn(
-                (self.batch_size, self.in_channels, 224, 224), dtype=torch.float32
-            ).to(self.device.type),
-            torch.randn(
-                (self.batch_size, self.num_frames * self.in_channels, 224, 224),
-                dtype=torch.float32,
-            ).to(self.device.type),
-        )
+        self.example_input_array = torch.randn(
+            (self.batch_size, in_channels, 224, 224), dtype=torch.float32
+        ).to(self.device.type)
 
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
 
+        # Sets metric if None.
         self.dice_metrics = {}
         self.other_metrics = {}
         setup_metrics(self, metric, classes)
 
-        # Attempts to load checkpoint if provided.
         self.weights_from_ckpt_path = weights_from_ckpt_path
         if self.weights_from_ckpt_path:
             ckpt = torch.load(self.weights_from_ckpt_path)
@@ -338,6 +193,8 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 except RuntimeError as e:
                     raise e
 
+        self.loading_mode = loading_mode
+
     @override
     def on_train_start(self):
         if isinstance(self.logger, TensorBoardLogger):
@@ -346,8 +203,8 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 {
                     "hp/val_loss": 0,
                     "hp/val/dice_macro_avg": 0,
-                    "hp/val/dice_macro_class_2_3": 0,
                     "hp/val/dice_weighted_avg": 0,
+                    "hp/val/dice_macro_class_2_3": 0,
                     "hp/val/dice_weighted_class_2_3": 0,
                     "hp/val/dice_class_1": 0,
                     "hp/val/dice_class_2": 0,
@@ -358,12 +215,12 @@ class TwoStreamUnetLightning(CommonModelMixin):
     @override
     def on_train_end(self) -> None:
         if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
+            torch.cuda.memory._dump_snapshot("unet_snapshot.pickle")
 
     @override
-    def forward(self, lge: torch.Tensor, cine: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=self.device.type):
-            return self.model(lge, cine)  # pyright: ignore[reportCallIssue]
+            return self.model(x)  # pyright: ignore[reportCallIssue]
 
     @override
     def on_train_epoch_end(self) -> None:
@@ -377,16 +234,13 @@ class TwoStreamUnetLightning(CommonModelMixin):
     def on_test_epoch_end(self) -> None:
         shared_metric_logging_epoch_end(self, "test")
 
-    @override
     def training_step(
-        self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
-        batch_idx: int,
+        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ) -> torch.Tensor:
         """Forward pass for the model with dataloader batches.
 
         Args:
-            batch: Batch of LGE images, cine frames, masks, and filenames.
+            batch: Batch of frames, masks, and filenames.
             batch_idx: Index of the batch in the epoch.
 
         Return:
@@ -396,17 +250,11 @@ class TwoStreamUnetLightning(CommonModelMixin):
             AssertionError: Prediction shape and ground truth mask shapes are different.
 
         """
-        lges, cines, masks, _names = batch
-        bs = lges.shape[0] if len(lges.shape) > 3 else 1
-        lges = lges.to(device=self.device, dtype=torch.float32)
-        cines = cines.to(device=self.device, dtype=torch.float32)
-        masks = masks.to(device=self.device).long()
+        images, masks, _ = batch
+        bs: int = images.shape[0] if len(images.shape) > 3 else 1
 
         with torch.autocast(device_type=self.device.type):
-            # B x C x H x W
-            masks_proba: torch.Tensor = self.model(
-                lges, cines
-            )  # pyright: ignore[reportCallIssue]
+            masks_proba: torch.Tensor = self.forward(images)
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
                 # GUARD: Check that the sizes match.
@@ -421,16 +269,23 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
             else:
                 loss_seg = self.alpha * self.loss(masks_proba, masks)
+
             loss_all = loss_seg
 
         self.log(
-            "loss/train", loss_all.item(), batch_size=bs, on_epoch=True, prog_bar=True
+            "loss/train",
+            loss_all.detach().cpu().item(),
+            batch_size=bs,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
         )
         self.log(
             f"loss/train/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
 
         if isinstance(
@@ -443,49 +298,46 @@ class TwoStreamUnetLightning(CommonModelMixin):
             if isinstance(self.logger, TensorBoardLogger):
                 self._shared_image_logging(
                     batch_idx,
-                    lges.detach().cpu(),
+                    images.detach().cpu(),
                     masks_one_hot.detach().cpu(),
                     masks_preds.detach().cpu(),
                     "train",
                     10,
                 )
-            self.train()
-
         return loss_all
 
     @override
     def validation_step(
-        self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
-        batch_idx: int,
+        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
     ):
         self._shared_eval(batch, batch_idx, "val")
 
     @override
     def test_step(
-        self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
-        batch_idx: int,
-    ):
+        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
+    ) -> None:
         self._shared_eval(batch, batch_idx, "test")
 
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch: tuple[torch.Tensor, torch.Tensor, str],
         batch_idx: int,
-        prefix: Literal["train", "val", "test"],
+        prefix: Literal["val", "test"],
     ):
-        lges, cines, masks, _names = batch
-        bs = lges.shape[0] if len(lges.shape) > 3 else 1
-        lges = lges.to(device=self.device, dtype=torch.float32)
-        cines = cines.to(device=self.device, dtype=torch.float32)
-        masks = masks.to(device=self.device).long()
+        """Shared evaluation step for validation and test.
 
-        # B x C x H x W
-        masks_proba: torch.Tensor = self.model(
-            lges, cines
-        )  # pyright: ignore[reportCallIssue]
+        Args:
+            batch: Batch of data.
+            batch_idx: Index of the batch.
+            prefix: Prefix for the logger.
+
+        """
+        images, masks, _ = batch
+        bs = images.shape[0] if len(images.shape) > 3 else 1
+        images_input = images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
+        masks_proba = self.model(images_input)  # pyright: ignore[reportCallIssue]
 
         if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
             # GUARD: Check that the sizes match.
@@ -493,7 +345,6 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 masks_proba.size() == masks.size()
             ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-        loss_seg: torch.Tensor
         # HACK: This ensures that the dimensions to the loss function are correct.
         if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
             self.loss, FocalLoss
@@ -501,26 +352,29 @@ class TwoStreamUnetLightning(CommonModelMixin):
             loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
         else:
             loss_seg = self.alpha * self.loss(masks_proba, masks)
-        loss_all = loss_seg
 
+        loss_all = loss_seg
         self.log(
             f"loss/{prefix}",
-            loss_all.item(),
+            loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
             prog_bar=True,
+            sync_dist=True,
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
         self.log(
             f"hp/{prefix}_loss",
             loss_all.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
+            sync_dist=True,
         )
 
         if isinstance(
@@ -533,7 +387,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
             if isinstance(self.logger, TensorBoardLogger):
                 self._shared_image_logging(
                     batch_idx,
-                    lges.detach().cpu(),
+                    images.detach().cpu(),
                     masks_one_hot.detach().cpu(),
                     masks_preds.detach().cpu(),
                     prefix,
@@ -550,18 +404,18 @@ class TwoStreamUnetLightning(CommonModelMixin):
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
-        """Log the images to tensorboard.
+        """Log images to tensorboard.
 
         Args:
-            batch_idx: The batch index.
-            images: The input images.
-            masks_one_hot: The ground truth masks.
-            masks_preds: The predicted masks.
-            prefix: The runtime mode (train, val, test).
-            every_interval: The interval to log images.
+            batch_idx: Index of the batch.
+            images: Images to log.
+            masks_one_hot: Ground truth masks.
+            masks_preds: Predicted masks.
+            prefix: Prefix for the logger.
+            every_interval: Interval to log images
 
         Returns:
-            None.
+            None
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
@@ -589,7 +443,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
 
             # NOTE: This will adapt based on the color mode of the images
             if self.loading_mode == LoadingMode.RGB:
-                inv_norm_img = self.de_transform(images).detach().cpu()
+                inv_norm_img = self.de_transform(images[:, :3, :, :]).detach().cpu()
             else:
                 image = (
                     images[:, 0, :, :].unsqueeze(1).repeat(1, 3, 1, 1).detach().cpu()
@@ -605,7 +459,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 )
                 # Get only the first frame of images.
                 for img, mask in zip(
-                    inv_norm_img[:, :3, :, :].detach().cpu(),
+                    inv_norm_img[:, 0:3, :, :].detach().cpu(),
                     masks_preds.detach().cpu(),
                     strict=True,
                 )
@@ -619,7 +473,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 )
                 # Get only the first frame of images.
                 for img, mask in zip(
-                    inv_norm_img[:, :3, :, :].detach().cpu(),
+                    inv_norm_img[:, 0:3, :, :].detach().cpu(),
                     masks_one_hot.detach().cpu(),
                     strict=True,
                 )
@@ -638,18 +492,29 @@ class TwoStreamUnetLightning(CommonModelMixin):
     @torch.no_grad()
     def predict_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str | list[str]],
+        batch: tuple[torch.Tensor, torch.Tensor, str | list[str]],
         batch_idx: int,
         dataloader_idx: int = 0,
     ):
+        """Forward pass for the model for one minibatch of a test epoch.
+
+        Args:
+            batch: Batch of frames, masks, and filenames.
+            batch_idx: Index of the batch in the epoch.
+            dataloader_idx: Index of the dataloader.
+
+        Return:
+            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
+                and filename.
+
+        """
         self.eval()
-        lges, cines, masks, fn = batch
-        lges_input = lges.to(self.device.type)
-        cines_input = cines.to(self.device.type)
+        images, masks, fn = batch
+        images_input = images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
         masks_proba: torch.Tensor = self.model(
-            lges_input, cines_input
+            images_input
         )  # pyright: ignore[reportCallIssue]
 
         if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
@@ -658,14 +523,14 @@ class TwoStreamUnetLightning(CommonModelMixin):
         else:
             masks_preds = masks_proba > 0.5
 
-        b, c, h, w = cines.shape
+        b, c, h, w = images.shape
         match self.loading_mode:
             case LoadingMode.RGB:
-                reshaped_cines = cines.view(b, c // 3, 3, h, w)
+                reshaped_images = images.view(b, c // 3, 3, h, w)
             case LoadingMode.GREYSCALE:
-                reshaped_cines = cines.view(b, c, 1, h, w)
+                reshaped_images = images.view(b, c, 1, h, w)
 
-        return masks_preds.detach().cpu(), reshaped_cines.detach().cpu(), fn
+        return masks_preds.detach().cpu(), reshaped_images.detach().cpu(), fn
 
     @override
     def configure_optimizers(self):  # pyright: ignore[reportIncompatibleMethodOverride]

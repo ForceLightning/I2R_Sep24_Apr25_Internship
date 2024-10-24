@@ -13,7 +13,7 @@ from torchvision.transforms.v2 import functional as v2f
 from torchvision.utils import draw_segmentation_masks
 from tqdm.auto import tqdm
 
-from utils.utils import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
+from utils.types import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
 
 
 class MaskImageWriter(BasePredictionWriter):
