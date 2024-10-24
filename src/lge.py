@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader
 from cine import LightningUnetWrapper
 from cli.common import CommonCLI
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
-from utils import utils
 from utils.utils import ClassificationMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
