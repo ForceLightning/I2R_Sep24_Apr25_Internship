@@ -1,0 +1,664 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tests package &mdash; I2R Sep 2024-Apr 2025 Internship 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=2709fde1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            I2R Sep 2024-Apr 2025 Internship
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">tests package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#tests-conv1d-test-module">tests.conv1d_test module</a></li>
+<li><a class="reference internal" href="#module-tests.integration_test">tests.integration_test module</a><ul>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI</span></code></a><ul>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.default_train_args"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.default_train_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.default_frames"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.default_frames</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.default_test_args"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.default_test_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.default_senet_args"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.default_senet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.default_resnet_args"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.default_resnet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.default_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.default_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.greyscale_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.greyscale_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.flatten_conv_args"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.flatten_conv_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.fast_dev_run_args"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.fast_dev_run_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.filename"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.filename</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_training"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_quick_resnet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_senet_training"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_quick_senet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_testing"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_quick_resnet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_senet_testing"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_quick_senet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_rgb"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_quick_resnet_rgb()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_greyscale"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_quick_resnet_greyscale()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoPlusOneCLI.test_flat_conv"><code class="docutils literal notranslate"><span class="pre">TestTwoPlusOneCLI.test_flat_conv()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI"><code class="docutils literal notranslate"><span class="pre">TestCineCLI</span></code></a><ul>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.default_train_args"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.default_train_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.default_test_args"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.default_test_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.default_senet_args"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.default_senet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.default_resnet_args"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.default_resnet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.fast_dev_run_args"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.fast_dev_run_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.default_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.default_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.greyscale_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.greyscale_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.filename"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.filename</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.test_quick_resnet_training"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.test_quick_resnet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.test_quick_senet_training"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.test_quick_senet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.test_quick_resnet_testing"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.test_quick_resnet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.test_quick_senet_testing"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.test_quick_senet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.test_quick_resnet_rgb"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.test_quick_resnet_rgb()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestCineCLI.test_quick_resnet_greyscale"><code class="docutils literal notranslate"><span class="pre">TestCineCLI.test_quick_resnet_greyscale()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI"><code class="docutils literal notranslate"><span class="pre">TestLGECLI</span></code></a><ul>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.default_train_args"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.default_train_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.default_test_args"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.default_test_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.default_senet_args"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.default_senet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.default_resnet_args"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.default_resnet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.default_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.default_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.greyscale_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.greyscale_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.fast_dev_run_args"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.fast_dev_run_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.filename"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.filename</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.test_quick_resnet_training"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.test_quick_resnet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.test_quick_senet_training"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.test_quick_senet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.test_quick_resnet_testing"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.test_quick_resnet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.test_quick_senet_testing"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.test_quick_senet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.test_quick_resnet_rgb"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.test_quick_resnet_rgb()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestLGECLI.test_quick_resnet_greyscale"><code class="docutils literal notranslate"><span class="pre">TestLGECLI.test_quick_resnet_greyscale()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI</span></code></a><ul>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.default_train_args"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.default_train_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.default_test_args"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.default_test_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.default_senet_args"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.default_senet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.default_resnet_args"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.default_resnet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.default_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.default_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.greyscale_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.greyscale_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.fast_dev_run_args"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.fast_dev_run_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.filename"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.filename</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_training"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.test_quick_resnet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.test_quick_senet_training"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.test_quick_senet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_testing"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.test_quick_resnet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.test_quick_senet_testing"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.test_quick_senet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_rgb"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.test_quick_resnet_rgb()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_greyscale"><code class="docutils literal notranslate"><span class="pre">TestTwoStreamCLI.test_quick_resnet_greyscale()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI</span></code></a><ul>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.default_train_args"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.default_train_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.default_frames"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.default_frames</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.default_test_args"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.default_test_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.default_senet_args"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.default_senet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.default_resnet_args"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.default_resnet_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.default_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.default_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.greyscale_colour_mode"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.greyscale_colour_mode</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.flatten_conv_args"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.flatten_conv_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.fast_dev_run_args"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.fast_dev_run_args</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.filename"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.filename</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_training"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_quick_resnet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_senet_training"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_quick_senet_training()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_testing"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_quick_resnet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_senet_testing"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_quick_senet_testing()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_rgb"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_quick_resnet_rgb()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_greyscale"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_quick_resnet_greyscale()</span></code></a></li>
+<li><a class="reference internal" href="#tests.integration_test.TestAttentionUnetCLI.test_flat_conv"><code class="docutils literal notranslate"><span class="pre">TestAttentionUnetCLI.test_flat_conv()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-tests">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">I2R Sep 2024-Apr 2025 Internship</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">tests package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/apidoc/tests.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tests-package">
+<h1>tests package<a class="headerlink" href="#tests-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="tests-conv1d-test-module">
+<h2>tests.conv1d_test module<a class="headerlink" href="#tests-conv1d-test-module" title="Link to this heading"></a></h2>
+</section>
+<section id="module-tests.integration_test">
+<span id="tests-integration-test-module"></span><h2>tests.integration_test module<a class="headerlink" href="#module-tests.integration_test" title="Link to this heading"></a></h2>
+<p>Quick testing script for the project.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tests.integration_test.</span></span><span class="sig-name descname"><span class="pre">TestTwoPlusOneCLI</span></span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3.12/library/functions.html#object" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test integration of the TwoPlusOne CLI with the models and datasets.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.default_train_args">
+<span class="sig-name descname"><span class="pre">default_train_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['fit',</span> <span class="pre">'--trainer.precision=bf16-mixed',</span> <span class="pre">'--model.classes=4',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/two_plus_one.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine_tpo_resnet50.yaml',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.default_train_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.default_frames">
+<span class="sig-name descname"><span class="pre">default_frames</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.num_frames=5']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.default_frames" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.default_test_args">
+<span class="sig-name descname"><span class="pre">default_test_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['test',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/two_plus_one.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine_tpo_resnet50.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/testing.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.default_test_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.default_senet_args">
+<span class="sig-name descname"><span class="pre">default_senet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=senet154',</span> <span class="pre">'--data.batch_size=2']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.default_senet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.default_resnet_args">
+<span class="sig-name descname"><span class="pre">default_resnet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=resnet50']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.default_resnet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.default_colour_mode">
+<span class="sig-name descname"><span class="pre">default_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=RGB']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.default_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.greyscale_colour_mode">
+<span class="sig-name descname"><span class="pre">greyscale_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=GREYSCALE',</span> <span class="pre">'--model.in_channels=1']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.greyscale_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.flatten_conv_args">
+<span class="sig-name descname"><span class="pre">flatten_conv_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.flat_conv=True']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.flatten_conv_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.fast_dev_run_args">
+<span class="sig-name descname"><span class="pre">fast_dev_run_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--trainer.fast_dev_run=1']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.fast_dev_run_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.filename">
+<span class="sig-name descname"><span class="pre">filename</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'two_plus_one.py'</span></em><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.filename" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_training">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (2+1) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_quick_senet_training">
+<span class="sig-name descname"><span class="pre">test_quick_senet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_senet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (2+1) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (2+1) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_quick_senet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_senet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_senet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (2+1) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_rgb">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_rgb</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_rgb" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (2+1) can train on a single batch with RGB images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_greyscale">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_greyscale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_quick_resnet_greyscale" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (2+1) can train on a single batch with greyscale images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoPlusOneCLI.test_flat_conv">
+<span class="sig-name descname"><span class="pre">test_flat_conv</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoPlusOneCLI.test_flat_conv" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (2+1) can train with a flat temporal convolutional layer.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tests.integration_test.</span></span><span class="sig-name descname"><span class="pre">TestCineCLI</span></span><a class="headerlink" href="#tests.integration_test.TestCineCLI" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3.12/library/functions.html#object" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test integration of the Cine CLI with the models and datasets.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.default_train_args">
+<span class="sig-name descname"><span class="pre">default_train_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['fit',</span> <span class="pre">'--trainer.precision=bf16-mixed',</span> <span class="pre">'--model.classes=4',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine_tpo_resnet50.yaml',</span> <span class="pre">'--trainer.logger=False',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.default_train_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.default_test_args">
+<span class="sig-name descname"><span class="pre">default_test_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['test',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine_tpo_resnet50.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/testing.yaml',</span> <span class="pre">'--trainer.logger=False',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.default_test_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.default_senet_args">
+<span class="sig-name descname"><span class="pre">default_senet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=senet154',</span> <span class="pre">'--data.batch_size=2']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.default_senet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.default_resnet_args">
+<span class="sig-name descname"><span class="pre">default_resnet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=resnet50']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.default_resnet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.fast_dev_run_args">
+<span class="sig-name descname"><span class="pre">fast_dev_run_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--trainer.fast_dev_run=1']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.fast_dev_run_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.default_colour_mode">
+<span class="sig-name descname"><span class="pre">default_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=RGB']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.default_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.greyscale_colour_mode">
+<span class="sig-name descname"><span class="pre">greyscale_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=GREYSCALE',</span> <span class="pre">'--model.in_channels=30']</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.greyscale_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.filename">
+<span class="sig-name descname"><span class="pre">filename</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cine.py'</span></em><a class="headerlink" href="#tests.integration_test.TestCineCLI.filename" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.test_quick_resnet_training">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestCineCLI.test_quick_resnet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (Cine) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.test_quick_senet_training">
+<span class="sig-name descname"><span class="pre">test_quick_senet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestCineCLI.test_quick_senet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (Cine) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.test_quick_resnet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestCineCLI.test_quick_resnet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (Cine) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.test_quick_senet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_senet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestCineCLI.test_quick_senet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (Cine) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.test_quick_resnet_rgb">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_rgb</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestCineCLI.test_quick_resnet_rgb" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (Cine) can train on a single batch with RGB images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestCineCLI.test_quick_resnet_greyscale">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_greyscale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestCineCLI.test_quick_resnet_greyscale" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (Cine) can train on a single batch with greyscale images.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tests.integration_test.</span></span><span class="sig-name descname"><span class="pre">TestLGECLI</span></span><a class="headerlink" href="#tests.integration_test.TestLGECLI" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3.12/library/functions.html#object" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test integration of the LGE CLI with the models and datasets.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.default_train_args">
+<span class="sig-name descname"><span class="pre">default_train_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['fit',</span> <span class="pre">'--trainer.precision=bf16-mixed',</span> <span class="pre">'--model.classes=4',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/lge.yaml',</span> <span class="pre">'--trainer.logger=False',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.default_train_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.default_test_args">
+<span class="sig-name descname"><span class="pre">default_test_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['test',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/lge.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/testing.yaml',</span> <span class="pre">'--trainer.logger=False',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.default_test_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.default_senet_args">
+<span class="sig-name descname"><span class="pre">default_senet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=senet154',</span> <span class="pre">'--data.batch_size=4']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.default_senet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.default_resnet_args">
+<span class="sig-name descname"><span class="pre">default_resnet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=resnet50']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.default_resnet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.default_colour_mode">
+<span class="sig-name descname"><span class="pre">default_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=RGB']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.default_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.greyscale_colour_mode">
+<span class="sig-name descname"><span class="pre">greyscale_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=GREYSCALE',</span> <span class="pre">'--model.in_channels=1']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.greyscale_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.fast_dev_run_args">
+<span class="sig-name descname"><span class="pre">fast_dev_run_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--trainer.fast_dev_run=1']</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.fast_dev_run_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.filename">
+<span class="sig-name descname"><span class="pre">filename</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'lge.py'</span></em><a class="headerlink" href="#tests.integration_test.TestLGECLI.filename" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.test_quick_resnet_training">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestLGECLI.test_quick_resnet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (LGE) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.test_quick_senet_training">
+<span class="sig-name descname"><span class="pre">test_quick_senet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestLGECLI.test_quick_senet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (LGE) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.test_quick_resnet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestLGECLI.test_quick_resnet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (LGE) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.test_quick_senet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_senet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestLGECLI.test_quick_senet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (LGE) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.test_quick_resnet_rgb">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_rgb</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestLGECLI.test_quick_resnet_rgb" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (LGE) can train on a single batch with RGB images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestLGECLI.test_quick_resnet_greyscale">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_greyscale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestLGECLI.test_quick_resnet_greyscale" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (LGE) can train on a single batch with greyscale images.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tests.integration_test.</span></span><span class="sig-name descname"><span class="pre">TestTwoStreamCLI</span></span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3.12/library/functions.html#object" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test integration of the TwoStream CLI with the models and datasets.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.default_train_args">
+<span class="sig-name descname"><span class="pre">default_train_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['fit',</span> <span class="pre">'--trainer.precision=bf16-mixed',</span> <span class="pre">'--model.classes=4',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/two_stream.yaml',</span> <span class="pre">'--trainer.logger=False',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.default_train_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.default_test_args">
+<span class="sig-name descname"><span class="pre">default_test_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['test',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/two_stream.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/testing.yaml',</span> <span class="pre">'--trainer.logger=False',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.default_test_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.default_senet_args">
+<span class="sig-name descname"><span class="pre">default_senet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=senet154',</span> <span class="pre">'--data.batch_size=2']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.default_senet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.default_resnet_args">
+<span class="sig-name descname"><span class="pre">default_resnet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=resnet50']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.default_resnet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.default_colour_mode">
+<span class="sig-name descname"><span class="pre">default_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=RGB']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.default_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.greyscale_colour_mode">
+<span class="sig-name descname"><span class="pre">greyscale_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=GREYSCALE',</span> <span class="pre">'--model.in_channels=1']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.greyscale_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.fast_dev_run_args">
+<span class="sig-name descname"><span class="pre">fast_dev_run_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--trainer.fast_dev_run=1']</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.fast_dev_run_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.filename">
+<span class="sig-name descname"><span class="pre">filename</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'two_stream.py'</span></em><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.filename" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.test_quick_resnet_training">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (TwoStream) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.test_quick_senet_training">
+<span class="sig-name descname"><span class="pre">test_quick_senet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.test_quick_senet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (TwoStream) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.test_quick_resnet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (TwoStream) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.test_quick_senet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_senet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.test_quick_senet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (TwoStream) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.test_quick_resnet_rgb">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_rgb</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_rgb" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (TwoStream) can train on a single batch with RGB images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestTwoStreamCLI.test_quick_resnet_greyscale">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_greyscale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestTwoStreamCLI.test_quick_resnet_greyscale" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (TwoStream) can train on a single batch with greyscale images.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tests.integration_test.</span></span><span class="sig-name descname"><span class="pre">TestAttentionUnetCLI</span></span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3.12/library/functions.html#object" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test integration of the AttentionUnet CLI with the models and datasets.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.default_train_args">
+<span class="sig-name descname"><span class="pre">default_train_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['fit',</span> <span class="pre">'--trainer.precision=bf16-mixed',</span> <span class="pre">'--model.classes=4',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/residual_attention.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine_tpo_resnet50.yaml',</span> <span class="pre">'--data.num_workers=0',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml',</span> <span class="pre">'--data.batch_size=1']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.default_train_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.default_frames">
+<span class="sig-name descname"><span class="pre">default_frames</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.num_frames=5']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.default_frames" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.default_test_args">
+<span class="sig-name descname"><span class="pre">default_test_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['test',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/residual_attention.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/cine_tpo_resnet50.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/testing.yaml',</span> <span class="pre">'--config',</span> <span class="pre">'./configs/no_checkpointing.yaml',</span> <span class="pre">'--data.batch_size=1']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.default_test_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.default_senet_args">
+<span class="sig-name descname"><span class="pre">default_senet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=senet154',</span> <span class="pre">'--data.batch_size=1']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.default_senet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.default_resnet_args">
+<span class="sig-name descname"><span class="pre">default_resnet_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.encoder_name=resnet50']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.default_resnet_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.default_colour_mode">
+<span class="sig-name descname"><span class="pre">default_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--image_loading_mode=RGB']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.default_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.greyscale_colour_mode">
+<span class="sig-name descname"><span class="pre">greyscale_colour_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--config',</span> <span class="pre">'./configs/residual_attention_greyscale.yaml']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.greyscale_colour_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.flatten_conv_args">
+<span class="sig-name descname"><span class="pre">flatten_conv_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--model.flat_conv=True']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.flatten_conv_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.fast_dev_run_args">
+<span class="sig-name descname"><span class="pre">fast_dev_run_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['--trainer.fast_dev_run=1']</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.fast_dev_run_args" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.filename">
+<span class="sig-name descname"><span class="pre">filename</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'attention_unet.py'</span></em><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.filename" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_training">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (AttentionUnet) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_quick_senet_training">
+<span class="sig-name descname"><span class="pre">test_quick_senet_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_senet_training" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (AttentionUnet) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (AttentionUnet) can train on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_quick_senet_testing">
+<span class="sig-name descname"><span class="pre">test_quick_senet_testing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_senet_testing" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the SENet154 (AttentionUnet) can validate on a single batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_rgb">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_rgb</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_rgb" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (AttentionUnet) can train on a single batch with RGB images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_greyscale">
+<span class="sig-name descname"><span class="pre">test_quick_resnet_greyscale</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_quick_resnet_greyscale" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (AttentionUnet) can train on a single batch with greyscale images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tests.integration_test.TestAttentionUnetCLI.test_flat_conv">
+<span class="sig-name descname"><span class="pre">test_flat_conv</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tests.integration_test.TestAttentionUnetCLI.test_flat_conv" title="Link to this definition"></a></dt>
+<dd><p>Tests whether the ResNet50 (AttentionUnet) can train with a flat temporal convolutional layer.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-tests">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-tests" title="Link to this heading"></a></h2>
+<p>Unit and integration tests for the project.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Christopher Kok, Yu Yang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
