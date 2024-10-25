@@ -8,16 +8,15 @@ import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from torch.nn import functional as F
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import (
-    MulticlassJaccardIndex,
-    MulticlassPrecision,
-    MulticlassRecall,
-    MultilabelJaccardIndex,
-    MultilabelPrecision,
-    MultilabelRecall,
-)
 
 from metrics.dice import GeneralizedDiceScoreVariant
+from metrics.jaccard import MulticlassMJaccardIndex, MultilabelMJaccardIndex
+from metrics.precision_recall import (
+    MulticlassMPrecision,
+    MulticlassMRecall,
+    MultilabelMPrecision,
+    MultilabelMRecall,
+)
 from models.common import CommonModelMixin
 from utils.types import ClassificationMode
 
@@ -44,25 +43,25 @@ def shared_metric_calculation(
     # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
     # of the combinations of classification modes and sets the metrics correctly.
     if module.eval_classification_mode == ClassificationMode.MULTILABEL_MODE:
-        masks_preds = masks_proba.sigmoid() > 0.5  # BS x C x H x W
+        masks_preds_one_hot = masks_proba.sigmoid() > 0.5  # BS x C x H x W
         if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
-            module.dice_metrics[prefix].update(masks_preds, masks_one_hot)
-            module.other_metrics[prefix].update(masks_proba, masks_one_hot)
+            module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+            module.other_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
         else:
-            module.dice_metrics[prefix].update(masks_preds, masks)
-            module.other_metrics[prefix].update(masks_proba, masks)
+            module.dice_metrics[prefix].update(masks_preds_one_hot, masks)
+            module.other_metrics[prefix].update(masks_preds_one_hot, masks)
     elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
         # Output: BS x C x H x W
         masks_preds = masks_proba.softmax(dim=1).argmax(dim=1)
-        masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
-        module.dice_metrics[prefix].update(masks_preds, masks_one_hot)
-        module.other_metrics[prefix].update(masks_proba, masks)
+        masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+        module.other_metrics[prefix].update(masks_preds, masks)
     else:
         raise NotImplementedError(
             f"The mode {module.eval_classification_mode.name} is not implemented."
         )
 
-    return masks_preds, masks_one_hot.bool()
+    return masks_preds_one_hot, masks_one_hot.bool()
 
 
 def setup_metrics(module: CommonModelMixin, metric: Metric | None, classes: int):
@@ -166,31 +165,22 @@ def _setup_dice(
 def _setup_jaccard(module: CommonModelMixin, classes: int):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
-            macro_avg_jaccard = MulticlassJaccardIndex(
-                num_classes=classes, average="macro", ignore_index=0
+            macro_avg_jaccard = MulticlassMJaccardIndex(
+                num_classes=classes, average="macro", ignore_index=0, zero_division=1.0
             )
-            weighted_avg_jaccard = MulticlassJaccardIndex(
-                num_classes=classes, average="weighted", ignore_index=0
-            )
-            non_agg_jaccard = MulticlassJaccardIndex(
-                num_classes=classes,
-                average="none",
+            non_agg_jaccard = MulticlassMJaccardIndex(
+                num_classes=classes, average="none", zero_division=1.0
             )
         case ClassificationMode.MULTILABEL_MODE:
-            macro_avg_jaccard = MultilabelJaccardIndex(
-                num_labels=classes, average="macro", ignore_index=0
+            macro_avg_jaccard = MultilabelMJaccardIndex(
+                num_labels=classes, average="macro", ignore_index=0, zero_division=1.0
             )
-            weighted_avg_jaccard = MultilabelJaccardIndex(
-                num_labels=classes, average="weighted", ignore_index=0
-            )
-            non_agg_jaccard = MultilabelJaccardIndex(
-                num_labels=classes,
-                average="none",
+            non_agg_jaccard = MultilabelMJaccardIndex(
+                num_labels=classes, average="none", zero_division=1.0
             )
 
     return {
         "jaccard_macro_avg": macro_avg_jaccard,
-        "jaccard_weighted_avg": weighted_avg_jaccard,
         "jaccard_per_class": non_agg_jaccard,
     }
 
@@ -198,51 +188,53 @@ def _setup_jaccard(module: CommonModelMixin, classes: int):
 def _setup_precision_recall(module: CommonModelMixin, classes: int):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
-            macro_avg_recall = MulticlassRecall(
-                classes, average="macro", multidim_average="global", ignore_index=0
+            macro_avg_recall = MulticlassMRecall(
+                classes,
+                average="macro",
+                multidim_average="global",
+                ignore_index=0,
+                zero_division=1.0,
             )
-            weighted_avg_recall = MulticlassRecall(
-                classes, average="weighted", multidim_average="global", ignore_index=0
+            non_agg_recall = MulticlassMRecall(
+                classes, average="none", multidim_average="global", zero_division=1.0
             )
-            non_agg_recall = MulticlassRecall(
-                classes, average="none", multidim_average="global"
+            macro_avg_precision = MulticlassMPrecision(
+                classes,
+                average="macro",
+                multidim_average="global",
+                ignore_index=0,
+                zero_division=1.0,
             )
-            macro_avg_precision = MulticlassPrecision(
-                classes, average="macro", multidim_average="global", ignore_index=0
-            )
-            weighted_avg_precision = MulticlassPrecision(
-                classes, average="weighted", multidim_average="global", ignore_index=0
-            )
-            non_agg_precision = MulticlassPrecision(
-                classes, average="none", multidim_average="global"
+            non_agg_precision = MulticlassMPrecision(
+                classes, average="none", multidim_average="global", zero_division=1.0
             )
 
         case ClassificationMode.MULTILABEL_MODE:
-            macro_avg_recall = MultilabelRecall(
-                classes, average="macro", multidim_average="global", ignore_index=0
+            macro_avg_recall = MultilabelMRecall(
+                classes,
+                average="macro",
+                multidim_average="global",
+                ignore_index=0,
+                zero_division=1.0,
             )
-            weighted_avg_recall = MultilabelRecall(
-                classes, average="weighted", multidim_average="global", ignore_index=0
+            non_agg_recall = MultilabelMRecall(
+                classes, average="none", multidim_average="global", zero_division=1.0
             )
-            non_agg_recall = MultilabelRecall(
-                classes, average="none", multidim_average="global"
+            macro_avg_precision = MultilabelMPrecision(
+                classes,
+                average="macro",
+                multidim_average="global",
+                ignore_index=0,
+                zero_division=1.0,
             )
-            macro_avg_precision = MultilabelPrecision(
-                classes, average="macro", multidim_average="global", ignore_index=0
-            )
-            weighted_avg_precision = MultilabelPrecision(
-                classes, average="weighted", multidim_average="global", ignore_index=0
-            )
-            non_agg_precision = MultilabelPrecision(
-                classes, average="none", multidim_average="global"
+            non_agg_precision = MultilabelMPrecision(
+                classes, average="none", multidim_average="global", zero_division=1.0
             )
 
     return {
         "recall_macro_avg": macro_avg_recall,
-        "recall_weighted_avg": weighted_avg_recall,
         "recall_per_class": non_agg_recall,
         "precision_macro_avg": macro_avg_precision,
-        "precision_weighted_avg": weighted_avg_precision,
         "precision_per_class": non_agg_precision,
     }
 
@@ -337,7 +329,6 @@ def _grouped_generalized_metric_logging(
     dice_results: dict[str, torch.Tensor] = dice_metric_obj.compute()
     other_results: dict[str, torch.Tensor] = other_metric_obj.compute()
     results = dice_results | other_results
-
     results_new: dict[str, torch.Tensor] = {}
     # (1) Log only validation metrics in hyperparameter tab.
     for k, v in results.items():
