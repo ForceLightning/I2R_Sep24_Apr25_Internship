@@ -19,9 +19,11 @@ release = "0.1"
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.coverage",
+    "sphinx.ext.mathjax",
     "sphinx_rtd_theme",
 ]
 
@@ -54,6 +56,8 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3.12/", None),
     "torch": ("https://pytorch.org/docs/2.5/", None),
     "numpy": ("https://numpy.org/doc/1.26/", None),
+    "torchmetrics": ("https://lightning.ai/docs/torchmetrics/v1.5.0/", None),
+    "matplotlib": ("https://matplotlib.org/3.9.0/", None),
     "segmentation_models_pytorch": ("https://smp.readthedocs.io/en/v0.3.4/", None),
 }
 

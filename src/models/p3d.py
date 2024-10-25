@@ -18,6 +18,18 @@ def conv_S(
     stride: int = 1,
     padding: int | tuple[int, int, int] = 1,
 ):
+    """Initialise spatial convolutional layer.
+
+    Args:
+        in_channels: Number of input channels.
+        out_channels: Number of output channels.
+        stride: Convolutional filter stride.
+        padding: Padding shape.
+
+    Return:
+        nn.Conv3d: Initalised spatial convolutional layer.
+
+    """
     return nn.Conv3d(
         in_channels,
         out_channels,
@@ -34,12 +46,35 @@ def conv_T(
     stride: int = 1,
     padding: int | tuple[int, int, int] = 1,
 ):
+    """Initialise temporal convolutional layer.
+
+    Args:
+        in_channels: Number of input channels.
+        out_channels: Number of output channels.
+        stride: Convolutional filter stride.
+        padding: Padding shape.
+
+    Return:
+        nn.Conv3d: Initalised temporal convolutional layer.
+
+    """
     return nn.Conv3d(
         in_channels, out_channels, (3, 1, 1), stride=stride, padding=padding, bias=False
     )
 
 
 def downsample_basic_block(x: torch.Tensor, channels: int, stride: int) -> torch.Tensor:
+    """Downsamples input with average pooling.
+
+    Args:
+        x: Input tensor.
+        channels: Number of output channels.
+        stride: Stride of average pooling layer.
+
+    Return:
+        torch.Tensor: Downsampled input.
+
+    """
     out = F.avg_pool3d(x, kernel_size=1, stride=stride)
     zero_padding = torch.zeros(
         (out.size(0), channels - out.size(1), out.size(2), out.size(3), out.size(4)),
@@ -52,6 +87,8 @@ def downsample_basic_block(x: torch.Tensor, channels: int, stride: int) -> torch
 
 
 class Bottleneck(nn.Module):
+    """Bottleneck layer."""
+
     expansion = 4
 
     def __init__(
@@ -64,6 +101,18 @@ class Bottleneck(nn.Module):
         depth_3d: int = 47,
         ST_struc: tuple[str, str, str] = ("A", "B", "C"),
     ):
+        """Initialise the bottleneck.
+
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            stride: Stride of the convolutional layer.
+            downsample: Downsample layer.
+            n_s: Current layer index.
+            depth_3d: Number of 3D layers.
+            ST_struc: Spatial-temporal structure.
+
+        """
         super().__init__()
         self.downsample = downsample
         self.depth_3d = depth_3d
@@ -129,6 +178,15 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
     def ST_A(self, x: torch.Tensor) -> torch.Tensor:
+        """A-type spatial-temporal structure.
+
+        Args:
+            x: Input tensor.
+
+        Return:
+            torch.Tensor: Output tensor
+
+        """
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.relu(x)
@@ -140,6 +198,15 @@ class Bottleneck(nn.Module):
         return x
 
     def ST_B(self, x: torch.Tensor) -> torch.Tensor:
+        """B-type spatial-temporal structure.
+
+        Args:
+            x: Input tensor.
+
+        Return:
+            torch.Tensor: Output tensor
+
+        """
         spat_x = self.conv2(x)
         spat_x = self.bn2(spat_x)
         spat_x = self.relu(spat_x)
@@ -151,6 +218,15 @@ class Bottleneck(nn.Module):
         return x + spat_x
 
     def ST_C(self, x: torch.Tensor) -> torch.Tensor:
+        """C-type spatial-temporal structure.
+
+        Args:
+            x: Input tensor.
+
+        Return:
+            torch.Tensor: Output tensor
+
+        """
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.relu(x)
@@ -161,6 +237,7 @@ class Bottleneck(nn.Module):
 
         return x + tmp_x
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         res = x
 
@@ -197,9 +274,13 @@ class Bottleneck(nn.Module):
 
 
 class TemporalSqueeze(nn.Module):
+    """Squeeze temporal dimension."""
+
+    @override
     def __init__(self):
         super().__init__()
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sizes = x.size()
         x = x.view(-1, sizes[1], sizes[3], sizes[4])
@@ -207,6 +288,8 @@ class TemporalSqueeze(nn.Module):
 
 
 class P3D(nn.Module):
+    """P3D model."""
+
     def __init__(
         self,
         block: type[Bottleneck],
@@ -219,6 +302,18 @@ class P3D(nn.Module):
             Literal["A", "B", "C"], Literal["A", "B", "C"], Literal["A", "B", "C"]
         ] = ("A", "B", "C"),
     ):
+        """Initialise the P3D model.
+
+        Args:
+            block: Block type.
+            layers: Number of layers.
+            modality: Input modality.
+            shortcut_type: Shortcut type.
+            num_classes: Number of classes.
+            dropout: Dropout rate.
+            ST_struc: Spatial-temporal structure.
+
+        """
         super().__init__()
         self.inplanes = 64
         match modality:
@@ -285,16 +380,19 @@ class P3D(nn.Module):
 
     @property
     def scale_size(self):
+        """Get the scale size of the model."""
         return (
             self.input_size[2] * 256 // 160
         )  # Assume that raw images are resized (360, 256)
 
     @property
     def temporal_length(self):
+        """Get the temporal length of the model."""
         return self.input_size[1]
 
     @property
     def crop_size(self):
+        """Get the crop size of the model."""
         return self.input_size[2]
 
     def _make_layer(
@@ -304,7 +402,20 @@ class P3D(nn.Module):
         blocks: int,
         shortcut_type: Literal["A", "B", "C"],
         stride: int = 1,
-    ):
+    ) -> nn.Sequential:
+        """Make a layer.
+
+        Args:
+            block: Block type.
+            planes: Number of planes.
+            blocks: Number of blocks.
+            shortcut_type: Shortcut type.
+            stride: Stride.
+
+        Return:
+            nn.Sequential: Layer.
+
+        """
         downsample = None
         stride_p = stride  # Especially for downsample branch.
 
@@ -400,12 +511,23 @@ class P3D(nn.Module):
 
         return x
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self._forward_impl(x)
 
 
 class P3DEncoder(P3D, EncoderMixin):
+    """P3D encoder."""
+
     def __init__(self, out_channels: tuple[int, ...], depth: int = 5, **kwargs):
+        """Initialise the P3D encoder.
+
+        Args:
+            out_channels: Number of output channels.
+            depth: Depth of the encoder.
+            **kwargs: Additional arguments.
+
+        """
         super().__init__(**kwargs)
         self._depth = depth
         self._out_channels = out_channels
@@ -414,6 +536,7 @@ class P3DEncoder(P3D, EncoderMixin):
         del self.fc
         del self.avgpool
 
+    @override
     def get_stages(self):
         return [
             nn.Identity(),
@@ -462,7 +585,16 @@ def patch_first_conv(
     new_in_channels: int,
     default_in_channels: int = 3,
     pretrained: bool = True,
-):
+) -> None:
+    """Patch first convolutional layer.
+
+    Args:
+        model: Model to patch.
+        new_in_channels: New number of input channels.
+        default_in_channels: Default number of input channels.
+        pretrained: Whether the model is pretrained.
+
+    """
     # Get first conv3d
     for module in model.modules():
         if isinstance(module, nn.Conv3d) and module.in_channels == default_in_channels:
@@ -503,7 +635,21 @@ def get_encoder(
     modality: Literal["RGB", "Greyscale", "Flow"] = "RGB",
     pretrained: bool = True,
     **kwargs,
-):
+) -> P3D:
+    """Get the P3D encoder model.
+
+    Args:
+        in_channels: Number of input channels.
+        output_stride: Output stride.
+        encoder_name: Encoder name.
+        modality: Input modality.
+        pretrained: Whether the model is pretrained.
+        **kwargs: Additional arguments.
+
+    Return:
+        P3DEncoder: P3D encoder model
+
+    """
     match encoder_name:
         case "p3d63":
             model = P3D(Bottleneck, [3, 4, 6, 3], modality=modality, **kwargs)
@@ -532,6 +678,8 @@ def get_encoder(
 
 
 class P3DUnet(SegmentationModel):
+    """P3D UNet model."""
+
     def __init__(
         self,
         encoder_name: Literal["p3d63", "p3d131", "p3d199"] = "p3d63",
@@ -544,6 +692,20 @@ class P3DUnet(SegmentationModel):
         num_frames: Literal[5, 10, 15, 20, 30] = 5,
         aux_params: dict[str, Any] | None = None,
     ):
+        """Initialise the P3D UNet model.
+
+        Args:
+            encoder_name: Encoder name.
+            modality: Input modality.
+            decoder_use_batchnorm: Whether to use batch normalisation in the decoder.
+            decoder_channels: Number of channels in the decoder.
+            decoder_attention_type: Attention type in the decoder.
+            classes: Number of classes.
+            activation: Activation function.
+            num_frames: Number of frames.
+            aux_params: Auxiliary parameters.
+
+        """
         super().__init__()
         self.encoder_name = encoder_name
         self.modality = modality
@@ -563,3 +725,4 @@ class P3DUnet(SegmentationModel):
         )
 
         # TODO: Complete this.
+        raise NotImplementedError("P3D UNet not implemented!")

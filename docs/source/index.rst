@@ -6,10 +6,7 @@
 I2R Sep 2024-Apr 2025 Internship documentation
 ==============================================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+Welcome to I2R Sep 2024-Apr 2025 Internship documentation!
 
 .. toctree::
    :maxdepth: 2
