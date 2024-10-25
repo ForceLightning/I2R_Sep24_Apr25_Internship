@@ -1,3 +1,13 @@
+# 2024-10-25 mJaccard-Index, mRecall, and mPrecision metrics
+[ed580be](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/ed580bec99a633d65bc61dd8d036be3b99567c8a)
+
+Implemented Jaccard Index, Recall, and Precision metrics which are calculated for each sample and the average across all samples are taken.
+
+# 2024-10-17 tscSE models [EXPERIMENTAL]
+[f352dde](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/f352dde8ccb6de37502686a9a5c4a940818d35e0)
+
+Implemented ResNet-based models with additional temporal, spatical, and channel squeeze excitation attention modules.
+
 # 2024-10-12 Optical Flow for residual frame calculation [EXPERIMENTAL]
 [3cd2866](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/commit/3cd28666d35d0c9cf16f72d7891107ffe417f448)
 
