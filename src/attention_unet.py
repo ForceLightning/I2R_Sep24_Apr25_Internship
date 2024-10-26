@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 
 from cli.common import CommonCLI
 from dataset.dataset import ResidualTwoPlusOneDataset, get_trainval_data_subsets
-from models.attention import ResidualAttentionUnetLightning
+from models.attention import ResidualAttentionLightningModule
+from models.attention.utils import ModelType, get_model_type
 from utils import utils
 from utils.types import ClassificationMode, LoadingMode, ResidualMode
 
@@ -240,6 +241,14 @@ class ResidualAttentionCLI(CommonCLI):
         """Add extra arguments to CLI parser."""
         super().add_arguments_to_parser(parser)
 
+        parser.add_argument(
+            "--model_architecture",
+            help="Model architecture (UNET, UNET_PLUS_PLUS, etc.)",
+        )
+        parser.link_arguments(
+            "model_architecture", "model.model_type", compute_fn=get_model_type
+        )
+
         parser.add_argument("--residual_mode", help="Residual calculation mode")
         parser.link_arguments(
             "residual_mode", "model.residual_mode", compute_fn=utils.get_residual_mode
@@ -253,6 +262,7 @@ class ResidualAttentionCLI(CommonCLI):
             "dl_classification_mode": "MULTICLASS_MODE",
             "eval_classification_mode": "MULTICLASS_MODE",
             "residual_mode": "SUBTRACT_NEXT_FRAME",
+            "model_architecture": "UNET",
             "trainer.max_epochs": 50,
             "model.encoder_name": "resnet50",
             "model.encoder_weights": "imagenet",
@@ -265,7 +275,7 @@ class ResidualAttentionCLI(CommonCLI):
 
 if __name__ == "__main__":
     cli = ResidualAttentionCLI(
-        ResidualAttentionUnetLightning,
+        ResidualAttentionLightningModule,
         ResidualTwoPlusOneDataModule,
         save_config_callback=None,
         auto_configure_optimizers=False,
