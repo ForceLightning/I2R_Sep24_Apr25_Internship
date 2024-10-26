@@ -11,6 +11,7 @@ from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
+from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
 from segmentation_models_pytorch.encoders import get_encoder as smp_get_encoder
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
@@ -563,6 +564,124 @@ class ResidualAttentionUnet(SegmentationModel):
 
         x = self.forward(regular_frames, residual_frames)
         return x
+
+
+class ResidualAttentionUnetPlusPlus(ResidualAttentionUnet):
+    """U-Net++ with Attention mechanism on residual frames."""
+
+    _default_decoder_channels = [256, 128, 64, 32, 16]
+    _default_skip_conn_channels = [2, 5, 10, 20, 40]
+
+    @override
+    def __init__(
+        self,
+        encoder_name: str = "resnet34",
+        encoder_depth: int = 5,
+        encoder_weights: str | None = "imagenet",
+        residual_mode: ResidualMode = ResidualMode.SUBTRACT_NEXT_FRAME,
+        decoder_use_batchnorm: bool = True,
+        decoder_channels: list[int] = _default_decoder_channels,
+        decoder_attention_type: Literal["scse"] | None = None,
+        in_channels: int = 3,
+        classes: int = 1,
+        activation: str | type[nn.Module] | None = None,
+        skip_conn_channels: list[int] = _default_skip_conn_channels,
+        num_frames: Literal[5, 10, 15, 20, 30] = 5,
+        aux_params: dict[str, Any] | None = None,
+        flat_conv: bool = False,
+        res_conv_activation: str | None = None,
+        use_dilations: bool = False,
+        reduce: REDUCE_TYPES = "prod",
+        _attention_only: bool = False,
+    ):
+        super().__init__()
+        self.num_frames = num_frames
+        self.flat_conv = flat_conv
+        self.activation = activation
+        self.use_dilations = use_dilations
+        self.encoder_name = encoder_name
+        self.res_conv_activation = res_conv_activation
+        self.reduce: REDUCE_TYPES = reduce
+        self.skip_conn_channels = skip_conn_channels
+        self.residual_mode = residual_mode
+        self._attention_only = _attention_only
+
+        # Define encoder, decoder, segmentation head, and classification head.
+        #
+        # If `tscse` is a part of the encoder name, handle instantiation slightly
+        # differently.
+        if "tscse" in encoder_name:
+            self.spatial_encoder = tscse_get_encoder(
+                encoder_name,
+                num_frames=num_frames,
+                in_channels=in_channels,
+                depth=encoder_depth,
+            )
+
+            # NOTE: This is to help with reproducibility during ablation studies.
+            with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+                self.residual_encoder = tscse_get_encoder(
+                    encoder_name,
+                    num_frames=num_frames,
+                    in_channels=(
+                        in_channels
+                        if residual_mode == ResidualMode.SUBTRACT_NEXT_FRAME
+                        else 2
+                    ),
+                    depth=encoder_depth,
+                )
+        else:
+            self.spatial_encoder = smp_get_encoder(
+                encoder_name,
+                in_channels=in_channels,
+                depth=encoder_depth,
+                weights=encoder_weights,
+            )
+
+            # NOTE: This is to help with reproducibility during ablation studies.
+            with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+                self.residual_encoder = smp_get_encoder(
+                    encoder_name,
+                    in_channels=(
+                        in_channels
+                        if residual_mode == ResidualMode.SUBTRACT_NEXT_FRAME
+                        else 2
+                    ),
+                    depth=encoder_depth,
+                    weights=encoder_weights,
+                )
+
+        encoder_channels = (
+            [x * 2 for x in self.spatial_encoder.out_channels]
+            if self.reduce == "cat"
+            else self.spatial_encoder.out_channels
+        )
+
+        self.decoder = UnetPlusPlusDecoder(
+            encoder_channels=encoder_channels,
+            decoder_channels=decoder_channels,
+            n_blocks=encoder_depth,
+            use_batchnorm=decoder_use_batchnorm,
+            center=encoder_name.startswith("vgg"),
+            attention_type=decoder_attention_type,
+        )
+
+        self.segmentation_head = SegmentationHead(
+            in_channels=decoder_channels[-1],
+            out_channels=classes,
+            activation=activation,
+            kernel_size=3,
+        )
+
+        if aux_params is not None:
+            self.classification_head = ClassificationHead(
+                in_channels=self.spatial_encoder.out_channels[-1], **aux_params
+            )
+        else:
+            self.classification_head = None
+
+        self.name = f"unetplusplus-{encoder_name}"
+        self.initialize()
 
 
 class ResidualAttentionUnetLightning(CommonModelMixin):
