@@ -43,17 +43,19 @@ def shared_metric_calculation(
     # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
     # of the combinations of classification modes and sets the metrics correctly.
     if module.eval_classification_mode == ClassificationMode.MULTILABEL_MODE:
-        masks_preds_one_hot = masks_proba.sigmoid() > 0.5  # BS x C x H x W
+        masks_preds_one_hot = masks_proba.sigmoid()  # BS x C x H x W
         if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
-            module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+            module.dice_metrics[prefix].update(masks_preds_one_hot > 0.5, masks_one_hot)
             module.other_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
         else:
-            module.dice_metrics[prefix].update(masks_preds_one_hot, masks)
+            module.dice_metrics[prefix].update(masks_preds_one_hot > 0.5, masks)
             module.other_metrics[prefix].update(masks_preds_one_hot, masks)
     elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
         # Output: BS x C x H x W
-        masks_preds = masks_proba.softmax(dim=1).argmax(dim=1)
-        masks_preds_one_hot = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        masks_preds = masks_proba.softmax(dim=1)
+        masks_preds_one_hot = F.one_hot(
+            masks_preds.argmax(dim=1), num_classes=4
+        ).permute(0, -1, 1, 2)
         module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
         module.other_metrics[prefix].update(masks_preds, masks)
     else:
@@ -191,44 +193,56 @@ def _setup_precision_recall(module: CommonModelMixin, classes: int):
             macro_avg_recall = MulticlassMRecall(
                 classes,
                 average="macro",
-                multidim_average="global",
+                multidim_average="samplewise",
                 ignore_index=0,
                 zero_division=1.0,
             )
             non_agg_recall = MulticlassMRecall(
-                classes, average="none", multidim_average="global", zero_division=1.0
+                classes,
+                average="none",
+                multidim_average="samplewise",
+                zero_division=1.0,
             )
             macro_avg_precision = MulticlassMPrecision(
                 classes,
                 average="macro",
-                multidim_average="global",
+                multidim_average="samplewise",
                 ignore_index=0,
                 zero_division=1.0,
             )
             non_agg_precision = MulticlassMPrecision(
-                classes, average="none", multidim_average="global", zero_division=1.0
+                classes,
+                average="none",
+                multidim_average="samplewise",
+                zero_division=1.0,
             )
 
         case ClassificationMode.MULTILABEL_MODE:
             macro_avg_recall = MultilabelMRecall(
                 classes,
                 average="macro",
-                multidim_average="global",
+                multidim_average="samplewise",
                 ignore_index=0,
                 zero_division=1.0,
             )
             non_agg_recall = MultilabelMRecall(
-                classes, average="none", multidim_average="global", zero_division=1.0
+                classes,
+                average="none",
+                multidim_average="samplewise",
+                zero_division=1.0,
             )
             macro_avg_precision = MultilabelMPrecision(
                 classes,
                 average="macro",
-                multidim_average="global",
+                multidim_average="samplewise",
                 ignore_index=0,
                 zero_division=1.0,
             )
             non_agg_precision = MultilabelMPrecision(
-                classes, average="none", multidim_average="global", zero_division=1.0
+                classes,
+                average="none",
+                multidim_average="samplewise",
+                zero_division=1.0,
             )
 
     return {
@@ -338,11 +352,8 @@ def _grouped_generalized_metric_logging(
             "val/dice_macro_class_2_3",
             "val/dice_weighted_class_2_3",
             "val/jaccard_macro_avg",
-            "val/jaccard_weighted_avg",
             "val/recall_macro_avg",
-            "val/recall_weighted_avg",
             "val/precision_macro_avg",
-            "val/precision_weighted_avg",
         ]:
             results_new[f"hp/{k}"] = v
 

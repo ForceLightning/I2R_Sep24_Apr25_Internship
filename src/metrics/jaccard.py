@@ -84,9 +84,9 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         )
         confmat = _multiclass_confusion_matrix_update(preds, target, self.num_classes)
         jaccard = _jaccard_index_reduce(
-            confmat, average="none", zero_division=self.zero_division
+            confmat, average=None, zero_division=self.zero_division
         )
-        self.mJaccard_running += jaccard
+        self.mJaccard_running += jaccard * preds.shape[0]
 
 
 class MultilabelMJaccardIndex(MultilabelJaccardIndex):
@@ -150,6 +150,6 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
         )
         confmat = _multilabel_confusion_matrix_update(preds, target, self.num_labels)
         jaccard = _jaccard_index_reduce(
-            confmat, average=self.average, zero_division=self.zero_division
+            confmat, average=None, zero_division=self.zero_division
         )
-        self.mJaccard_running += jaccard
+        self.mJaccard_running += jaccard * preds.shape[0]

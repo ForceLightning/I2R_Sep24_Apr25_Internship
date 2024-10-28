@@ -81,7 +81,6 @@ class MulticlassMPrecision(MulticlassPrecision):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        self.samples += preds.shape[0]
         if self.validate_args:
             _multiclass_stat_scores_tensor_validation(
                 preds,
@@ -97,7 +96,7 @@ class MulticlassMPrecision(MulticlassPrecision):
             target,
             self.num_classes,
             self.top_k,
-            self.average,
+            None,
             self.multidim_average,
             self.ignore_index,
         )
@@ -107,13 +106,19 @@ class MulticlassMPrecision(MulticlassPrecision):
             fp,
             tn,
             fn,
-            average=self.average,
+            average=None,
             multidim_average=self.multidim_average,
             top_k=self.top_k,
             zero_division=self.zero_division,
         )
 
-        self.mPrecision_running += mPrecision
+        match self.multidim_average:
+            case "global":
+                self.samples += preds.shape[0]
+                self.mPrecision_running += mPrecision * preds.shape[0]
+            case "samplewise":
+                self.samples += preds.shape[0]
+                self.mPrecision_running += mPrecision.sum(dim=0)
 
 
 class MultilabelMPrecision(MultilabelPrecision):
@@ -171,7 +176,6 @@ class MultilabelMPrecision(MultilabelPrecision):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        self.samples += preds.shape[0]
         if self.validate_args:
             _multilabel_stat_scores_tensor_validation(
                 preds,
@@ -195,13 +199,19 @@ class MultilabelMPrecision(MultilabelPrecision):
             fp,
             tn,
             fn,
-            average=self.average,
+            average=None,
             multidim_average=self.multidim_average,
             multilabel=True,
             zero_division=self.zero_division,
         )
 
-        self.mPrecision_running += mPrecision
+        match self.multidim_average:
+            case "global":
+                self.samples += preds.shape[0]
+                self.mPrecision_running += mPrecision * preds.shape[0]
+            case "samplewise":
+                self.samples += preds.shape[0]
+                self.mPrecision_running += mPrecision.sum(dim=0)
 
 
 class MulticlassMRecall(MulticlassRecall):
@@ -259,7 +269,6 @@ class MulticlassMRecall(MulticlassRecall):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        self.samples += preds.shape[0]
         if self.validate_args:
             _multiclass_stat_scores_tensor_validation(
                 preds,
@@ -275,7 +284,7 @@ class MulticlassMRecall(MulticlassRecall):
             target,
             self.num_classes,
             self.top_k,
-            self.average,
+            None,
             self.multidim_average,
             self.ignore_index,
         )
@@ -285,13 +294,19 @@ class MulticlassMRecall(MulticlassRecall):
             fp,
             tn,
             fn,
-            average=self.average,
+            average=None,
             multidim_average=self.multidim_average,
             top_k=self.top_k,
             zero_division=self.zero_division,
         )
 
-        self.mRecall_running += mRecall
+        match self.multidim_average:
+            case "global":
+                self.samples += preds.shape[0]
+                self.mRecall_running += mRecall * preds.shape[0]
+            case "samplewise":
+                self.samples += preds.shape[0]
+                self.mRecall_running += mRecall.sum(dim=0)
 
 
 class MultilabelMRecall(MultilabelRecall):
@@ -349,7 +364,6 @@ class MultilabelMRecall(MultilabelRecall):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        self.samples += preds.shape[0]
         if self.validate_args:
             _multilabel_stat_scores_tensor_validation(
                 preds,
@@ -373,10 +387,16 @@ class MultilabelMRecall(MultilabelRecall):
             fp,
             tn,
             fn,
-            average=self.average,
+            average=None,
             multidim_average=self.multidim_average,
             multilabel=True,
             zero_division=self.zero_division,
         )
 
-        self.mPrecision_running += mRecall
+        match self.multidim_average:
+            case "global":
+                self.samples += preds.shape[0]
+                self.mRecall_running += mRecall * preds.shape[0]
+            case "samplewise":
+                self.samples += preds.shape[0]
+                self.mRecall_running += mRecall.sum(dim=0)
