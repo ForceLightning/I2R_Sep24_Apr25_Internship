@@ -13,7 +13,7 @@ from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 from warmup_scheduler import GradualWarmupScheduler
 
-from utils.types import ClassificationMode, LoadingMode, ResidualMode
+from utils.types import ClassificationMode, LoadingMode, ModelType, ResidualMode
 
 
 class LightningGradualWarmupScheduler(LRScheduler):
@@ -300,3 +300,19 @@ def get_accumulate_grad_batches(batch_size: int):
         return 1
     else:
         return 8 // batch_size
+
+
+def get_model_type(enum_str: str):
+    """Get enum from input string.
+
+    Args:
+        enum_str: String to match with enum.
+
+    Return:
+        ModelType: Resultant enum variant.
+
+    Raises:
+        KeyError: If the variant requested is not found.
+
+    """
+    return ModelType[enum_str.upper()]

@@ -72,3 +72,11 @@ class LoadingMode(Enum):
 
     RGB = auto()
     GREYSCALE = auto()
+
+
+class ModelType(Enum):
+    """Model architecture types."""
+
+    UNET = auto()
+    UNET_PLUS_PLUS = auto()
+    TRANS_UNET = auto()

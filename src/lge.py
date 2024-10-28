@@ -191,6 +191,7 @@ class LGECLI(CommonCLI):
             "dl_classification_mode": "MULTICLASS_MODE",
             "eval_classification_mode": "MULTICLASS_MODE",
             "trainer.max_epochs": 50,
+            "model_architecture": "UNET",
             "model.encoder_name": "resnet50",
             "model.encoder_weights": "imagenet",
             "model.in_channels": 3,  # 1 image, RGB channels.

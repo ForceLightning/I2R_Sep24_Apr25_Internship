@@ -33,6 +33,7 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    ModelType,
 )
 
 
@@ -45,6 +46,7 @@ class LightningUnetWrapper(CommonModelMixin):
         metric: Metric | None = None,
         num_frames: int = 30,
         loss: nn.Module | str | None = None,
+        model_type: ModelType = ModelType.UNET,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
@@ -72,6 +74,7 @@ class LightningUnetWrapper(CommonModelMixin):
             metric: Metric to use for evaluation.
             num_frames: Number of frames to process.
             loss: Loss function to use for training.
+            model_type: Model architecture to use.
             encoder_name: Name of the encoder to use.
             encoder_depth: The depth of the encoder.
             encoder_weights: Weights to use for the encoder.
@@ -106,14 +109,27 @@ class LightningUnetWrapper(CommonModelMixin):
         self.save_hyperparameters(ignore=["loss"])
         self.batch_size = batch_size
         self.num_frames = num_frames
+        self.model_type = model_type
 
-        self.model = smp.Unet(
-            encoder_name=encoder_name,
-            encoder_depth=encoder_depth,
-            encoder_weights=encoder_weights,
-            in_channels=in_channels,
-            classes=classes,
-        )
+        match model_type:
+            case ModelType.UNET:
+                self.model = smp.Unet(
+                    encoder_name=encoder_name,
+                    encoder_depth=encoder_depth,
+                    encoder_weights=encoder_weights,
+                    in_channels=in_channels,
+                    classes=classes,
+                )
+            case ModelType.UNET_PLUS_PLUS:
+                self.model = smp.UnetPlusPlus(
+                    encoder_name=encoder_name,
+                    encoder_depth=encoder_depth,
+                    encoder_weights=encoder_weights,
+                    in_channels=in_channels,
+                    classes=classes,
+                )
+            case _:
+                raise NotImplementedError(f"{model_type} is not yet implemented!")
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
         self.scheduler = scheduler

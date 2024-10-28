@@ -12,6 +12,7 @@ from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
+from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
@@ -36,6 +37,7 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    ModelType,
 )
 
 
@@ -310,6 +312,7 @@ class TwoPlusOneUnet(SegmentationModel):
 
     def __init__(
         self,
+        model_type: ModelType = ModelType.UNET,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
@@ -329,6 +332,7 @@ class TwoPlusOneUnet(SegmentationModel):
         """Init the 2+1D U-Net model.
 
         Args:
+            model_type: Model architecture to use.
             encoder_name: Name of the encoder.
             encoder_depth: Depth of the encoder.
             encoder_weights: Weights to use for the encoder.
@@ -357,6 +361,7 @@ class TwoPlusOneUnet(SegmentationModel):
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
         self.skip_conn_channels = skip_conn_channels
+        self.model_type = model_type
 
         # Define encoder, decoder, segmentation head and classification head.
         self.encoder = get_encoder(
@@ -366,14 +371,29 @@ class TwoPlusOneUnet(SegmentationModel):
             weights=encoder_weights,
         )
 
-        self.decoder = UnetDecoder(
-            encoder_channels=self.encoder.out_channels,
-            decoder_channels=decoder_channels,
-            n_blocks=encoder_depth,
-            use_batchnorm=decoder_use_batchnorm,
-            center=encoder_name.startswith("vgg"),
-            attention_type=decoder_attention_type,
-        )
+        match model_type:
+            case ModelType.UNET:
+                self.decoder = UnetDecoder(
+                    encoder_channels=self.encoder.out_channels,
+                    decoder_channels=decoder_channels,
+                    n_blocks=encoder_depth,
+                    use_batchnorm=decoder_use_batchnorm,
+                    center=encoder_name.startswith("vgg"),
+                    attention_type=decoder_attention_type,
+                )
+                self.name = f"u-{encoder_name}"
+            case ModelType.UNET_PLUS_PLUS:
+                self.decoder = UnetPlusPlusDecoder(
+                    encoder_channels=self.encoder.out_channels,
+                    decoder_channels=decoder_channels,
+                    n_blocks=encoder_depth,
+                    use_batchnorm=decoder_use_batchnorm,
+                    center=encoder_name.startswith("vgg"),
+                    attention_type=decoder_attention_type,
+                )
+                self.name = f"unetplusplus-{encoder_name}"
+            case _:
+                raise NotImplementedError(f"{model_type} not implemented yet!")
 
         self.segmentation_head = SegmentationHead(
             in_channels=decoder_channels[-1],
@@ -519,6 +539,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
+        model_type: ModelType = ModelType.UNET,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
@@ -548,6 +569,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             batch_size: Mini-batch size.
             metric: The metric to use for evaluation.
             loss: The loss function to use for training.
+            model_type: Model architecture to use.
             encoder_name: The encoder name to use for the Unet.
             encoder_depth: The depth of the encoder.
             encoder_weights: The weights to use for the encoder.
@@ -583,6 +605,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         self.classes = classes
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
+        self.model_type = model_type
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -601,6 +624,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             num_frames=num_frames,
             flat_conv=flat_conv,
             activation=unet_activation,
+            model_type=model_type,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}

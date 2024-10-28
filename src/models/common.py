@@ -9,7 +9,7 @@ from segmentation_models_pytorch.base.model import SegmentationModel
 from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 
-from utils.types import ClassificationMode, InverseNormalize
+from utils.types import ClassificationMode, InverseNormalize, ModelType
 
 
 class CommonModelMixin(L.LightningModule):
@@ -19,6 +19,7 @@ class CommonModelMixin(L.LightningModule):
     eval_classification_mode: ClassificationMode
     metrics: dict[str, MetricCollection | Metric]
     model: Union[SegmentationModel, ModelHubMixin]
+    model_type: ModelType
     de_transform: Compose | InverseNormalize
 
     def on_train_start(self):

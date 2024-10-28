@@ -17,6 +17,7 @@ from segmentation_models_pytorch.base.initialization import (
     initialize_head,
 )
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
+from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 from torch import nn
@@ -41,6 +42,7 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    ModelType,
 )
 
 
@@ -49,6 +51,7 @@ class TwoStreamUnet(SegmentationModel):
 
     def __init__(
         self,
+        model_type: ModelType = ModelType.UNET,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
@@ -64,6 +67,7 @@ class TwoStreamUnet(SegmentationModel):
         """Init the Two Stream U-Net model with LGE and Cine inputs.
 
         Args:
+            model_type: Model architecture to use.
             encoder_name: Name of the encoder.
             encoder_depth: Depth of the encoder.
             encoder_weights: Pretrained weights for the encoder.
@@ -99,14 +103,29 @@ class TwoStreamUnet(SegmentationModel):
             weights=encoder_weights,
         )
 
-        self.decoder = UnetDecoder(
-            encoder_channels=self.lge_encoder.out_channels,
-            decoder_channels=init_decoder_channels,
-            n_blocks=encoder_depth,
-            use_batchnorm=decoder_use_batchnorm,
-            center=True if encoder_name.startswith("vgg") else False,
-            attention_type=decoder_attention_type,
-        )
+        match model_type:
+            case ModelType.UNET:
+                self.decoder = UnetDecoder(
+                    encoder_channels=self.lge_encoder.out_channels,
+                    decoder_channels=init_decoder_channels,
+                    n_blocks=encoder_depth,
+                    use_batchnorm=decoder_use_batchnorm,
+                    center=True if encoder_name.startswith("vgg") else False,
+                    attention_type=decoder_attention_type,
+                )
+                self.name = f"u-{encoder_name}"
+            case ModelType.UNET_PLUS_PLUS:
+                self.decoder = UnetPlusPlusDecoder(
+                    encoder_channels=self.lge_encoder.out_channels,
+                    decoder_channels=init_decoder_channels,
+                    n_blocks=encoder_depth,
+                    use_batchnorm=decoder_use_batchnorm,
+                    center=encoder_name.startswith("vgg"),
+                    attention_type=decoder_attention_type,
+                )
+                self.name = f"unetplusplus-{encoder_name}"
+            case _:
+                raise NotImplementedError(f"{model_type} not implemented yet!")
 
         self.segmentation_head = SegmentationHead(
             in_channels=init_decoder_channels[-1],
@@ -124,7 +143,6 @@ class TwoStreamUnet(SegmentationModel):
         else:
             self.classification_head = None
 
-        self.name = f"u-{encoder_name}"
         self.initialize()
 
     @override
@@ -182,6 +200,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
         batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
+        model_type: ModelType = ModelType.UNET,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",
@@ -209,6 +228,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
             batch_size: The batch size.
             metric: The metric to use.
             loss: The loss function to use.
+            model_type: The model architecture to use.
             encoder_name: The encoder name.
             encoder_depth: The encoder depth.
             encoder_weights: The encoder weights.
@@ -238,6 +258,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
         self.classes = classes
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
+        self.model_type = model_type
 
         if self.dump_memory_snapshot:
             torch.cuda.memory._record_memory_history(
@@ -251,6 +272,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
             in_channels=in_channels,
             classes=classes,
             num_frames=num_frames,
+            model_type=model_type,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}

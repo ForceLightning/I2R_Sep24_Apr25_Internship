@@ -155,3 +155,12 @@ class CommonCLI(LightningCLI):
             "prediction_writer.output_dir",
             compute_fn=prediction_writer.get_output_dir_from_ckpt_path,
         )
+
+        # Model type argument
+        parser.add_argument(
+            "--model_architecture",
+            help="Model architecture (UNET, UNET_PLUS_PLUS, etc.)",
+        )
+        parser.link_arguments(
+            "model_architecture", "model.model_type", compute_fn=utils.get_model_type
+        )

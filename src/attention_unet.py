@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader
 from cli.common import CommonCLI
 from dataset.dataset import ResidualTwoPlusOneDataset, get_trainval_data_subsets
 from models.attention import ResidualAttentionLightningModule
-from models.attention.utils import ModelType, get_model_type
 from utils import utils
 from utils.types import ClassificationMode, LoadingMode, ResidualMode
 
@@ -240,15 +239,6 @@ class ResidualAttentionCLI(CommonCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         """Add extra arguments to CLI parser."""
         super().add_arguments_to_parser(parser)
-
-        parser.add_argument(
-            "--model_architecture",
-            help="Model architecture (UNET, UNET_PLUS_PLUS, etc.)",
-        )
-        parser.link_arguments(
-            "model_architecture", "model.model_type", compute_fn=get_model_type
-        )
-
         parser.add_argument("--residual_mode", help="Residual calculation mode")
         parser.link_arguments(
             "residual_mode", "model.residual_mode", compute_fn=utils.get_residual_mode

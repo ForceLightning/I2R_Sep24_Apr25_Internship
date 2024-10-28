@@ -29,7 +29,6 @@ from models.attention.segementation_model import (
     ResidualAttentionUnet,
     ResidualAttentionUnetPlusPlus,
 )
-from models.attention.utils import ModelType
 from models.common import CommonModelMixin
 from utils import utils
 from utils.types import (
@@ -37,6 +36,7 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    ModelType,
     ResidualMode,
 )
 
