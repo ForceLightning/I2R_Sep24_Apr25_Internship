@@ -6,6 +6,7 @@ import lightning as L
 from huggingface_hub import ModelHubMixin
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.base.model import SegmentationModel
+from torch import nn
 from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 
@@ -18,7 +19,7 @@ class CommonModelMixin(L.LightningModule):
     dl_classification_mode: ClassificationMode
     eval_classification_mode: ClassificationMode
     metrics: dict[str, MetricCollection | Metric]
-    model: Union[SegmentationModel, ModelHubMixin]
+    model: Union[SegmentationModel, ModelHubMixin, nn.Module]
     model_type: ModelType
     de_transform: Compose | InverseNormalize
 

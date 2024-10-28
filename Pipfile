@@ -57,3 +57,10 @@ ipympl = "*"
 sphinx = "*"
 sphinx-autodoc2 = "*"
 sphinx-rtd-theme = "*"
+
+[transunet]
+ml-collections = "*"
+medpy = "*"
+simpleitk = "*"
+scipy = "*"
+h5py = "*"

@@ -11,6 +11,11 @@ import torch
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from segmentation_models_pytorch.losses.focal import FocalLoss
+from thirdparty.TransUNet.networks.vit_seg_configs import (
+    get_b16_config,
+    get_r50_b16_config,
+)
+from thirdparty.TransUNet.networks.vit_seg_modeling import VisionTransformer
 from torch import nn
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
@@ -27,6 +32,7 @@ from metrics.logging import (
     shared_metric_logging_epoch_end,
 )
 from models.common import CommonModelMixin
+from models.transunet import TransUnet
 from utils import utils
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
@@ -128,8 +134,16 @@ class LightningUnetWrapper(CommonModelMixin):
                     in_channels=in_channels,
                     classes=classes,
                 )
-            case _:
-                raise NotImplementedError(f"{model_type} is not yet implemented!")
+            case ModelType.TRANS_UNET:
+                config = get_r50_b16_config()
+                config.patches.grid = (  # pyright: ignore
+                    int(224 / config.patches.grid[0]),  # pyright: ignore
+                    int(224 / config.patches.grid[1]),  # pyright: ignore
+                )
+                self.model = TransUnet(
+                    config, img_size=224, num_classes=classes, in_channels=in_channels
+                )
+
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
         self.scheduler = scheduler
