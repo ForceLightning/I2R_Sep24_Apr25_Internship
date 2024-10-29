@@ -73,11 +73,8 @@ class MulticlassMPrecision(MulticlassPrecision):
 
     @override
     def compute(self) -> Tensor:
-        match self.average:
-            case "macro":
-                return (self.mPrecision_running / self.samples).mean()
-            case _:
-                return self.mPrecision_running / self.samples
+        avg = self.mPrecision_running / self.samples
+        return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
@@ -168,11 +165,8 @@ class MultilabelMPrecision(MultilabelPrecision):
 
     @override
     def compute(self) -> Tensor:
-        match self.average:
-            case "macro":
-                return (self.mPrecision_running / self.samples).mean()
-            case _:
-                return self.mPrecision_running / self.samples
+        avg = self.mPrecision_running / self.samples
+        return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
@@ -261,11 +255,8 @@ class MulticlassMRecall(MulticlassRecall):
 
     @override
     def compute(self) -> Tensor:
-        match self.average:
-            case "macro":
-                return (self.mRecall_running / self.samples).mean()
-            case _:
-                return self.mRecall_running / self.samples
+        avg = self.mRecall_running / self.samples
+        return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
@@ -356,11 +347,8 @@ class MultilabelMRecall(MultilabelRecall):
 
     @override
     def compute(self) -> Tensor:
-        match self.average:
-            case "macro":
-                return (self.mRecall_running / self.samples).mean()
-            case _:
-                return self.mRecall_running / self.samples
+        avg = self.mRecall_running / self.samples
+        return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:

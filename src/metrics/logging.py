@@ -351,9 +351,6 @@ def _grouped_generalized_metric_logging(
             "val/dice_weighted_avg",
             "val/dice_macro_class_2_3",
             "val/dice_weighted_class_2_3",
-            "val/jaccard_macro_avg",
-            "val/recall_macro_avg",
-            "val/precision_macro_avg",
         ]:
             results_new[f"hp/{k}"] = v
 
@@ -370,12 +367,18 @@ def _grouped_generalized_metric_logging(
                 per_class, torch.Tensor
             ), f"Metric `per_class` is of an invalid type: {type(per_class)}"
 
+            avg = torch.zeros(1).to(module.device.type)
             for i, class_metric in enumerate(per_class):
                 if i == 0:  # NOTE: Skips background class.
                     continue
+                avg += class_metric
                 results[f"{prefix}/{metric_type}_class_{i}"] = class_metric
                 if prefix == "val":
                     results[f"hp/{prefix}/{metric_type}_class_{i}"] = class_metric
+
+            avg /= len(per_class) - 1
+            results[f"{prefix}/{metric_type}_macro_avg"] = avg
+            results[f"hp/{prefix}/{metric_type}_macro_avg"] = avg
 
             # Remove the per_class metric from the results.
             del results[f"{prefix}/{metric_type}_per_class"]

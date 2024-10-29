@@ -65,11 +65,8 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
 
     @override
     def compute(self):
-        match self.average:
-            case "macro":
-                return (self.mJaccard_running / self.samples).mean()
-            case _:
-                return self.mJaccard_running / self.samples
+        avg = self.mJaccard_running / self.samples
+        return avg
 
     @override
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
@@ -133,11 +130,8 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
 
     @override
     def compute(self):
-        match self.average:
-            case "macro":
-                return (self.mJaccard_running / self.samples).mean()
-            case _:
-                return self.mJaccard_running / self.samples
+        avg = self.mJaccard_running / self.samples
+        return avg
 
     @override
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
