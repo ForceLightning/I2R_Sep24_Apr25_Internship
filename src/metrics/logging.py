@@ -167,22 +167,15 @@ def _setup_dice(
 def _setup_jaccard(module: CommonModelMixin, classes: int):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
-            macro_avg_jaccard = MulticlassMJaccardIndex(
-                num_classes=classes, average="macro", ignore_index=0, zero_division=1.0
-            )
             non_agg_jaccard = MulticlassMJaccardIndex(
                 num_classes=classes, average="none", zero_division=1.0
             )
         case ClassificationMode.MULTILABEL_MODE:
-            macro_avg_jaccard = MultilabelMJaccardIndex(
-                num_labels=classes, average="macro", ignore_index=0, zero_division=1.0
-            )
             non_agg_jaccard = MultilabelMJaccardIndex(
                 num_labels=classes, average="none", zero_division=1.0
             )
 
     return {
-        "jaccard_macro_avg": macro_avg_jaccard,
         "jaccard_per_class": non_agg_jaccard,
     }
 
@@ -190,24 +183,10 @@ def _setup_jaccard(module: CommonModelMixin, classes: int):
 def _setup_precision_recall(module: CommonModelMixin, classes: int):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
-            macro_avg_recall = MulticlassMRecall(
-                classes,
-                average="macro",
-                multidim_average="samplewise",
-                ignore_index=0,
-                zero_division=1.0,
-            )
             non_agg_recall = MulticlassMRecall(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=1.0,
-            )
-            macro_avg_precision = MulticlassMPrecision(
-                classes,
-                average="macro",
-                multidim_average="samplewise",
-                ignore_index=0,
                 zero_division=1.0,
             )
             non_agg_precision = MulticlassMPrecision(
@@ -218,24 +197,10 @@ def _setup_precision_recall(module: CommonModelMixin, classes: int):
             )
 
         case ClassificationMode.MULTILABEL_MODE:
-            macro_avg_recall = MultilabelMRecall(
-                classes,
-                average="macro",
-                multidim_average="samplewise",
-                ignore_index=0,
-                zero_division=1.0,
-            )
             non_agg_recall = MultilabelMRecall(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=1.0,
-            )
-            macro_avg_precision = MultilabelMPrecision(
-                classes,
-                average="macro",
-                multidim_average="samplewise",
-                ignore_index=0,
                 zero_division=1.0,
             )
             non_agg_precision = MultilabelMPrecision(
@@ -246,9 +211,7 @@ def _setup_precision_recall(module: CommonModelMixin, classes: int):
             )
 
     return {
-        "recall_macro_avg": macro_avg_recall,
         "recall_per_class": non_agg_recall,
-        "precision_macro_avg": macro_avg_precision,
         "precision_per_class": non_agg_precision,
     }
 

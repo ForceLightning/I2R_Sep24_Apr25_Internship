@@ -66,6 +66,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         self.return_type: Literal["weighted_avg", "macro_avg", "per_class"] = (
             return_type
         )
+        self.include_background = include_background
 
         self.weighted_average = weighted_average
         if self.weighted_average:
@@ -150,36 +151,44 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        numerator, denominator = _generalized_dice_update(
-            preds,
-            target,
-            self.num_classes,
-            True,
-            self.weight_type,  # pyright: ignore[reportArgumentType]
-        )
-        dice = _generalized_dice_compute(numerator, denominator, self.per_class).sum(
-            dim=0
-        )
         self.samples += preds.shape[0]
 
-        if self.weighted_average:
-            self.score_running += dice
-            class_occurrences = preds.sum(dim=[0, 2, 3])
-            self.class_occurrences += class_occurrences
-            class_distribution = _safe_divide(
-                self.class_occurrences,
-                (
-                    self.class_occurrences.sum()
-                    if self.include_background
-                    else self.class_occurrences[1:].sum()
-                ),
+        for pred_sample, target_sample in zip(preds, target, strict=True):
+            n_classes = (
+                self.num_classes if self.include_background else self.num_classes + 1
             )
-            if self.include_background:
-                self.score = dice @ class_distribution
+            p_sample = pred_sample.view(1, n_classes, -1)
+            t_sample = target_sample.view(1, n_classes, -1)
+
+            numerator, denominator = _generalized_dice_update(
+                p_sample,
+                t_sample,
+                self.num_classes,
+                True,
+                self.weight_type,  # pyright: ignore[reportArgumentType]
+            )
+            dice = _generalized_dice_compute(
+                numerator, denominator, self.per_class
+            ).sum(dim=0)
+
+            if self.weighted_average:
+                self.score_running += dice
+                class_occurrences = preds.sum(dim=[0, 2, 3])
+                self.class_occurrences += class_occurrences
+                class_distribution = _safe_divide(
+                    self.class_occurrences,
+                    (
+                        self.class_occurrences.sum()
+                        if self.include_background
+                        else self.class_occurrences[1:].sum()
+                    ),
+                )
+                if self.include_background:
+                    self.score = dice @ class_distribution
+                else:
+                    self.score = dice[1:] @ class_distribution[1:]
             else:
-                self.score = dice[1:] @ class_distribution[1:]
-        else:
-            self.score += dice
+                self.score += dice
 
 
 def _generalized_dice_compute(

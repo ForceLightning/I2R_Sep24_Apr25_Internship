@@ -73,19 +73,25 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         bs = preds.shape[0]
         self.samples += bs
 
-        if self.validate_args:
-            _multiclass_confusion_matrix_tensor_validation(
-                preds, target, self.num_classes, self.ignore_index
-            )
-        preds, target = _multiclass_confusion_matrix_format(
-            preds, target, self.ignore_index
-        )
-        confmat = _multiclass_confusion_matrix_update(preds, target, self.num_classes)
-        jaccard = _jaccard_index_reduce(
-            confmat, average=None, zero_division=self.zero_division
-        )
+        for pred_sample, target_sample in zip(preds, target, strict=True):
+            p_sample = pred_sample.view(1, self.num_classes, -1)
+            t_sample = target_sample.view(1, -1)
 
-        self.mJaccard_running += jaccard * bs
+            if self.validate_args:
+                _multiclass_confusion_matrix_tensor_validation(
+                    p_sample, t_sample, self.num_classes, self.ignore_index
+                )
+            p_sample, t_sample = _multiclass_confusion_matrix_format(
+                p_sample, t_sample, self.ignore_index
+            )
+            confmat = _multiclass_confusion_matrix_update(
+                p_sample, t_sample, self.num_classes
+            )
+            jaccard = _jaccard_index_reduce(
+                confmat, average=None, zero_division=self.zero_division
+            )
+
+            self.mJaccard_running += jaccard
 
 
 class MultilabelMJaccardIndex(MultilabelJaccardIndex):
@@ -138,17 +144,23 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
         bs = preds.shape[0]
         self.samples += bs
 
-        if self.validate_args:
-            _multilabel_confusion_matrix_tensor_validation(
-                preds, target, self.num_labels, self.ignore_index
+        for pred_sample, target_sample in zip(preds, target, strict=True):
+            p_sample = pred_sample.view(1, self.num_classes, -1)
+            t_sample = target_sample.view(1, self.num_classes, -1)
+
+            if self.validate_args:
+                _multilabel_confusion_matrix_tensor_validation(
+                    p_sample, t_sample, self.num_labels, self.ignore_index
+                )
+
+            p_sample, t_sample = _multilabel_confusion_matrix_format(
+                p_sample, t_sample, self.num_labels, self.threshold, self.ignore_index
+            )
+            confmat = _multilabel_confusion_matrix_update(
+                p_sample, t_sample, self.num_labels
+            )
+            jaccard = _jaccard_index_reduce(
+                confmat, average=None, zero_division=self.zero_division
             )
 
-        preds, target = _multilabel_confusion_matrix_format(
-            preds, target, self.num_labels, self.threshold, self.ignore_index
-        )
-        confmat = _multilabel_confusion_matrix_update(preds, target, self.num_labels)
-        jaccard = _jaccard_index_reduce(
-            confmat, average=None, zero_division=self.zero_division
-        )
-
-        self.mJaccard_running += jaccard * bs
+            self.mJaccard_running += jaccard
