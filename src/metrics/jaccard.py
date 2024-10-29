@@ -73,12 +73,13 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
 
     @override
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
-        self.samples += preds.shape[0]
+        bs = preds.shape[0]
+        self.samples += bs
+
         if self.validate_args:
             _multiclass_confusion_matrix_tensor_validation(
                 preds, target, self.num_classes, self.ignore_index
             )
-
         preds, target = _multiclass_confusion_matrix_format(
             preds, target, self.ignore_index
         )
@@ -86,7 +87,8 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         jaccard = _jaccard_index_reduce(
             confmat, average=None, zero_division=self.zero_division
         )
-        self.mJaccard_running += jaccard * preds.shape[0]
+
+        self.mJaccard_running += jaccard * bs
 
 
 class MultilabelMJaccardIndex(MultilabelJaccardIndex):
@@ -139,7 +141,9 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
 
     @override
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
-        self.samples += preds.shape[0]
+        bs = preds.shape[0]
+        self.samples += bs
+
         if self.validate_args:
             _multilabel_confusion_matrix_tensor_validation(
                 preds, target, self.num_labels, self.ignore_index
@@ -152,4 +156,5 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
         jaccard = _jaccard_index_reduce(
             confmat, average=None, zero_division=self.zero_division
         )
-        self.mJaccard_running += jaccard * preds.shape[0]
+
+        self.mJaccard_running += jaccard * bs
