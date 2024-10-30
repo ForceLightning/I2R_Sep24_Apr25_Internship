@@ -138,7 +138,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     num_frames=num_frames,
                     flat_conv=flat_conv,
                     activation=unet_activation,
-                    use_dilations=True,
+                    use_dilations=False,
                     reduce=attention_reduction,
                     _attention_only=attention_only,
                 )
