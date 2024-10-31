@@ -11,9 +11,7 @@ import torch
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.losses.dice import DiceLoss
 from segmentation_models_pytorch.losses.focal import FocalLoss
-from thirdparty.TransUNet.networks.vit_seg_configs import (
-    get_r50_b16_config,
-)
+from thirdparty.TransUNet.networks.vit_seg_configs import get_r50_b16_config
 from torch import nn
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
