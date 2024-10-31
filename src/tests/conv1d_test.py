@@ -5,7 +5,7 @@ from typing import Literal
 import pytest
 import torch
 
-from models.two_plus_one import ENCODER_OUTPUT_SHAPES, DilatedOneD, OneD
+from models.two_plus_one import ENCODER_OUTPUT_SHAPES, DilatedOneD, OneD, Temporal3DConv
 from models.two_plus_one import compress_2 as _compress2_new
 from models.two_plus_one import compress_dilated
 
@@ -123,6 +123,51 @@ class TestNewOneD:
                 + f"max diff: {diff.max().item():.2E} "
                 + f"mean diff: {diff.mean().item():.2E} "
             )
+
+
+class TestConv3D:
+    """Test the 3D convolution."""
+
+    batch_size = 2
+    num_channels = 2048
+    height = 7
+    width = 7
+
+    def _test_with_num_frames(self, num_frames: int):
+        input_original = torch.randn(
+            self.batch_size, num_frames, self.num_channels, self.height, self.width
+        ).to(DEVICE)
+
+        with torch.random.fork_rng():
+            old_oned = OneD(1, 2, num_frames).to(DEVICE)
+
+        with torch.random.fork_rng():
+            new_oned = Temporal3DConv(1, 2, num_frames).to(DEVICE)
+
+        try:
+            old_compress_out = _compress_wrapper(input_original.clone(), old_oned)
+            new_compress_out = new_oned(input_original.clone())
+        except Exception as e:
+            raise ExceptionGroup(f"Input of shape {input_original.shape}", [e]) from e
+
+        try:
+            allclose = torch.allclose(old_compress_out, new_compress_out)
+        except RuntimeError as e:
+            raise ExceptionGroup(
+                f"Old shape: {old_compress_out.shape}, New shape: {new_compress_out.shape}",
+                [e],
+            ) from e
+
+        assert allclose, "Values of the operations are not the same."
+
+    def test_conv3d(self):
+        """Test the Temporal Conv3D model with different approaches to compressing the input.
+
+        This test is performed for frames in (5, 30), with a step of 5.
+
+        """
+        for num_frames in range(5, 35, 5):
+            self._test_with_num_frames(num_frames)
 
 
 def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:

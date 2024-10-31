@@ -249,6 +249,119 @@ class DilatedOneD(nn.Module):
         return self.one(x)
 
 
+class Temporal3DConv(nn.Module):
+    """1D Temporal Convolution for 5D Tensor input."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        num_frames: int,
+        flat: bool = False,
+        activation: str | type[nn.Module] | None = None,
+    ):
+        """Init the 1D Temporal Convolutional block using 3D Convolutional Layers.
+
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            num_frames: Number of frames in the input tensor.
+            flat: If True, only one convolutional layer is used.
+            activation: Activation function to use.
+
+        Raises:
+            NotImplementedError: If the number of frames is not implemented.
+
+        Note:
+            The number of frames must be one of 5, 10, 15, 20, or 30.
+
+        """
+        super().__init__()
+        if isinstance(activation, type):
+            self.activation = activation
+        else:
+            match activation:
+                case "relu":
+                    self.activation = nn.ReLU
+                case "gelu":
+                    self.activation = nn.GELU
+                case "mish":
+                    self.activation = nn.Mish
+                case "elu":
+                    self.activation = nn.ELU
+                case "silu" | "swish":
+                    self.activation = nn.SiLU
+                case _:
+                    warnings.warn(
+                        f"Activation function {activation} not recognized. Using ReLU.",
+                        stacklevel=2,
+                    )
+                    self.activation = nn.ReLU
+
+        if flat:
+            self.one = nn.Sequential(
+                nn.Conv3d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=(num_frames, 1, 1),
+                    stride=(num_frames, 1, 1),
+                    padding=0,
+                )
+            )
+        else:
+            kernels: list[int] = []
+            match num_frames:
+                case 5:
+                    kernels = [5]
+                case 10:
+                    kernels = [5, 2]
+                case 15:
+                    kernels = [5, 3]
+                case 20:
+                    kernels = [5, 4]
+                case 25:
+                    kernels = [5, 5]
+                case 30:
+                    kernels = [5, 3, 2]
+                case _:
+                    raise NotImplementedError(
+                        f"Model with num_frames of {num_frames} not implemented!"
+                    )
+
+            layers: list[nn.Module] = []
+            for i, k in enumerate(kernels):
+                layers += [
+                    nn.Conv3d(
+                        in_channels=in_channels if i == 0 else out_channels,
+                        out_channels=out_channels,
+                        kernel_size=(k, 1, 1),
+                        stride=(k, 1, 1),
+                        padding=0,
+                    ),
+                    (
+                        self.activation(inplace=True)
+                        if isinstance(self.activation, (nn.ReLU, nn.SiLU))
+                        else self.activation()
+                    ),
+                ]
+            self.one = nn.Sequential(*layers)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+    @override
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Input to Conv3D is (B, C_in, D, H, W)
+        # Output is (B, C_out, D_out, H_out, W_out)
+        # x.shape is (B, D, C, H, W)
+
+        b, f, c, h, w = x.shape
+        x = x.permute(0, 2, 1, 3, 4).contiguous().view(b * c, 1, f, h, w)
+        # (B * C, C_out, 1, H, W) -> (B * C, 1, H, W) -> (B, C, H, W)
+        z = self.one(x).mean(dim=1).squeeze(dim=1).view(b, c, h, w)
+        return z
+
+
 def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     """Apply the OneD temporal convolution on the stacked outputs.
 
