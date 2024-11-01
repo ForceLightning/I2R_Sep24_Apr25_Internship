@@ -28,7 +28,14 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "models.p3d", "tests"]
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    "models.p3d",
+    "tests",
+    "thirdparty",
+]
 
 language = "en"
 
