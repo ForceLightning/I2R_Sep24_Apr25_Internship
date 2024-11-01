@@ -361,43 +361,8 @@ class TwoStreamUnetLightning(CommonModelMixin):
                     raise e
 
     @override
-    def on_train_start(self):
-        if isinstance(self.logger, TensorBoardLogger):
-            self.logger.log_hyperparams(
-                self.hparams,  # pyright: ignore[reportArgumentType]
-                {
-                    "hp/val_loss": 0,
-                    "hp/val/dice_macro_avg": 0,
-                    "hp/val/dice_macro_class_2_3": 0,
-                    "hp/val/dice_weighted_avg": 0,
-                    "hp/val/dice_weighted_class_2_3": 0,
-                    "hp/val/dice_class_1": 0,
-                    "hp/val/dice_class_2": 0,
-                    "hp/val/dice_class_3": 0,
-                },
-            )
-
-    @override
-    def on_train_end(self) -> None:
-        if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
-
-    @override
-    def forward(self, lge: torch.Tensor, cine: torch.Tensor) -> torch.Tensor:
-        with torch.autocast(device_type=self.device.type):
-            return self.model(lge, cine)  # pyright: ignore[reportCallIssue]
-
-    @override
-    def on_train_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "train")
-
-    @override
-    def on_validation_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "val")
-
-    @override
-    def on_test_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "test")
+    def log_metrics(self, prefix) -> None:
+        shared_metric_logging_epoch_end(self, prefix)
 
     @override
     def training_step(

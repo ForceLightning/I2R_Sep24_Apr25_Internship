@@ -1,8 +1,9 @@
 """Common definitions for the models module."""
 
-from typing import Union
+from typing import Literal, Union, override
 
 import lightning as L
+import torch
 from huggingface_hub import ModelHubMixin
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.base.model import SegmentationModel
@@ -18,13 +19,14 @@ class CommonModelMixin(L.LightningModule):
 
     dl_classification_mode: ClassificationMode
     eval_classification_mode: ClassificationMode
-    metrics: dict[str, MetricCollection | Metric]
+    dice_metrics: dict[str, MetricCollection | Metric]
+    other_metrics: dict[str, MetricCollection]
     model: Union[SegmentationModel, ModelHubMixin, nn.Module]
     model_type: ModelType
     de_transform: Compose | InverseNormalize
 
+    @override
     def on_train_start(self):
-        """Call at the beginning of training after sanity check."""
         if isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(
                 self.hparams,  # pyright: ignore[reportArgumentType]
@@ -56,6 +58,30 @@ class CommonModelMixin(L.LightningModule):
                     "hp/val/recall_class_3": 0,
                 },
             )
+
+    def log_metrics(self, prefix: Literal["train", "val", "test"]) -> None:
+        """Implement shared metric logging epoch end here.
+
+        Note: This is to prevent circular imports with the logging module.
+        """
+        raise NotImplementedError("Log metrics not implemented!")
+
+    @override
+    def on_train_end(self) -> None:
+        if self.dump_memory_snapshot:
+            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
+
+    @override
+    def on_train_epoch_end(self) -> None:
+        self.log_metrics("train")
+
+    @override
+    def on_validation_epoch_end(self) -> None:
+        self.log_metrics("val")
+
+    @override
+    def on_test_epoch_end(self) -> None:
+        self.log_metrics("test")
 
 
 ENCODER_OUTPUT_SHAPES = {

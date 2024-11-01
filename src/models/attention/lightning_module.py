@@ -25,7 +25,7 @@ from metrics.logging import (
     shared_metric_logging_epoch_end,
 )
 from models.attention.model import REDUCE_TYPES
-from models.attention.segementation_model import (
+from models.attention.segmentation_model import (
     ResidualAttentionUnet,
     ResidualAttentionUnetPlusPlus,
 )
@@ -262,11 +262,6 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 except RuntimeError as e:
                     raise e
 
-    def on_train_end(self) -> None:
-        """Call at the end of training before logger experiment is closed."""
-        if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("attention_unet_snapshot.pickle")
-
     def forward(self, x_img: torch.Tensor, x_res: torch.Tensor) -> torch.Tensor:
         """Forward pass of the model."""
         # HACK: This is to get things to work with deepspeed opt level 1 & 2. Level 3
@@ -274,17 +269,9 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         with torch.autocast(device_type=self.device.type):
             return self.model(x_img, x_res)  # pyright: ignore[reportCallIssue]
 
-    def on_train_epoch_end(self) -> None:
-        """Call in the training loop at the very end of the epoch."""
-        shared_metric_logging_epoch_end(self, "train")
-
-    def on_validation_epoch_end(self) -> None:
-        """Call in the validation loop at the very end of the epoch."""
-        shared_metric_logging_epoch_end(self, "val")
-
-    def on_test_epoch_end(self) -> None:
-        """Call in the test loop at the very end of the epoch."""
-        shared_metric_logging_epoch_end(self, "test")
+    @override
+    def log_metrics(self, prefix) -> None:
+        shared_metric_logging_epoch_end(self, prefix)
 
     def training_step(
         self,

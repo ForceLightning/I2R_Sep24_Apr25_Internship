@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import pickle
 import random
-from typing import Literal, override
+from typing import Any, Literal, Protocol, override
 
 import cv2
 import numpy as np
@@ -91,8 +91,25 @@ class DefaultTransformsMixin:
         return transforms_img, transforms_mask, transforms_together
 
 
+class DefaultDatasetProtocol(Protocol):
+    """Mixin class for default attributes in Dataset implementations."""
+
+    img_dir: str
+    train_idxs: list[int]
+    valid_idxs: list[int]
+
+    def __len__(self) -> int:
+        """Get the length of the dataset."""
+        ...
+
+    def __getitem__(self, index) -> Any:
+        """Fetch a data sample for a given key."""
+        ...
+
+
 class LGEDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, str]], DefaultTransformsMixin
+    Dataset[tuple[torch.Tensor, torch.Tensor, str]],
+    DefaultTransformsMixin,
 ):
     """LGE dataset for the cardiac LGE MRI images."""
 
@@ -233,7 +250,8 @@ class LGEDataset(
 
 
 class CineDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, str]], DefaultTransformsMixin
+    Dataset[tuple[torch.Tensor, torch.Tensor, str]],
+    DefaultTransformsMixin,
 ):
     """Cine cardiac magnetic resonance imagery dataset."""
 
@@ -556,6 +574,8 @@ class TwoStreamDataset(
         self.cine_list = os.listdir(self.cine_dir)
         self.mask_list = os.listdir(self.mask_dir)
 
+        self.img_dir = lge_dir
+
         self.transform_img = transform_img
         self.transform_mask = transform_mask
         self.transform_together = (
@@ -578,11 +598,6 @@ class TwoStreamDataset(
         self._imread_mode = (
             IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
         )
-
-    @property
-    def img_dir(self):
-        """Get the LGE directory."""
-        return self.lge_dir
 
     def __getitem__(
         self, index: int
@@ -1084,13 +1099,7 @@ def concatenate_imgs(
 
 
 def load_train_indices(
-    dataset: (
-        LGEDataset
-        | CineDataset
-        | TwoPlusOneDataset
-        | TwoStreamDataset
-        | ResidualTwoPlusOneDataset
-    ),
+    dataset: DefaultDatasetProtocol,
     train_idxs_path: str,
     valid_idxs_path: str,
 ) -> tuple[list[int], list[int]]:
@@ -1220,21 +1229,8 @@ def seed_worker(worker_id):
 
 
 def get_trainval_data_subsets(
-    train_dataset: (
-        CineDataset
-        | LGEDataset
-        | TwoPlusOneDataset
-        | TwoStreamDataset
-        | ResidualTwoPlusOneDataset
-    ),
-    valid_dataset: (
-        CineDataset
-        | LGEDataset
-        | TwoPlusOneDataset
-        | TwoStreamDataset
-        | ResidualTwoPlusOneDataset
-        | None
-    ) = None,
+    train_dataset: DefaultDatasetProtocol,
+    valid_dataset: DefaultDatasetProtocol | None = None,
 ) -> tuple[Subset, Subset]:
     """Get the subsets of the data as train/val splits from a superset.
 
@@ -1257,8 +1253,12 @@ def get_trainval_data_subsets(
         + f"{type(train_dataset)} != {type(valid_dataset)}"
     )
 
-    train_set = Subset(train_dataset, train_dataset.train_idxs)
-    valid_set = Subset(valid_dataset, valid_dataset.valid_idxs)
+    train_set = Subset(
+        train_dataset, train_dataset.train_idxs  # pyright: ignore[reportArgumentType]
+    )
+    valid_set = Subset(
+        valid_dataset, valid_dataset.valid_idxs  # pyright: ignore[reportArgumentType]
+    )
     return train_set, valid_set
 
 

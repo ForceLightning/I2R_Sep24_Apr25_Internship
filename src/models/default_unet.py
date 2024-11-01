@@ -239,26 +239,13 @@ class LightningUnetWrapper(CommonModelMixin):
             )
 
     @override
-    def on_train_end(self) -> None:
-        if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("unet_snapshot.pickle")
-
-    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=self.device.type):
             return self.model(x)  # pyright: ignore[reportCallIssue]
 
     @override
-    def on_train_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "train")
-
-    @override
-    def on_validation_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "val")
-
-    @override
-    def on_test_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "test")
+    def log_metrics(self, prefix) -> None:
+        shared_metric_logging_epoch_end(self, prefix)
 
     def training_step(
         self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int

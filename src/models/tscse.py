@@ -1173,26 +1173,13 @@ class TSCSEUnetLightning(CommonModelMixin):
             )
 
     @override
-    def on_train_end(self) -> None:
-        if self.dump_memory_snapshot:
-            torch.cuda.memory._dump_snapshot("two_plus_one_snapshot.pickle")
-
-    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type=self.device.type):
             return self.model(x)  # pyright: ignore[reportCallIssue]
 
     @override
-    def on_train_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "train")
-
-    @override
-    def on_validation_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "val")
-
-    @override
-    def on_test_epoch_end(self) -> None:
-        shared_metric_logging_epoch_end(self, "test")
+    def log_metrics(self, prefix: Literal["train", "val", "test"]) -> None:
+        shared_metric_logging_epoch_end(self, prefix)
 
     @override
     def training_step(
