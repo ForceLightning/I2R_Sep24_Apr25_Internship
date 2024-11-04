@@ -240,10 +240,12 @@ $RECYCLE.BIN/
 checkpoints
 .old_checkpoints
 lightning_logs
+pretrained_models
 
 checkpoints/
 .old_checkpoints/
 lightning_logs/
+pretrained_models/
 
 # Data (handles symlinks)
 data

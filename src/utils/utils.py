@@ -164,19 +164,17 @@ def configure_optimizers(module: L.LightningModule):
 
     """
     module.optimizer_kwargs.update({"lr": module.learning_rate})
+    # OPTIM: Taken from Vivim implementation.
+    params = filter(lambda p: p.requires_grad, module.model.parameters())
     match module.optimizer:
         case "adam":
             module.optimizer_kwargs.update({"fused": True})
-            optimizer = Adam(
-                params=module.model.parameters(), **module.optimizer_kwargs
-            )
+            optimizer = Adam(params=params, **module.optimizer_kwargs)
         case "adamw":
             module.optimizer_kwargs.update({"fused": True})
-            optimizer = AdamW(
-                params=module.model.parameters(), **module.optimizer_kwargs
-            )
+            optimizer = AdamW(params=params, **module.optimizer_kwargs)
         case "sgd":
-            optimizer = SGD(params=module.model.parameters(), **module.optimizer_kwargs)
+            optimizer = SGD(params=params, **module.optimizer_kwargs)
         case _:
             raise NotImplementedError(f"optimizer {module.optimizer} not implemented!")
 

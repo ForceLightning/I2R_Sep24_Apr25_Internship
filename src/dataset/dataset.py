@@ -279,7 +279,6 @@ class CineDataset(
             idxs_dir: Path to the directory containing the indices.
             transform_img: Transform to apply to the images.
             transform_mask: Transform to apply to the masks.
-            transform_resize: The resize transform to apply to both images and masks.
             transform_together: The transform to apply to both the images and masks.
             frames: Number of frames to use for the model (out of 30).
             select_frame_method: How to select the frames (if fewer than 30).

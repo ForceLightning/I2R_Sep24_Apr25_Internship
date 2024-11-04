@@ -41,6 +41,9 @@ viztracer = "*"
 ruff = "*"
 pytest = "*"
 isort = "*"
+setuptools = "*"
+buildtools = "*"
+wheel = "*"
 
 [requires]
 python_version = "3.12"
@@ -64,3 +67,8 @@ medpy = "*"
 simpleitk = "*"
 scipy = "*"
 h5py = "*"
+
+[vivim]
+mamba-ssm = {file = "thirdparty/vivim/mamba", editable = true}
+transformers = "*"
+causal-conv1d = {file = "thirdparty/vivim/causal_conv1d", editable = true}
