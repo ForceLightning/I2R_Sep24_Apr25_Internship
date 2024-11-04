@@ -102,6 +102,8 @@ class JointEdgeSegLoss(_Loss):
 
     def bce2d(self, input: Tensor, target: Tensor) -> Tensor:
         """Compute Binary CrossEntropy loss."""
+        # TODO: Fix this for multiclass.
+
         assert input.ndim == 4, f"input of shape {input.shape} does not have 4 dims."
         log_p = input.transpose(1, 2).transpose(2, 3).contiguous().view(1, -1)
         target_t = target.transpose(1, 2).transpose(2, 3).contiguous().view(1, -1)
@@ -146,6 +148,9 @@ class JointEdgeSegLoss(_Loss):
     ) -> Tensor:
         seg_in, edge_in = inputs
         seg_mask, edge_mask = targets
+
+        seg_mask = F.one_hot(seg_mask, self.num_classes).permute(0, -1, 1, 2)
+        edge_mask = F.one_hot(edge_mask.long(), self.num_classes).permute(0, -1, 1, 2)
 
         total_loss = (
             self.seg_weight
