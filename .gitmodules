@@ -4,3 +4,6 @@
 [submodule "thirdparty/FLA-Net"]
 	path = thirdparty/fla_net
 	url = git@github.com:ForceLightning/FLA-Net.git
+[submodule "thirdparty/vivim"]
+	path = thirdparty/vivim
+	url = git@github.com:ForceLightning/Vivim.git
