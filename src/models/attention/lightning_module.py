@@ -285,7 +285,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             batch_idx: Index of the batch in the epoch.
 
         Return:
-            torch.tensor: Training loss.
+            torch.Tensor: Training loss.
 
         Raises:
             AssertionError: Prediction shape and ground truth mask shapes are different.
@@ -574,7 +574,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             dataloader_idx: Index of the dataloader.
 
         Return:
-            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
+            tuple[torch.Tensor, torch.Tensor, str]: Mask predictions, original images,
                 and filename.
 
         """

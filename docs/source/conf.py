@@ -61,13 +61,16 @@ autodoc_default_options = {
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3.12/", None),
-    "torch": ("https://pytorch.org/docs/2.5.1/", None),
-    "numpy": ("https://numpy.org/doc/1.26.4/", None),
+    "torch": ("https://pytorch.org/docs/2.5/", None),
+    "numpy": ("https://numpy.org/doc/1.26/", None),
     "lightning": ("https://lightning.ai/docs/pytorch/2.4.0/", None),
     "torchmetrics": ("https://lightning.ai/docs/torchmetrics/v1.5.1/", None),
     "matplotlib": ("https://matplotlib.org/3.9.2/", None),
     "segmentation_models_pytorch": ("https://smp.readthedocs.io/en/v0.3.4/", None),
+    "transformers": ("https://huggingface.co/docs/transformers/v4.46.0/en/", None),
+    "ml_collections": ("https://ml-collections.readthedocs.io/en/stable/", None),
 }
 
 sys.path.insert(0, os.path.abspath("../../"))
+sys.path.insert(0, os.path.abspath("../../thirdparty/"))
 sys.path.insert(0, os.path.abspath("../../src/"))
