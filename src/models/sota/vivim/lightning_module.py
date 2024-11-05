@@ -250,15 +250,9 @@ class VivimLightningModule(CommonModelMixin):
         if not self.with_edge:
             # HACK: This ensures that the dimensions to the loss function are correct.
             if isinstance(self.loss, (nn.CrossEntropyLoss, FocalLoss, StructureLoss)):
-                loss_seg = self.alpha * self.loss(
-                    masks_proba[self.num_frames // 2 :: self.num_frames],
-                    masks[self.num_frames // 2 :: self.num_frames].squeeze(dim=1),
-                )
+                loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
             else:
-                loss_seg = self.alpha * self.loss(
-                    masks_proba[self.num_frames // 2 :: self.num_frames],
-                    masks[self.num_frames // 2 :: self.num_frames],
-                )
+                loss_seg = self.alpha * self.loss(masks_proba, masks)
         else:
             assert e0 is not None, "edge output is None!"
             assert edge_gt is not None, "edge ground truth is None!"
@@ -266,16 +260,7 @@ class VivimLightningModule(CommonModelMixin):
                 self.loss, JointEdgeSegLoss
             ), f"self.loss is not of type JointEdgeSegLoss: {self.loss.__class__}"
 
-            loss_seg = self.loss(
-                (
-                    masks_proba[self.num_frames // 2 :: self.num_frames],
-                    e0[self.num_frames // 2 :: self.num_frames],
-                ),
-                (
-                    masks[self.num_frames // 2 :: self.num_frames],
-                    edge_gt[self.num_frames // 2 :: self.num_frames],
-                ),
-            )
+            loss_seg = self.loss((masks_proba, e0), (masks, edge_gt))
 
         loss_all = loss_seg
 

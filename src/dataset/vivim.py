@@ -168,14 +168,17 @@ class VivimDataset(
 
         out_video, out_mask = self.transform_together(combined_video, out_mask)
         out_video = concatenate_imgs(self.frames, self.select_frame_method, out_video)
+        out_mask = out_mask.squeeze().long()
 
         if self.with_edge:
             edgemap = self._onehot_to_binary_edges(
                 lab_mask_one_hot.permute(-1, 0, 1).numpy(), 2, 2
             )
-            return out_video, out_mask.squeeze().long(), edgemap, img_name
+            edgemap = edgemap.reshape(1, *edgemap.shape)
 
-        return out_video, out_mask.squeeze().long(), img_name
+            return out_video, out_mask, edgemap, img_name
+
+        return out_video, out_mask, img_name
 
     def _onehot_to_binary_edges(
         self, mask: npt.NDArray[np.float32], radius: int, num_classes: int

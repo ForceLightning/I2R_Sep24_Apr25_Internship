@@ -25,7 +25,7 @@ class StructureLoss(_Loss):
         else:
             target_one_hot = target
 
-        if not target.dtype.is_floating_point:
+        if not target_one_hot.dtype.is_floating_point:
             target_float = target_one_hot.to(torch.float32, copy=True)
         else:
             target_float = target_one_hot
@@ -102,12 +102,13 @@ class JointEdgeSegLoss(_Loss):
 
     def bce2d(self, input: Tensor, target: Tensor) -> Tensor:
         """Compute Binary CrossEntropy loss."""
-        # TODO: Fix this for multiclass.
-
         assert input.ndim == 4, f"input of shape {input.shape} does not have 4 dims."
-        log_p = input.transpose(1, 2).transpose(2, 3).contiguous().view(1, -1)
-        target_t = target.transpose(1, 2).transpose(2, 3).contiguous().view(1, -1)
-
+        assert target.ndim == 4, f"input of shape {target.shape} does not have 3 dims."
+        assert (
+            input.shape == target.shape
+        ), f"input of shape {input.shape} does not match target of shape {target.shape}"
+        log_p = input
+        target_t = target
         target_trans = target_t.clone()
 
         pos_index = target_t == 1
@@ -117,9 +118,9 @@ class JointEdgeSegLoss(_Loss):
         target_trans[pos_index] = 1
         target_trans[neg_index] = 0
 
-        pos_index = pos_index.data.cpu().numpy().astype(bool)
-        neg_index = neg_index.data.cpu().numpy().astype(bool)
-        ignore_index = ignore_index.data.cpu().numpy().astype(bool)
+        pos_index = pos_index.bool()
+        neg_index = neg_index.bool()
+        ignore_index = ignore_index.bool()
 
         weight = torch.zeros_like(log_p)
         pos_num = pos_index.sum()
@@ -150,14 +151,13 @@ class JointEdgeSegLoss(_Loss):
         seg_mask, edge_mask = targets
 
         seg_mask = F.one_hot(seg_mask, self.num_classes).permute(0, -1, 1, 2)
-        edge_mask = F.one_hot(edge_mask.long(), self.num_classes).permute(0, -1, 1, 2)
 
         total_loss = (
             self.seg_weight
             + self.seg_loss(seg_in, seg_mask)
-            + self.edge_weight * self.bce2d(edge_in, edge_mask)
+            + self.edge_weight * self.bce2d(edge_in, edge_mask.float())
             + self.att_weight * self.edge_attention(seg_in, seg_mask, edge_in)
             + self.inv_weight
-            + self.inverse_distance(edge_in, edge_mask)
+            + self.inverse_distance(edge_in, edge_mask.float())
         )
         return total_loss
