@@ -10,6 +10,7 @@ model:
   in_channels: 3
   classes: 4
   total_epochs: 50
+  encoder_name: resnet50
 data:
   data_dir: data/train_val/
   test_dir: data/test/
