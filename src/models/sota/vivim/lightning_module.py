@@ -302,6 +302,14 @@ class VivimLightningModule(CommonModelMixin):
     ):
         self._shared_eval(batch, batch_idx, "val")
 
+    @override
+    def test_step(
+        self,
+        batch: tuple[Tensor, Tensor, str],
+        batch_idx: int,
+    ):
+        self._shared_eval(batch, batch_idx, "test")
+
     @torch.no_grad()
     def _shared_eval(
         self,
