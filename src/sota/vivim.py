@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Two-plus-one architecture training script."""
+"""Vivim architecture training script."""
 from __future__ import annotations
 
 import os

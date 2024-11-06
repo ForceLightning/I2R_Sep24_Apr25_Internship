@@ -11,7 +11,7 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from models.default_unet import LightningUnetWrapper
 from utils.types import ClassificationMode, LoadingMode
@@ -177,7 +177,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         )
 
 
-class LGECLI(CommonCLI):
+class LGECLI(I2RInternshipCommonCLI):
     """CLI for LGE MRI model training."""
 
     multi_frame = False

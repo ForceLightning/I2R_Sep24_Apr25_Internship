@@ -10,7 +10,7 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import CineDataset, get_trainval_data_subsets
 from models.default_unet import LightningUnetWrapper
 from utils.types import ClassificationMode, LoadingMode
@@ -181,7 +181,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         )
 
 
-class CineCLI(CommonCLI):
+class CineCLI(I2RInternshipCommonCLI):
     """CLI class for cine CMR task."""
 
     @override

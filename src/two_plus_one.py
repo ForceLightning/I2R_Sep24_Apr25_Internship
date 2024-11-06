@@ -10,7 +10,7 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
 from models.two_plus_one import TwoPlusOneUnetLightning
 from utils.types import ClassificationMode, LoadingMode
@@ -194,7 +194,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         )
 
 
-class TwoPlusOneCLI(CommonCLI):
+class TwoPlusOneCLI(I2RInternshipCommonCLI):
     """CLI class for cine CMR 2+1 task."""
 
     @override

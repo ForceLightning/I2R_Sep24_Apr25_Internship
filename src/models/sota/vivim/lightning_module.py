@@ -33,7 +33,6 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
-    ModelType,
 )
 
 
@@ -51,7 +50,6 @@ class VivimLightningModule(CommonModelMixin):
         batch_size: int,
         metric: Metric | None = None,
         loss: nn.Module | str | None = None,
-        model_type: ModelType = ModelType.UNET,
         encoder_name: str = "resnet34",
         encoder_depth: int = 5,
         encoder_weights: str | None = "imagenet",

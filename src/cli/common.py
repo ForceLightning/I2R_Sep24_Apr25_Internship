@@ -156,6 +156,14 @@ class CommonCLI(LightningCLI):
             compute_fn=prediction_writer.get_output_dir_from_ckpt_path,
         )
 
+
+class I2RInternshipCommonCLI(CommonCLI):
+    """Internship project common CLI functionality."""
+
+    @override
+    def add_arguments_to_parser(self, parser: LightningArgumentParser):
+        super().add_arguments_to_parser(parser)
+
         # Model type argument
         parser.add_argument(
             "--model_architecture",

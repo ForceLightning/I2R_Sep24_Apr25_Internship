@@ -11,7 +11,7 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import ResidualTwoPlusOneDataset, get_trainval_data_subsets
 from models.attention import ResidualAttentionLightningModule
 from utils import utils
@@ -208,7 +208,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         )
 
 
-class ResidualAttentionCLI(CommonCLI):
+class ResidualAttentionCLI(I2RInternshipCommonCLI):
     """CLI class for Residual Attention task."""
 
     @override

@@ -11,7 +11,7 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import TwoStreamDataset, get_trainval_data_subsets
 from models.two_stream import TwoStreamUnetLightning
 from utils.types import ClassificationMode, LoadingMode
@@ -188,7 +188,7 @@ class TwoStreamDataModule(L.LightningDataModule):
         )
 
 
-class TwoStreamCLI(CommonCLI):
+class TwoStreamCLI(I2RInternshipCommonCLI):
     """Two stream CLI for LGE & cine CMR."""
 
     @override

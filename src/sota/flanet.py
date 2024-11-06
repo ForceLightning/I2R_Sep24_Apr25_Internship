@@ -10,7 +10,7 @@ import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import get_trainval_data_subsets
 from dataset.flanet import FLANetDataset
 from models.sota.fla_net.lightning_module import FLANetLightningModule
@@ -177,7 +177,7 @@ class FLANetDataModule(L.LightningDataModule):
         )
 
 
-class FLANetCLI(CommonCLI):
+class FLANetCLI(I2RInternshipCommonCLI):
     """CLI class for FLA-Net SOTA implementation."""
 
     @override

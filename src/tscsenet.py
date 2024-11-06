@@ -8,7 +8,7 @@ from typing import override
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
 
-from cli.common import CommonCLI
+from cli.common import I2RInternshipCommonCLI
 from models.tscse import TSCSEUnetLightning
 from two_plus_one import TwoPlusOneDataModule
 
@@ -17,7 +17,7 @@ NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
 
 
-class TSCSECLI(CommonCLI):
+class TSCSECLI(I2RInternshipCommonCLI):
     """CLI class for cine CMR TSCSE-UNet task."""
 
     @override
