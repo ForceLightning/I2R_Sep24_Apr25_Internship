@@ -72,3 +72,7 @@ h5py = "*"
 causal-conv1d = {file = "thirdparty/vivim/causal_conv1d", editable = true}
 mamba-ssm = {file = "thirdparty/vivim/mamba", editable = true}
 transformers = "*"
+
+[vps]
+torchtnt = "*"
+self-cuda = {file = "thirdparty/VPS/lib/module/PNS", editable = true}
