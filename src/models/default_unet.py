@@ -151,10 +151,10 @@ class LightningUnetWrapper(CommonModelMixin):
                 case "cross_entropy":
                     class_weights = torch.Tensor(
                         [
-                            0.00018531001957368073,
-                            0.015518576429048081,
-                            0.058786240529692384,
-                            0.925509873021686,
+                            0.000019931143,
+                            0.001904109430,
+                            0.010289336432,
+                            0.987786622995,
                         ],
                     ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)

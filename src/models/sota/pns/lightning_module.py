@@ -70,6 +70,7 @@ class PNSLightningModule(CommonModelMixin):
             encoder_depth: The encoder depth.
             encoder_weights: The encoder weights.
             classes: The number of classes.
+            in_channels: Number of image channels.
             num_frames: The number of frames.
             weights_from_ckpt_path: The path to the checkpoint.
             optimizer: The optimizer to use.
@@ -115,10 +116,10 @@ class PNSLightningModule(CommonModelMixin):
                 case "cross_entropy":
                     class_weights = torch.Tensor(
                         [
-                            0.00018531001957368073,
-                            0.015518576429048081,
-                            0.058786240529692384,
-                            0.925509873021686,
+                            0.000019931143,
+                            0.001904109430,
+                            0.010289336432,
+                            0.987786622995,
                         ],
                     ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
