@@ -1,4 +1,4 @@
-name: documentation
+name: docs
 on:
   push:
     branches:
@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
+          token: ${{ secrets.PAT_TOKEN }}
       - uses: actions/setup-python@v3
         with:
           python-version: '3.12'
@@ -19,11 +22,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements-cpu.txt
+          pip install -r requirements-thirdparty.txt
           pip install sphinx sphinx_rtd_theme myst_parser
       - name: Sphinx build
         run: |
-          TZ=UTC sphinx-apidoc -f --remove-old -o docs/source/apidoc ./src/
-          TZ=UTC sphinx-build -b html docs/source docs/build/html
+          TZ=UTC PYTHONPATH="src/:thirdparty/VPS" sphinx-apidoc -f --remove-old -o docs/source/apidoc ./src/
+          TZ=UTC PYTHONPATH="src/:thirdparty/VPS" sphinx-build -b html docs/source docs/build/html
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

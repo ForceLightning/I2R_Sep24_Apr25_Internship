@@ -1,4 +1,5 @@
-# I2R Sep24 - Apr25 Internship
+# A*STAR/I2R Sep 2024 - Apr 2025 Internship
+[![docs](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/actions/workflows/docs.yml/badge.svg)](https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship/actions/workflows/docs.yml)
 An in-development repository for Christopher Kok's internship at A*STAR from Sep 2024 to Apr 2025.
 
 # Introduction
@@ -16,46 +17,50 @@ See the [changelog](./CHANGELOG.md) for the differences in our approaches.
 ```sh
 .
 ├── CHANGELOG.md
+├── Conv1D.ipynb
 ├── Pipfile
 ├── Pipfile.lock
 ├── README.md
-├── __init__.py
-├── attention_unet.py
 ├── checkpoints
-├── cine.py
+│   ├── cine
+│   ├── lge
+│   ├── residual-attention
+│   ├── tscsenet
+│   ├── sota
+│   ├── two-plus-one
+│   └── two-stream
 ├── configs
 │   └── *.yaml
 ├── data
-│   ├── Indices         # Used for splitting the train/val dataset.
-│   ├── test            # Test dataset.
-│   │   ├── Cine        #   CINE image data
-│   │   ├── LGE         #   LGE image data
-│   │   └── masks       #   Annotated masks
-│   └── train_val       # Train/Val dataset.
-│   │   ├── Cine        #   CINE image data
-│   │   ├── LGE         #   LGE image data
-│   │   └── masks       #   Annotated masks
+│   ├── Indices                                     # Used for splitting the train/val dataset.
+│   ├── test                                        # Test dataset.
+│   │   ├── Cine                                    #   CINE image data
+│   │   ├── LGE                                     #   LGE image data
+│   │   └── masks                                   #   Annotated masks
+│   └── train_val                                   # Train/Val dataset.
+│       ├── Cine                                    #   CINE image data
+│       ├── LGE                                     #   LGE image data
+│       └── masks                                   #   Annotated masks
 ├── dataset
-│   ├── __init__.py
-│   └── dataset.py
 ├── docs
-├── lge.py
-├── metrics
-│   ├── __init__.py
-│   ├── dice.py
-│   └── logging.py
-├── models
-│   ├── __init__.py
-│   ├── attention.py
-│   ├── two_plus_one.py
-│   └── two_stream.py
-├── tests
-│   ├── __init__.py
-│   ├── conv1d_test.py
-│   └── quick_test.py
-├── two_plus_one.py
-├── two_stream.py
-└── utils
+│   ├── Makefile
+│   ├── build
+│   ├── make.bat
+│   └── source
+│       ├── conf.py
+│       └── index.rst
+├── pretrained_models
+│   ├── distance_measures_regressor.pth             # Used for Vivim SOTA model.
+│   └── PNSPlus.pth                                 # May or may not be used for PNS+ SOTA model.
+├── pyrightconfig.json
+├── pytest.ini
+├── requirements*.txt
+├── src
+└── thirdparty
+    ├── TransUNet
+    ├── VPS
+    ├── fla_net
+    └── vivim
 ```
 
 # Installation
@@ -87,7 +92,7 @@ Some default configurations are included in the `./configs/` directory, which wi
 > Ensure that the environment variable `PYTHONPATH` is set to `./src/`.
 > This can be done with:
 > ```sh
-> export PYTHONPATH=./src/
+> export PYTHONPATH="src/:thirdparty/VPS"
 > ```
 > Alternatively, set it in a `.env` file if using pipenv.
 
