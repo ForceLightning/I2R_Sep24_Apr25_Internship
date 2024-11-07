@@ -109,6 +109,21 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             ),
         )
 
+        class_distribution_sum = (
+            class_distribution.sum()
+            if self.include_background
+            else class_distribution[1:].sum()
+        )
+
+        # GUARD: Ensure that the relevant class distribution parts sum to 1.
+        assert torch.allclose(
+            class_distribution_sum,
+            torch.tensor(1, dtype=torch.float32, device=self.class_weights.device),
+        ), (
+            f"class distribution should sum to 1 but is instead: {class_distribution_sum}.\n"
+            + f"class distribution: {class_distribution if self.include_background else class_distribution[1:]}"
+        )
+
         self.weighted_avg_metric = (
             _safe_divide(class_distribution @ self.score_running, self.samples)
             if self.include_background
@@ -173,7 +188,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
 
             if self.weighted_average:
                 self.score_running += dice
-                class_occurrences = preds.sum(dim=[0, 2, 3])
+                class_occurrences = target.sum(dim=[0, 2, 3])
                 self.class_occurrences += class_occurrences
                 class_distribution = _safe_divide(
                     self.class_occurrences,
