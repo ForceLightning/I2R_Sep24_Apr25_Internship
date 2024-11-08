@@ -6,7 +6,7 @@ import lightning as L
 import torch
 from torch.optim.adam import Adam
 from torch.optim.adamw import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler, OneCycleLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler, OneCycleLR, StepLR
 from torch.optim.optimizer import Optimizer
 from torch.optim.sgd import SGD
 from torchvision.transforms import v2
@@ -221,6 +221,15 @@ def configure_optimizers(module: L.LightningModule):
                     "scheduler": CosineAnnealingLR(**kwargs),
                     "interval": "step",
                 }
+            case "steplr":
+                kwargs = {
+                    "optimizer": optimizer,
+                    "gamma": 0.5,
+                    "step_size": 25,
+                }
+                kwargs |= module.scheduler_kwargs
+
+                scheduler = {"scheduler": StepLR(**kwargs), "interval": "epoch"}
             case _:
                 raise NotImplementedError(
                     f"Scheduler of type {module.scheduler} not implemented"

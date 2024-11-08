@@ -8,6 +8,11 @@ url = "https://download.pytorch.org/whl/cu121/"
 verify_ssl = true
 name = "downloadpytorch"
 
+[[source]]
+url = "https://data.pyg.org/whl/torch-2.4.0+cu121.html"
+verify_ssl = true
+name = "downloadpyg"
+
 [packages]
 torch = { index = "downloadpytorch"}
 torchvision = { index = "downloadpytorch"}
@@ -76,3 +81,7 @@ transformers = "*"
 [vps]
 torchtnt = "*"
 self-cuda = {file = "thirdparty/VPS/lib/module/PNS", editable = true}
+
+[afb_urr]
+# torch-scatter = { index = "downloadpyg" }
+torch-scatter = "*"

@@ -10,3 +10,6 @@
 [submodule "thirdparty/VPS"]
 	path = thirdparty/VPS
 	url = git@github.com:ForceLightning/VPS.git
+[submodule "thirdparty/AFB-URR"]
+	path = thirdparty/AFB_URR
+	url = git@github.com:ForceLightning/AFB-URR.git
