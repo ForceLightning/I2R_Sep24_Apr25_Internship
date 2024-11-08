@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import Any, Union, override
 
+# PyTorch
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 
+# First party imports
 from utils import prediction_writer, utils
 from utils.prediction_writer import MaskImageWriter
 

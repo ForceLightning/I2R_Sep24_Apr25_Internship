@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import Any, Literal, override
 
-import torch
+# Third-Party
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
 from segmentation_models_pytorch.encoders import get_encoder as smp_get_encoder
+
+# PyTorch
+import torch
 from torch import nn
 
+# First party imports
 from models.attention.model import REDUCE_TYPES, AttentionLayer, SpatialAttentionBlock
 from models.common import ENCODER_OUTPUT_SHAPES
 from models.tscse import TSCSENetEncoder

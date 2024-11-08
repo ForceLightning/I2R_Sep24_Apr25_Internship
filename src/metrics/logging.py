@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 """Logging utilities for metrics."""
 
+# Standard Library
 from typing import Literal
 
+# PyTorch
 import lightning as L
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from torch.nn import functional as F
 from torchmetrics import Metric, MetricCollection
 
+# First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.jaccard import MulticlassMJaccardIndex, MultilabelMJaccardIndex
 from metrics.precision_recall import (

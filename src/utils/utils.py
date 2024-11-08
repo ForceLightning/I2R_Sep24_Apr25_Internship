@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """Utility functions for the project."""
+# Standard Library
 from typing import override
 
+# Third-Party
+from warmup_scheduler import GradualWarmupScheduler
+
+# PyTorch
 import lightning as L
 import torch
 from torch.optim.adam import Adam
@@ -11,8 +16,8 @@ from torch.optim.optimizer import Optimizer
 from torch.optim.sgd import SGD
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
-from warmup_scheduler import GradualWarmupScheduler
 
+# First party imports
 from utils.types import ClassificationMode, LoadingMode, ModelType, ResidualMode
 
 

@@ -2,14 +2,17 @@
 """Two-plus-one architecture training script."""
 from __future__ import annotations
 
+# Standard Library
 import os
 from typing import Literal, override
 
+# PyTorch
 import lightning as L
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
+# First party imports
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
 from models.two_plus_one import TwoPlusOneUnetLightning
@@ -37,7 +40,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
     ):
-        """Init the 2+1 datamodule.
+        """Init the R(2D+1D) datamodule.
 
         Args:
             data_dir: Path to train data directory containing Cine and masks

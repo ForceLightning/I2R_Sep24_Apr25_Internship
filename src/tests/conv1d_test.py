@@ -1,10 +1,15 @@
+# Standard Library
 import os
 from itertools import product
 from typing import Literal
 
+# Third-Party
 import pytest
+
+# PyTorch
 import torch
 
+# First party imports
 from models.two_plus_one import ENCODER_OUTPUT_SHAPES, DilatedOneD, OneD, Temporal3DConv
 from models.two_plus_one import compress_2 as _compress2_new
 from models.two_plus_one import compress_dilated

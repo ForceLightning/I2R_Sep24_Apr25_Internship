@@ -1,12 +1,16 @@
 """Implementation of loss functions."""
 
+# Standard Library
 from typing import override
 
+# PyTorch
 import torch
-from thirdparty.vivim.modeling.utils import InverseTransform2D
 from torch import Tensor
 from torch.nn import functional as F
 from torch.nn.modules.loss import _Loss
+
+# State-of-the-Art (SOTA) code
+from thirdparty.vivim.modeling.utils import InverseTransform2D
 
 
 class StructureLoss(_Loss):

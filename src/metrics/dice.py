@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Dice score metrics."""
+# Standard Library
 from typing import Any, Literal, override
 
+# PyTorch
 import torch
 from torch import Tensor
 from torchmetrics.segmentation import GeneralizedDiceScore

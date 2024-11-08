@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """Quick testing script for the project."""
+# Standard Library
 import ssl
 import sys
 from unittest import mock
 
+# Third-Party
 import pytest
 
 sys.path.insert(0, "../..")
 
+# First party imports
 from attention_unet import (
     ResidualAttentionCLI,
     ResidualAttentionLightningModule,

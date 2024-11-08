@@ -3,14 +3,18 @@
 
 Taken from https://github.com/Lightning-AI/pytorch-lightning/issues/3009
 """
+# Standard Library
 import re
 from datetime import datetime, timedelta
 from typing import override
 
-from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBar
+# Third-Party
 from rich.progress import ProgressColumn
 from rich.style import Style
 from rich.text import Text
+
+# PyTorch
+from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBar
 
 
 class RemainingTimeColumn(ProgressColumn):

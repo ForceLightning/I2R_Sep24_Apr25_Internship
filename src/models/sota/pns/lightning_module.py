@@ -1,10 +1,14 @@
 """PNS+ architecture LightningModule."""
 
+# Standard Library
 from typing import Any, Literal, Optional, OrderedDict, Union, override
 
+# Third-Party
+from segmentation_models_pytorch.losses import FocalLoss
+
+# PyTorch
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
-from segmentation_models_pytorch.losses import FocalLoss
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.optim import Optimizer
@@ -14,6 +18,7 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
+# First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,

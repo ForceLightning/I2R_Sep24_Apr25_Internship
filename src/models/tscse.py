@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+# Standard Library
 import abc
 from typing import Any, Callable, Literal, OrderedDict, Type, Union, override
 
+# Third-Party
 import segmentation_models_pytorch as smp
-import torch
-from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from segmentation_models_pytorch.base import (
     ClassificationHead,
     SegmentationHead,
@@ -16,6 +16,10 @@ from segmentation_models_pytorch.base import (
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders._base import EncoderMixin
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
+
+# PyTorch
+import torch
+from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.common_types import _size_3_t
@@ -26,6 +30,7 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
+# First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,

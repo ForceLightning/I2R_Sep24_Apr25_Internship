@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import Any, Literal, OrderedDict, override
 
-import torch
+# Third-Party
 from huggingface_hub import ModelHubMixin
-from lightning.pytorch.loggers import TensorBoardLogger
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.losses import FocalLoss
+
+# PyTorch
+import torch
+from lightning.pytorch.loggers import TensorBoardLogger
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.modules.loss import _Loss
@@ -19,6 +23,7 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
+# First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,

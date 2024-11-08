@@ -5,10 +5,18 @@ Based on the implementation at https://github.com/Beckschen/TransUNet
 
 from __future__ import annotations
 
+# Standard Library
 from typing import OrderedDict, override
 
-import torch
+# Third-Party
 from ml_collections import ConfigDict
+
+# PyTorch
+import torch
+from torch import nn
+from torch.nn.modules.utils import _pair
+
+# State-of-the-Art (SOTA) code
 from thirdparty.TransUNet.networks.vit_seg_modeling import DecoderCup
 from thirdparty.TransUNet.networks.vit_seg_modeling import Embeddings as BaseEmbeddings
 from thirdparty.TransUNet.networks.vit_seg_modeling import Encoder
@@ -22,8 +30,6 @@ from thirdparty.TransUNet.networks.vit_seg_modeling_resnet_skip import (
     PreActBottleneck,
     StdConv2d,
 )
-from torch import nn
-from torch.nn.modules.utils import _pair
 
 
 class ResNetV2(BaseResNetV2):

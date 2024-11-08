@@ -1,16 +1,21 @@
 """Common definitions for the models module."""
 
+# Standard Library
 from typing import Literal, Union, override
 
+# Third-Party
+from huggingface_hub import ModelHubMixin
+from segmentation_models_pytorch.base.model import SegmentationModel
+
+# PyTorch
 import lightning as L
 import torch
-from huggingface_hub import ModelHubMixin
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
-from segmentation_models_pytorch.base.model import SegmentationModel
 from torch import nn
 from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 
+# First party imports
 from utils.types import ClassificationMode, InverseNormalize, ModelType
 
 

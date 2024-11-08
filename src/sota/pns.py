@@ -2,11 +2,14 @@
 """PNS+ architecture training script."""
 from __future__ import annotations
 
+# Standard Library
 from typing import override
 
+# PyTorch
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
 
+# First party imports
 from cli.common import CommonCLI
 from models.sota.pns.lightning_module import PNSLightningModule
 from two_plus_one import TwoPlusOneDataModule

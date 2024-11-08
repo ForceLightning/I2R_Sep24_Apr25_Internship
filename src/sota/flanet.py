@@ -2,14 +2,17 @@
 """Two-plus-one architecture training script."""
 from __future__ import annotations
 
+# Standard Library
 import os
 from typing import Literal, override
 
+# PyTorch
 import lightning as L
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
 from torch.utils.data import DataLoader
 
+# First party imports
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import get_trainval_data_subsets
 from dataset.flanet import FLANetDataset

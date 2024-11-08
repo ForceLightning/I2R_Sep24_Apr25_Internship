@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import override
 
+# PyTorch
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+# First party imports
 from models.attention.utils import REDUCE_TYPES
 from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
 

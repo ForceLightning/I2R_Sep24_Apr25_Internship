@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import override
 
+# PyTorch
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
 
+# First party imports
 from cli.common import I2RInternshipCommonCLI
 from models.tscse import TSCSEUnetLightning
 from two_plus_one import TwoPlusOneDataModule

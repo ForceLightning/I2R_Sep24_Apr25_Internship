@@ -1,8 +1,10 @@
 """Helper module containing type and class definitions."""
 
+# Standard Library
 from enum import Enum, auto
 from typing import Sequence, override
 
+# PyTorch
 import torch
 from torchvision.transforms import v2
 

@@ -1,7 +1,9 @@
 """Compute mJaccard-Index."""
 
+# Standard Library
 from typing import Any, Literal, Optional, override
 
+# PyTorch
 import torch
 from torchmetrics.classification import (
     MulticlassConfusionMatrix,

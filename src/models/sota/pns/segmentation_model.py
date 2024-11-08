@@ -1,11 +1,16 @@
 """Segmentation Model implementation for PNSnet."""
 
+# Standard Library
 from typing import override
 
+# Third-Party
 from segmentation_models_pytorch.base.model import SegmentationModel
+
+# PyTorch
 from torch import Tensor
 from torch.nn.common_types import _size_2_t
 
+# First party imports
 from models.sota.pns.pns import PNSNet
 
 

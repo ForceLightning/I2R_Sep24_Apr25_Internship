@@ -5,14 +5,17 @@ See doi:10.48550/arXiv.2310.01861
 
 from __future__ import annotations
 
+# Standard Library
 import os
 from typing import Literal, override
 
+# Image Libraries
 import cv2
-import torch
 from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from PIL import Image
-from thirdparty.fla_net.Code.utils.video_dataloader3 import HeatmapGenerator
+
+# PyTorch
+import torch
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 from torchvision import tv_tensors
@@ -20,6 +23,10 @@ from torchvision.ops import masks_to_boxes
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 
+# State-of-the-Art (SOTA) code
+from thirdparty.fla_net.Code.utils.video_dataloader3 import HeatmapGenerator
+
+# First party imports
 from dataset.dataset import (
     DefaultDatasetProtocol,
     DefaultTransformsMixin,

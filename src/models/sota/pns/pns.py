@@ -1,6 +1,13 @@
+# Standard Library
 from typing import Sequence, override
 
+# PyTorch
 import torch
+from torch import Tensor, nn
+from torch.nn import functional as F
+from torch.nn.common_types import _size_2_t
+
+# State-of-the-Art (SOTA) code
 from thirdparty.VPS.lib.module.LightRFB import LightRFB
 from thirdparty.VPS.lib.module.PNSPlusModule import (
     Relevance_Measuring,
@@ -9,9 +16,6 @@ from thirdparty.VPS.lib.module.PNSPlusModule import (
 from thirdparty.VPS.lib.module.PNSPlusNetwork import PNSNet as PNSBaseNet
 from thirdparty.VPS.lib.module.PNSPlusNetwork import conbine_feature as CombineFeatures
 from thirdparty.VPS.lib.module.PNSPlusNetwork import res2net50_v1b_26w_4s
-from torch import Tensor, nn
-from torch.nn import functional as F
-from torch.nn.common_types import _size_2_t
 
 
 class NSBlock(nn.Module):

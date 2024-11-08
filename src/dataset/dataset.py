@@ -2,17 +2,23 @@
 """Module for the dataset classes and functions for the cardiac MRI images."""
 from __future__ import annotations
 
+# Standard Library
 import os
 import pickle
 import random
 from typing import Any, Literal, Protocol, override
 
-import cv2
+# Third-Party
 import numpy as np
-import torch
-from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from numpy import typing as npt
+
+# Image Libraries
+import cv2
+from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from PIL import Image
+
+# PyTorch
+import torch
 from torch.nn import functional as F
 from torch.utils.data import (
     DataLoader,
@@ -26,6 +32,7 @@ from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 from torchvision.transforms.v2 import functional as v2f
 
+# First party imports
 from dataset.optical_flow import cuda_optical_flow, dense_optical_flow
 from utils.types import INV_NORM_GREYSCALE_DEFAULT
 from utils.utils import ClassificationMode, LoadingMode, ResidualMode

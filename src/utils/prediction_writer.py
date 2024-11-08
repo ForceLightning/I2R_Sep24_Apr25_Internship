@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+# Standard Library
 import os
 from typing import Any, Literal, Sequence
 
+# Third-Party
+from tqdm.auto import tqdm
+
+# Image Libraries
+from PIL.Image import Image
+
+# PyTorch
 import lightning as L
 import torch
 from lightning.pytorch.callbacks import BasePredictionWriter
-from PIL.Image import Image
 from torchvision.transforms.v2 import functional as v2f
 from torchvision.utils import draw_segmentation_masks
-from tqdm.auto import tqdm
 
+# First party imports
 from utils.types import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
 
 

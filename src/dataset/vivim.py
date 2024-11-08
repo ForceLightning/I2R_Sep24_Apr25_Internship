@@ -5,16 +5,22 @@ See doi: 10.48550/arXiv.2401.14168
 
 from __future__ import annotations
 
+# Standard Library
 import os
 from typing import Literal, override
 
-import cv2
+# Third-Party
 import numpy as np
-import torch
-from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
 from numpy import typing as npt
-from PIL import Image
 from scipy.ndimage import distance_transform_edt
+
+# Image Libraries
+import cv2
+from cv2 import IMREAD_COLOR, IMREAD_GRAYSCALE
+from PIL import Image
+
+# PyTorch
+import torch
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import Dataset
@@ -22,6 +28,7 @@ from torchvision import tv_tensors
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 
+# First party imports
 from dataset.dataset import (
     DefaultDatasetProtocol,
     DefaultTransformsMixin,

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import Any, Literal, OrderedDict, override
 
-import torch
+# Third-Party
 from huggingface_hub import ModelHubMixin
-from lightning.pytorch.loggers import TensorBoardLogger
 from segmentation_models_pytorch.base import SegmentationModel
 from segmentation_models_pytorch.losses import FocalLoss
-from thirdparty.vivim.modeling.vivim import Vivim
+
+# PyTorch
+import torch
+from lightning.pytorch.loggers import TensorBoardLogger
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
@@ -19,6 +22,10 @@ from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
+# State-of-the-Art (SOTA) code
+from thirdparty.vivim.modeling.vivim import Vivim
+
+# First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import (
     setup_metrics,
@@ -142,7 +149,6 @@ class VivimLightningModule(CommonModelMixin):
                         f"Loss type of {loss} is not implemented!"
                     )
         else:
-            # TODO: Check if these implementations are ok.
             self.loss = (
                 loss
                 if isinstance(loss, nn.Module)

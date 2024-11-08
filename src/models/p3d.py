@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+# Standard Library
 import math
 from functools import partial
 from typing import Any, Callable, Literal, Mapping, override
 
+# Third-Party
 import numpy as np
-import torch
 from segmentation_models_pytorch.base import SegmentationModel
 from segmentation_models_pytorch.encoders._base import EncoderMixin
+
+# PyTorch
+import torch
 from torch import nn
 from torch.nn import functional as F
 

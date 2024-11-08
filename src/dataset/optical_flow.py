@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+# Standard Library
 from collections import deque
 from typing import Sequence
 
-import cv2
+# Third-Party
 import numpy as np
-import PIL.ImageSequence as ImageSequence
-import torch
-from cv2 import typing as cvt
 from matplotlib import animation, colors
 from matplotlib import pyplot as plt
+
+# Image Libraries
+import cv2
+import PIL.ImageSequence as ImageSequence
+from cv2 import typing as cvt
 from PIL import Image
+
+# PyTorch
+import torch
 from torchvision.transforms.v2 import functional as v2f
 
+# First party imports
 from utils.types import INV_NORM_RGB_DEFAULT, InverseNormalize
 
 

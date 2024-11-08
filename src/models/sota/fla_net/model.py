@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+# Standard Library
 from typing import Any, Callable, List, Optional, Union, override
 
-import torch
+# Third-Party
 from segmentation_models_pytorch.base import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
+
+# PyTorch
+import torch
 from torch import nn
 from torch.nn import functional as F
 
