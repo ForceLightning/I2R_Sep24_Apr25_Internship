@@ -60,6 +60,7 @@ widgetsnbextension = "*"
 ipywidgets = "*"
 ipykernel = "*"
 ipympl = "*"
+sphobjinv = "*"
 
 [docs]
 sphinx = "*"
@@ -83,5 +84,4 @@ torchtnt = "*"
 self-cuda = {file = "thirdparty/VPS/lib/module/PNS", editable = true}
 
 [afb_urr]
-# torch-scatter = { index = "downloadpyg" }
 torch-scatter = "*"
