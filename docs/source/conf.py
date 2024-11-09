@@ -1,3 +1,4 @@
+# Standard Library
 import os
 import sys
 
@@ -55,6 +56,7 @@ autodoc_default_options = {
     "show-inheritance": True,
 }
 
+autodoc_mock_imports = ["thirdparty"]
 
 # -- Options for intersphinx extension ---------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html#configuration

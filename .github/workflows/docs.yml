@@ -22,7 +22,6 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements-cpu.txt
-          pip install -r requirements-thirdparty.txt
           pip install sphinx sphinx_rtd_theme myst_parser
       - name: Sphinx build
         run: |
