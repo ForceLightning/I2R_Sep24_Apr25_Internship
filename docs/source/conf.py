@@ -19,8 +19,9 @@ release = "0.1"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    "sphinx.ext.autodoc",
     "sphinx.ext.doctest",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.coverage",
@@ -64,6 +65,7 @@ autodoc_mock_imports = ["thirdparty"]
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3.12/", None),
     "torch": ("https://pytorch.org/docs/2.5/", None),
+    "torchvision": ("https://pytorch.org/vision/0.20/", None),
     "numpy": ("https://numpy.org/doc/1.26/", None),
     "lightning": ("https://lightning.ai/docs/pytorch/2.4.0/", None),
     "torchmetrics": ("https://lightning.ai/docs/torchmetrics/v1.5.1/", None),

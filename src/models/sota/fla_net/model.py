@@ -280,7 +280,7 @@ class Unet(FLANetSegmentationModel):
             channels of output mask)
         activation: An activation function to apply after the final convolution layer.
             Available options are **"sigmoid"**, **"softmax"**, **"logsoftmax"**,
-                **"tanh"**, **"identity"**, **callable** and **None**.
+            **"tanh"**, **"identity"**, **callable** and **None**.
             Default is **None**
         aux_params: Dictionary with parameters of the auxiliary output (classification
             head). Auxiliary output is build on top of encoder if **aux_params** is not
@@ -289,7 +289,7 @@ class Unet(FLANetSegmentationModel):
                 - pooling (str): One of "max", "avg". Default is "avg"
                 - dropout (float): Dropout factor in [0, 1)
                 - activation (str): An activation function to apply "sigmoid"/"softmax"
-                    (could be **None** to return logits)
+                (could be **None** to return logits)
 
     Returns:
         ``torch.nn.Module``: Unet
