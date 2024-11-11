@@ -17,11 +17,14 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Metric, MetricCollection
+from torchvision import tv_tensors
+from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 from torchvision.utils import draw_segmentation_masks
 
 # State-of-the-Art (SOTA) code
-from thirdparty.AFB_URR.model.FeatureBank import FeatureBank
+from thirdparty.AFB_URR.model import AFB_URR as AFB_URR_Base
+from thirdparty.AFB_URR.model import FeatureBank as FeatureBankBase
 
 # First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
@@ -40,7 +43,7 @@ from utils.types import (
 
 # Local folders
 from ...common import CommonModelMixin
-from .model import AFB_URR
+from .model import AFB_URR, FeatureBank
 
 
 class AFB_URRLightningModule(CommonModelMixin):
@@ -71,6 +74,7 @@ class AFB_URRLightningModule(CommonModelMixin):
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
+        use_original: bool = False,
     ):
         """Initialise the AFB-URR LightningModule wrapper.
 
@@ -98,6 +102,7 @@ class AFB_URRLightningModule(CommonModelMixin):
             eval_classification_mode: The classification mode for evaluation.
             loading_mode: The loading mode.
             dump_memory_snapshot: Whether to dump the memory snapshot.
+            use_original: Whether to use the original model.
 
         """
         super().__init__()
@@ -108,6 +113,10 @@ class AFB_URRLightningModule(CommonModelMixin):
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
         self.budget = budget
+        self._use_original = use_original
+
+        if self._use_original:
+            assert batch_size == 1, "Batch size must be 1 for the original model."
 
         # Trace memory usage.
         if self.dump_memory_snapshot:
@@ -115,8 +124,12 @@ class AFB_URRLightningModule(CommonModelMixin):
                 enabled="all", context="all", stacks="python"
             )
 
-        self.model: AFB_URR = (  # pyright: ignore[reportIncompatibleVariableOverride]
+        self.model: (  # pyright: ignore[reportIncompatibleVariableOverride]
+            AFB_URR | AFB_URR_Base
+        ) = (
             AFB_URR(self.device.type, update_bank=False, load_imagenet_params=True)
+            if not self._use_original
+            else AFB_URR_Base(self.device, update_bank=False, load_imagenet_params=True)
         )
 
         self.optimizer = optimizer
@@ -164,7 +177,7 @@ class AFB_URRLightningModule(CommonModelMixin):
             ]
         )
         # NOTE: This is to help with reproducibility
-        with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+        with torch.random.fork_rng(devices=("cpu", self.device)):
             self.example_input_array = (
                 torch.randn(
                     (self.batch_size, self.num_frames, self.in_channels, 224, 224),
@@ -207,17 +220,57 @@ class AFB_URRLightningModule(CommonModelMixin):
                 except RuntimeError as e:
                     raise e
 
+        self.first_frame_transform = Compose(
+            [
+                v2.RandomHorizontalFlip(),
+                v2.RandomVerticalFlip(),
+                v2.RandomRotation([-90, 90]),
+            ]
+        )
+
     def forward(self, frames: Tensor, masks: Tensor) -> Tensor:
         """Forward pass of the model."""
         # HACK: This is to get things to work with deepspeed opt level 1 & 2. Level 3
         # is broken due to the casting of batchnorm to non-fp32 types.
         with torch.autocast(device_type=self.device.type):
-            fb_global = FeatureBank(self.classes, self.budget, self.device.type)
-            k4_list, v4_list = self.model.memorize(frames[:, 0], masks)
-            fb_global.init_bank(k4_list, v4_list)
+            if self._use_original:
+                assert isinstance(
+                    self.model, AFB_URR_Base
+                ), "Wrong model class if use_original is True"
 
-            scores, _uncertainty = self.model.segment(frames[:, 1:], fb_global)
-            return scores
+                first_frame = tv_tensors.Image(frames[:, 0].clone())
+                first_mask = tv_tensors.Mask(masks.clone())
+
+                first_frame, first_mask = self.first_frame_transform(
+                    first_frame, first_mask
+                )
+                first_frame = first_frame[0]
+
+                k4_list, v4_list = self.model.memorize(first_frame, first_mask)
+                fb_global = FeatureBankBase(self.classes, self.budget, self.device.type)
+
+                fb_global.init_bank(k4_list, v4_list)
+                model_ret = self.model.segment(frames[0, 1:], fb_global)
+                masks_proba, _uncertainty = model_ret
+                masks_proba = masks_proba[-1].unsqueeze(0)
+            else:
+                assert isinstance(
+                    self.model, AFB_URR
+                ), "Wrong model class if use_original is False"
+                first_frame = tv_tensors.Image(frames[:, 0:1].clone())
+                first_mask = tv_tensors.Mask(masks.clone())
+
+                first_frame, first_mask = self.first_frame_transform(
+                    first_frame, first_mask
+                )
+                fb_global = FeatureBank(self.classes, self.budget, self.device.type)
+
+                k4_list, v4_list = self.model.memorize(first_frame, first_mask)
+
+                fb_global.init_bank(k4_list, v4_list)
+                model_ret = self.model.segment(frames[:, 1:], fb_global)
+                masks_proba, _uncertainty = model_ret
+            return masks_proba
 
     @override
     def log_metrics(self, prefix) -> None:
@@ -241,14 +294,45 @@ class AFB_URRLightningModule(CommonModelMixin):
             masks_input = masks
 
         with torch.autocast(device_type=self.device.type, enabled=prefix == "train"):
-            fb_global = FeatureBank(self.classes, self.budget, self.device.type)
-            k4_list, v4_list = self.model.memorize(images_input[:, 0], masks_input)
-            fb_global.init_bank(k4_list, v4_list)
+            model_ret: tuple[Tensor, Tensor | None]
+            if self._use_original:
+                assert isinstance(
+                    self.model, AFB_URR_Base
+                ), "Wrong model class if use_original is True"
 
-            model_ret: tuple[Tensor, Tensor | None] = self.model.segment(
-                images_input[:, 1:], fb_global
-            )
-            masks_proba, uncertainty = model_ret
+                first_frame = tv_tensors.Image(images_input[:, 0].clone())
+                first_mask = tv_tensors.Mask(masks_input.clone())
+
+                first_frame, first_mask = self.first_frame_transform(
+                    first_frame, first_mask
+                )
+                first_frame = first_frame[0]
+
+                k4_list, v4_list = self.model.memorize(first_frame, first_mask)
+                fb_global = FeatureBankBase(self.classes, self.budget, self.device.type)
+
+                fb_global.init_bank(k4_list, v4_list)
+                model_ret = self.model.segment(images_input[0, 1:], fb_global)
+                masks_proba, uncertainty = model_ret
+                masks_proba = masks_proba[-1].unsqueeze(0)
+            else:
+                assert isinstance(
+                    self.model, AFB_URR
+                ), "Wrong model class if use_original is False"
+                first_frame = tv_tensors.Image(images_input[:, 0:1].clone())
+                first_mask = tv_tensors.Mask(masks_input.clone())
+
+                first_frame, first_mask = self.first_frame_transform(
+                    first_frame, first_mask
+                )
+                fb_global = FeatureBank(self.classes, self.budget, self.device.type)
+
+                k4_list, v4_list = self.model.memorize(first_frame, first_mask)
+
+                fb_global.init_bank(k4_list, v4_list)
+                model_ret = self.model.segment(images_input[:, 1:], fb_global)
+                masks_proba, uncertainty = model_ret
+
             uncertainty = uncertainty if uncertainty else 0.0
 
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
@@ -363,7 +447,7 @@ class AFB_URRLightningModule(CommonModelMixin):
     ):
         images, masks, _ = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
-        loss_all, masks_proba = self._shared_forward_pass(batch, "train")
+        loss_all, masks_proba = self._shared_forward_pass(batch, prefix)
 
         self.log(
             f"loss/{prefix}",
@@ -473,7 +557,7 @@ class AFB_URRLightningModule(CommonModelMixin):
                 )
                 # Get only the first frame of images.
                 for img, mask in zip(
-                    inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                    inv_norm_img[:, -1, :, :, :].detach().cpu(),
                     masks_preds.detach().cpu(),
                     strict=True,
                 )
@@ -487,7 +571,7 @@ class AFB_URRLightningModule(CommonModelMixin):
                 )
                 # Get only the first frame of images.
                 for img, mask in zip(
-                    inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                    inv_norm_img[:, -1, :, :, :].detach().cpu(),
                     masks_one_hot.detach().cpu(),
                     strict=True,
                 )
@@ -526,15 +610,47 @@ class AFB_URRLightningModule(CommonModelMixin):
         images_input = images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
-        fb_global = FeatureBank(self.classes, self.budget, self.device.type)
-        k4_list, v4_list = self.model.memorize(images_input, masks)
-        fb_global.init_bank(k4_list, v4_list)
+        model_ret: tuple[Tensor, Tensor | None]
 
-        model_ret: tuple[Tensor, Tensor | None] = self.model.segment(
-            images_input[1:], fb_global
-        )
-        masks_proba, uncertainty = model_ret
-        uncertainty = uncertainty if uncertainty else 0.0
+        if self._use_original:
+            assert isinstance(
+                self.model, AFB_URR_Base
+            ), "Wrong model class if use_original is True"
+
+            first_frame = tv_tensors.Image(images_input[:, 0].clone())
+            first_mask = tv_tensors.Mask(masks.clone())
+
+            first_frame, first_mask = self.first_frame_transform(
+                first_frame, first_mask
+            )
+            first_frame = first_frame[0]
+
+            k4_list, v4_list = self.model.memorize(first_frame, first_mask)
+            fb_global = FeatureBankBase(self.classes, self.budget, self.device.type)
+
+            fb_global.init_bank(k4_list, v4_list)
+            model_ret = self.model.segment(images_input[0, 1:], fb_global)
+            masks_proba, uncertainty = model_ret
+            masks_proba = masks_proba[-1].unsqueeze(0)
+            uncertainty = uncertainty if uncertainty else 0.0
+        else:
+            assert isinstance(
+                self.model, AFB_URR
+            ), "Wrong model class if use_original is False"
+            first_frame = tv_tensors.Image(images_input[:, 0:1].clone())
+            first_mask = tv_tensors.Mask(masks.clone())
+
+            first_frame, first_mask = self.first_frame_transform(
+                first_frame, first_mask
+            )
+            fb_global = FeatureBank(self.classes, self.budget, self.device.type)
+
+            k4_list, v4_list = self.model.memorize(first_frame, first_mask)
+
+            fb_global.init_bank(k4_list, v4_list)
+            model_ret = self.model.segment(images_input[:, 1:], fb_global)
+            masks_proba, uncertainty = model_ret
+            uncertainty = uncertainty if uncertainty else 0.0
 
         if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
             masks_preds = masks_proba.argmax(dim=1)

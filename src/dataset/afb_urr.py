@@ -40,6 +40,24 @@ class AFB_URRDataset(Dataset[tuple[Tensor, Tensor, str]], DefaultTransformsMixin
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
     ) -> None:
+        """Initialise the AFB-URR compatible dataset.
+
+        Args:
+            img_dir: Path to the directory containing the cine images.
+            mask_dir: Path to the directory containing the masks.
+            idxs_dir: Path to the directory containing the indices.
+            frames: Number of frames to select from the cine images.
+            select_frame_method: Method to select frames.
+            transform_img: Transforms to apply to the cine images.
+            transform_mask: Transforms to apply to the masks.
+            transform_together: Transforms to apply to both the cine images and masks.
+            batch_size: Batch size.
+            mode: Training/Inference mode.
+            classification_mode: Classification mode.
+            loading_mode: Loading mode.
+            combine_train_val: Combine the train and validation datasets.
+
+        """
         super().__init__()
 
         self.img_dir = img_dir
@@ -77,6 +95,7 @@ class AFB_URRDataset(Dataset[tuple[Tensor, Tensor, str]], DefaultTransformsMixin
             )
 
     def __len__(self) -> int:
+        """Return the length of the dataset."""
         return len(self.img_list)
 
     @override
@@ -159,5 +178,5 @@ class AFB_URRDataset(Dataset[tuple[Tensor, Tensor, str]], DefaultTransformsMixin
             num_frames < 30 and num_frames > 0
         ), f"number of frames: {num_frames} must be <= 30 and > 0"
 
-        idxs = list(reversed(range(29, -1, 30 // num_frames)))
+        idxs = list(reversed(range(29, -1, -30 // num_frames)))
         return imgs[idxs]
