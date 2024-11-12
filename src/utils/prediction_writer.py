@@ -32,7 +32,7 @@ class MaskImageWriter(BasePredictionWriter):
         output_dir: str | None = None,
         write_interval: Literal["batch", "epoch", "batch_and_epoch"] = "epoch",
         inv_transform: InverseNormalize = INV_NORM_RGB_DEFAULT,
-        format: Literal["apng", "tiff", "gif", "webp"] = "tiff",
+        format: Literal["apng", "tiff", "gif", "webp", "png"] = "gif",
     ):
         """Initialise the MaskImageWriter.
 
@@ -48,7 +48,7 @@ class MaskImageWriter(BasePredictionWriter):
         self.output_dir = output_dir
         self.inv_transform = inv_transform
         self.loading_mode = loading_mode
-        self.format: Literal["apng", "tiff", "gif", "webp"] = format
+        self.format: Literal["apng", "tiff", "gif", "webp", "png"] = format
         if self.output_dir:
             if not os.path.exists(out_dir := os.path.normpath(self.output_dir)):
                 os.makedirs(out_dir)
@@ -105,7 +105,7 @@ class MaskImageWriter(BasePredictionWriter):
                             save_path,
                             append_images=masked_frames[1:],
                             save_all=True,
-                            duration=1000 / num_frames,
+                            duration=1000 // num_frames,
                             default_image=False,
                             disposal=1,
                             loop=0,
@@ -115,7 +115,7 @@ class MaskImageWriter(BasePredictionWriter):
                             save_path,
                             append_images=masked_frames[1:],
                             save_all=True,
-                            duration=1000 / num_frames,
+                            duration=1000 // num_frames,
                             disposal=2,
                             loop=0,
                         )
@@ -124,11 +124,23 @@ class MaskImageWriter(BasePredictionWriter):
                             save_path,
                             append_images=masked_frames[1:],
                             save_all=True,
-                            duration=1000 / num_frames,
+                            duration=1000 // num_frames,
                             loop=0,
                             background=(0, 0, 0, 0),
                             allow_mixed=True,
                         )
+                    case "png":
+                        for i, frame in enumerate(masked_frames):
+                            save_path = os.path.join(
+                                os.path.normpath(self.output_dir),
+                                save_sample_fp,
+                            )
+                            if not os.path.exists(save_path):
+                                os.makedirs(save_path)
+                            save_path = os.path.join(
+                                save_path, f"pred_{i:04d}.{self.format}"
+                            )
+                            frame.save(save_path)
 
 
 def get_output_dir_from_ckpt_path(ckpt_path: str | None):
