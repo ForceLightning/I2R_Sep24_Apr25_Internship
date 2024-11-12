@@ -114,6 +114,7 @@ class AFB_URRLightningModule(CommonModelMixin):
         self.dump_memory_snapshot = dump_memory_snapshot
         self.budget = budget
         self._use_original = use_original
+        self.loading_mode = loading_mode
 
         if self._use_original:
             assert batch_size == 1, "Batch size must be 1 for the original model."
@@ -244,7 +245,6 @@ class AFB_URRLightningModule(CommonModelMixin):
                 first_frame, first_mask = self.first_frame_transform(
                     first_frame, first_mask
                 )
-                first_frame = first_frame[0]
 
                 k4_list, v4_list = self.model.memorize(first_frame, first_mask)
                 fb_global = FeatureBankBase(self.classes, self.budget, self.device.type)
@@ -306,7 +306,6 @@ class AFB_URRLightningModule(CommonModelMixin):
                 first_frame, first_mask = self.first_frame_transform(
                     first_frame, first_mask
                 )
-                first_frame = first_frame[0]
 
                 k4_list, v4_list = self.model.memorize(first_frame, first_mask)
                 fb_global = FeatureBankBase(self.classes, self.budget, self.device.type)
@@ -623,7 +622,6 @@ class AFB_URRLightningModule(CommonModelMixin):
             first_frame, first_mask = self.first_frame_transform(
                 first_frame, first_mask
             )
-            first_frame = first_frame[0]
 
             k4_list, v4_list = self.model.memorize(first_frame, first_mask)
             fb_global = FeatureBankBase(self.classes, self.budget, self.device.type)
