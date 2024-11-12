@@ -513,7 +513,7 @@ class FLANetLightningModule(CommonModelMixin):
     @torch.no_grad()
     def predict_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str | list[str]],
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str | list[str]],
         batch_idx: int,
         dataloader_idx: int = 0,
     ):
@@ -530,11 +530,11 @@ class FLANetLightningModule(CommonModelMixin):
 
         """
         self.eval()
-        images, masks, fn = batch
-        images_input = images.to(self.device.type)
+        images, masks, _hms, fn = batch
+        images_input = images.to(self.device.type, dtype=torch.float32)
         masks = masks.to(self.device.type).long()
 
-        masks_proba: torch.Tensor = self.model(
+        masks_proba, _hm_preds = self.model(
             images_input
         )  # pyright: ignore[reportCallIssue]
 
