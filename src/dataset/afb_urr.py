@@ -1,3 +1,5 @@
+"""AFB-URR compatible dataset."""
+
 # Standard Library
 import os
 from typing import Literal, Optional, override

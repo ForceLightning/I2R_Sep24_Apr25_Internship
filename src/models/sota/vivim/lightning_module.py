@@ -88,6 +88,44 @@ class VivimLightningModule(CommonModelMixin):
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
     ):
+        """Initialise the Vivim LightningModule.
+
+        Args:
+            batch_size: The batch size.
+            metric: The metric to use.
+            loss: The loss function to use.
+            encoder_name: The name of the encoder.
+            encoder_depth: The depth of the encoder.
+            encoder_weights: The weights of the encoder.
+            in_channels: The number of input channels.
+            classes: The number of classes.
+            num_frames: The number of frames.
+            depths: The number of modules per layer.
+            feat_size: The feature sizes.
+            drop_path_rate: The dropout rate.
+            layer_scale_init_value: The layer scale initial value.
+            hidden_size: The hidden size.
+            norm_name: The name of the normalisation.
+            conv_block: Whether to use convolutional blocks.
+            res_block: Whether to use residual blocks.
+            spatial_dims: The spatial dimensions.
+            with_edge: Whether to use edges.
+            weights_from_ckpt_path: The path to the checkpoint.
+            optimizer: The optimizer to use.
+            optimizer_kwargs: The optimizer keyword arguments.
+            scheduler: The scheduler to use.
+            scheduler_kwargs: The scheduler keyword arguments.
+            multiplier: The multiplier.
+            total_epochs: The total number of epochs.
+            alpha: The alpha loss scaling value.
+            _beta: The beta loss scaling value. (Unused).
+            learning_rate: The learning rate.
+            dl_classification_mode: The classification mode for dataloader.
+            eval_classification_mode: The classification mode for evaluation.
+            loading_mode: The image loading mode.
+            dump_memory_snapshot: Whether to dump memory snapshot.
+
+        """
         super().__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
         self.batch_size = batch_size

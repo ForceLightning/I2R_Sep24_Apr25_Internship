@@ -1,3 +1,5 @@
+"""AFB-URR Feature bank and modules."""
+
 # Standard Library
 from math import sqrt
 from typing import Union
@@ -17,8 +19,6 @@ from torchvision.models import resnet50
 from thirdparty.AFB_URR import myutils
 from thirdparty.AFB_URR.model.AFB_URR import Refine, ResBlock
 from thirdparty.AFB_URR.myutils.data import calc_uncertainty, pad_divide_by
-
-# from thirdparty.AFB_URR.model.FeatureBank import FeatureBank
 
 
 class FeatureBank(nn.Module):

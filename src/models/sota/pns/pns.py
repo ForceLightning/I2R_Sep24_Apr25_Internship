@@ -1,3 +1,8 @@
+"""PNS+ network from `Video Polyp Segmentation: A Deep Learning Perspective`.
+
+Code adapted from `http://arxiv.org/abs/2203.14291`.
+"""
+
 # Standard Library
 from typing import Sequence, override
 
