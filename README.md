@@ -65,9 +65,26 @@ See the [changelog](./CHANGELOG.md) for the differences in our approaches.
 ```
 
 # Installation
-Install the dependencies from `Pipfile.lock`.
+Clone the repository with:
+```sh
+git clone --recursive https://github.com/ForceLightning/I2R_Sep24_Apr25_Internship.git
+```
+> [!NOTE]
+> Ensure that the `--recursive` flag is set if third-party modules are needed.
+
+Install the dependencies from `Pipfile.lock` or `requirements.txt`. Note that the CUDA version used is 12.1, modify it as necessary.
 ```sh
 pipenv sync
+# or
+pip install -r requirements.txt
+```
+Optionally, install the dependencies for developement and the third-party libraries.
+```sh
+pipenv install -d
+pipenv install --categories transunet && pipenv install --categories vivim && pipenv install --categories transunet && pipenv install --categories vivim && pipenv install --categories vps && pipenv install --categories afb_urr
+# or
+pip install -r requirements-dev.txt
+pip install -r requirements-thirdparty.txt
 ```
 
 ## CUDA-accelerated Optical Flow support
@@ -99,9 +116,9 @@ Some default configurations are included in the `./configs/` directory, which wi
 
 ## Description of config modules
 - `cine.yaml`, `lge.yaml`, `two_stream.yaml`, `two_plus_one.yaml`, `residual_attention.yaml`: Incomplete defaults for initialisation.
-- `training.yaml`, `testing.yaml`, `no_checkpointing.yaml`: Overrides for training or validation/testing/quick run modes. This must be the last config file loaded in.
+- `training.yaml`, `testing.yaml`, `training_no_checkpointing.yaml`: Overrides for training or validation/testing/quick run modes. This must be the last config file loaded in.
 - `*_greyscale.yaml`, `*_rgb.yaml`: Defaults for handling either RGB images or greyscale images as inputs.
-- `cine_tpo_resnet50.yaml`, `cine_tpo_senet154.yaml`: Defaults for the ResNet50 and SENet154 backbones for the CINE, TwoStream, TwoPlusOne, and Attention tasks.
+- `cine_tpo_resnet50.yaml`, `cine_tpo_senet154.yaml`: Defaults for the ResNet50 and SENet154 backbones for the CINE, TwoStream, TwoPlusOne R(2D+1D), and Attention tasks.
 
 ## Useful CLI arguments
 - `--version`: Sets the name of the experiment for logging and model checkpointing use cases.
@@ -143,5 +160,11 @@ python -m two_plus_one fit --config ./configs/two_plus_one.yaml --config ./confi
 ## Attention U-Net
 The example below runs a U-Net with 2 + 1 temporal convolution residual connections and attention mechanism on residual frames using a ResNet50 backbone and Greyscale image loading.
 ```sh
-python -m attention_unet fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 15 --data.batch_size 1 --version default
+python -m attention_unet fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 15 --data.batch_size 2 --version default
 ```
+## Third-party modules
+SOTA methods can be run using the following python modules:
+- `sota.afb_urr`
+- `sota.flanet`
+- `sota.pns`
+- `sota.vivim`
