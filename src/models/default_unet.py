@@ -75,6 +75,7 @@ class LightningUnetWrapper(CommonModelMixin):
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTILABEL_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
+        dummy_predict: bool = False,
     ):
         """Init the UNet model.
 
@@ -103,6 +104,7 @@ class LightningUnetWrapper(CommonModelMixin):
             eval_classification_mode: Classification mode for evaluation.
             loading_mode: Image loading mode.
             dump_memory_snapshot: Whether to dump a memory snapshot after training.
+            dummy_predict: Whether to predict ground truth masks for visualisation.
 
         """
         # Trace memory usage
@@ -119,6 +121,7 @@ class LightningUnetWrapper(CommonModelMixin):
         self.batch_size = batch_size
         self.num_frames = num_frames
         self.model_type = model_type
+        self.dummy_predict = dummy_predict
 
         match model_type:
             case ModelType.UNET:
@@ -533,15 +536,25 @@ class LightningUnetWrapper(CommonModelMixin):
         images_input = images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
-        masks_proba: torch.Tensor = self.model(
-            images_input
-        )  # pyright: ignore[reportCallIssue]
-
-        if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
-            masks_preds = masks_proba.argmax(dim=1)
-            masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        masks_preds: torch.Tensor
+        if self.dummy_predict:
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = (
+                    F.one_hot(masks, num_classes=4).permute(0, -1, 1, 2).bool()
+                )
+            else:
+                masks_preds = masks.bool()
         else:
-            masks_preds = masks_proba > 0.5
+            assert isinstance(self.model, nn.Module)
+            masks_proba: torch.Tensor = self.model(images_input)
+
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = masks_proba.argmax(dim=1)
+                masks_preds = (
+                    F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2).bool()
+                )
+            else:
+                masks_preds = masks_proba > 0.5
 
         b, c, h, w = images.shape
         match self.loading_mode:

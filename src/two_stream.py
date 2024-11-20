@@ -11,6 +11,7 @@ from typing import override
 import lightning as L
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
+from torch.nn.common_types import _size_2_t
 from torch.utils.data import DataLoader
 
 # First party imports
@@ -33,12 +34,14 @@ class TwoStreamDataModule(L.LightningDataModule):
         test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
+        image_size: _size_2_t = (224, 224),
         frames: int = NUM_FRAMES,
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
+        dummy_predict: bool = False,
     ) -> None:
         """Initialise the TwoStreamDataModule.
 
@@ -47,12 +50,14 @@ class TwoStreamDataModule(L.LightningDataModule):
             test_dir: The test directory.
             indices_dir: The indices directory.
             batch_size: The batch size.
+            image_size: Dataloader output image resolution.
             frames: The number of frames.
             classification_mode: The classification mode.
             num_workers: The number of workers.
             loading_mode: The loading mode.
             combine_train_val: Whether to combine the training and validation sets.
             augment: Whether to augment the data during training.
+            dummy_predict: Whether to include the train/val sets in the prediction.
 
         """
         super().__init__()
@@ -61,12 +66,14 @@ class TwoStreamDataModule(L.LightningDataModule):
         self.test_dir = test_dir
         self.indices_dir = indices_dir
         self.batch_size = batch_size
+        self.image_size = image_size
         self.frames = frames
         self.classification_mode = classification_mode
         self.num_workers = num_workers
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
         self.augment = augment
+        self.dummy_predict = dummy_predict
 
     @override
     def setup(self, stage):
@@ -77,7 +84,9 @@ class TwoStreamDataModule(L.LightningDataModule):
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
         transforms_img, transforms_mask, transforms_together = (
-            TwoStreamDataset.get_default_transforms(self.loading_mode, self.augment)
+            TwoStreamDataset.get_default_transforms(
+                self.loading_mode, self.augment, self.image_size
+            )
         )
 
         trainval_dataset = TwoStreamDataset(
@@ -92,6 +101,7 @@ class TwoStreamDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -111,6 +121,7 @@ class TwoStreamDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
 
         if self.combine_train_val:
@@ -137,6 +148,7 @@ class TwoStreamDataModule(L.LightningDataModule):
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
+                image_size=self.image_size,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
@@ -182,13 +194,38 @@ class TwoStreamDataModule(L.LightningDataModule):
 
     @override
     def predict_dataloader(self):
-        return DataLoader(
+        test_loader = DataLoader(
             self.test,
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
             persistent_workers=False,
         )
+
+        if self.dummy_predict:
+            train_loader = DataLoader(
+                self.train,
+                batch_size=self.batch_size,
+                pin_memory=True,
+                num_workers=self.num_workers,
+                drop_last=True,
+                persistent_workers=True if self.num_workers > 0 else False,
+                shuffle=False,
+            )
+            if not self.combine_train_val:
+                valid_loader = DataLoader(
+                    self.train,
+                    batch_size=self.batch_size,
+                    pin_memory=True,
+                    num_workers=self.num_workers,
+                    drop_last=True,
+                    persistent_workers=True if self.num_workers > 0 else False,
+                    shuffle=False,
+                )
+
+                return (train_loader, valid_loader, test_loader)
+            return (train_loader, test_loader)
+        return test_loader
 
 
 class TwoStreamCLI(I2RInternshipCommonCLI):

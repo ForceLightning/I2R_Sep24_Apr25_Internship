@@ -57,7 +57,10 @@ class MaskImageWriter(BasePredictionWriter):
         self,
         trainer: L.Trainer,
         pl_module: L.LightningModule,
-        predictions: Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]],
+        predictions: (
+            Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]]
+            | Sequence[Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]]]
+        ),
         batch_indices: Sequence[Any],
     ) -> None:
         """Save the predicted images with masks to the output directory.
@@ -71,76 +74,88 @@ class MaskImageWriter(BasePredictionWriter):
         """
         if not self.output_dir:
             return
-        for batched_mask_preds, batched_images, batched_fns in tqdm(
-            predictions, desc="Batches"
-        ):
 
-            for mask_pred, image, fn in zip(
-                batched_mask_preds, batched_images, batched_fns, strict=True
+        predictions_for_loop: list[
+            Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]]
+        ]
+        if isinstance(predictions[0][0], torch.Tensor):
+            predictions_for_loop = [
+                predictions  # pyright: ignore[reportAssignmentType]
+            ]
+        else:
+            predictions_for_loop = predictions  # pyright: ignore[reportAssignmentType]
+
+        for preds in predictions_for_loop:
+            for batched_mask_preds, batched_images, batched_fns in tqdm(
+                preds, desc="Batches"
             ):
-                num_frames = image.shape[0]
 
-                masked_frames: list[Image] = []
-                for frame in image:
-                    masked_frame = _draw_masks(
-                        frame, mask_pred, self.loading_mode, self.inv_transform
+                for mask_pred, image, fn in zip(
+                    batched_mask_preds, batched_images, batched_fns, strict=True
+                ):
+                    num_frames = image.shape[0]
+
+                    masked_frames: list[Image] = []
+                    for frame in image:
+                        masked_frame = _draw_masks(
+                            frame, mask_pred, self.loading_mode, self.inv_transform
+                        )
+                        masked_frames.append(masked_frame)
+
+                    save_sample_fp = ".".join(fn.split(".")[:-1])
+
+                    save_path = os.path.join(
+                        os.path.normpath(self.output_dir),
+                        f"{save_sample_fp}_pred.{self.format}",
                     )
-                    masked_frames.append(masked_frame)
-
-                save_sample_fp = ".".join(fn.split(".")[:-1])
-
-                save_path = os.path.join(
-                    os.path.normpath(self.output_dir),
-                    f"{save_sample_fp}_pred.{self.format}",
-                )
-                match self.format:
-                    case "tiff":
-                        masked_frames[0].save(
-                            save_path,
-                            append_images=masked_frames[1:],
-                            save_all=True,
-                        )
-                    case "apng":
-                        masked_frames[0].save(
-                            save_path,
-                            append_images=masked_frames[1:],
-                            save_all=True,
-                            duration=1000 // num_frames,
-                            default_image=False,
-                            disposal=1,
-                            loop=0,
-                        )
-                    case "gif":
-                        masked_frames[0].save(
-                            save_path,
-                            append_images=masked_frames[1:],
-                            save_all=True,
-                            duration=1000 // num_frames,
-                            disposal=2,
-                            loop=0,
-                        )
-                    case "webp":
-                        masked_frames[0].save(
-                            save_path,
-                            append_images=masked_frames[1:],
-                            save_all=True,
-                            duration=1000 // num_frames,
-                            loop=0,
-                            background=(0, 0, 0, 0),
-                            allow_mixed=True,
-                        )
-                    case "png":
-                        for i, frame in enumerate(masked_frames):
-                            save_path = os.path.join(
-                                os.path.normpath(self.output_dir),
-                                save_sample_fp,
+                    match self.format:
+                        case "tiff":
+                            masked_frames[0].save(
+                                save_path,
+                                append_images=masked_frames[1:],
+                                save_all=True,
                             )
-                            if not os.path.exists(save_path):
-                                os.makedirs(save_path)
-                            save_path = os.path.join(
-                                save_path, f"pred_{i:04d}.{self.format}"
+                        case "apng":
+                            masked_frames[0].save(
+                                save_path,
+                                append_images=masked_frames[1:],
+                                save_all=True,
+                                duration=1000 // num_frames,
+                                default_image=False,
+                                disposal=1,
+                                loop=0,
                             )
-                            frame.save(save_path)
+                        case "gif":
+                            masked_frames[0].save(
+                                save_path,
+                                append_images=masked_frames[1:],
+                                save_all=True,
+                                duration=1000 // num_frames,
+                                disposal=2,
+                                loop=0,
+                            )
+                        case "webp":
+                            masked_frames[0].save(
+                                save_path,
+                                append_images=masked_frames[1:],
+                                save_all=True,
+                                duration=1000 // num_frames,
+                                loop=0,
+                                background=(0, 0, 0, 0),
+                                allow_mixed=True,
+                            )
+                        case "png":
+                            for i, frame in enumerate(masked_frames):
+                                save_path = os.path.join(
+                                    os.path.normpath(self.output_dir),
+                                    save_sample_fp,
+                                )
+                                if not os.path.exists(save_path):
+                                    os.makedirs(save_path)
+                                save_path = os.path.join(
+                                    save_path, f"pred_{i:04d}.{self.format}"
+                                )
+                                frame.save(save_path)
 
 
 def get_output_dir_from_ckpt_path(ckpt_path: str | None):
@@ -184,7 +199,7 @@ def _draw_masks(
             norm_img,
             mask_one_hot.bool(),
             colors=["black", "red", "blue", "green"],
-            alpha=0.5,
+            alpha=0.25,
         ),
         mode="RGB",
     )

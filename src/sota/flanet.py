@@ -10,6 +10,7 @@ from typing import Literal, override
 import lightning as L
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
+from torch.nn.common_types import _size_2_t
 from torch.utils.data import DataLoader
 
 # First party imports
@@ -33,6 +34,7 @@ class FLANetDataModule(L.LightningDataModule):
         test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
+        image_size: _size_2_t = (224, 224),
         frames: int = 30,
         select_frame_method: Literal["consecutive", "specific"] = "specific",
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
@@ -40,7 +42,26 @@ class FLANetDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
+        dummy_predict: bool = False,
     ):
+        """Initialise the FLA-Net DataModule.
+
+        Args:
+            data_dir: Path to the training and validation data.
+            test_dir: Path to the test data.
+            indices_dir: Path to the indices directory.
+            batch_size: Batch size for the DataLoader.
+            image_size: Size of the image.
+            frames: Number of frames.
+            select_frame_method: Method to select frames.
+            classification_mode: Classification mode.
+            num_workers: Number of workers for the DataLoader.
+            loading_mode: Loading mode.
+            combine_train_val: Combine training and validation data.
+            augment: Whether to augment the data.
+            dummy_predict: Use train/val in predict dataloaders.
+
+        """
         super().__init__()
         self.save_hyperparameters()
         self.frames = frames
@@ -51,11 +72,13 @@ class FLANetDataModule(L.LightningDataModule):
         self.test_dir = test_dir
         self.indices_dir = indices_dir
         self.batch_size = batch_size
+        self.image_size = image_size
         self.classification_mode = classification_mode
         self.num_workers = num_workers
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
         self.augment = augment
+        self.dummy_predict = dummy_predict
 
     @override
     def setup(self, stage):
@@ -65,7 +88,9 @@ class FLANetDataModule(L.LightningDataModule):
         trainval_mask_dir = os.path.join(os.getcwd(), self.data_dir, "masks")
 
         transforms_img, transforms_mask, transforms_together = (
-            FLANetDataset.get_default_transforms(self.loading_mode, self.augment)
+            FLANetDataset.get_default_transforms(
+                self.loading_mode, self.augment, self.image_size
+            )
         )
 
         trainval_dataset = FLANetDataset(
@@ -80,6 +105,7 @@ class FLANetDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
 
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
@@ -99,6 +125,7 @@ class FLANetDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
 
         if self.combine_train_val:
@@ -126,6 +153,7 @@ class FLANetDataModule(L.LightningDataModule):
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
+                image_size=self.image_size,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
@@ -169,15 +197,40 @@ class FLANetDataModule(L.LightningDataModule):
             persistent_workers=True if self.num_workers > 0 else False,
         )
 
+    @override
     def predict_dataloader(self):
-        """Get the predict dataloader."""
-        return DataLoader(
+        test_loader = DataLoader(
             self.test,
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
             persistent_workers=False,
         )
+
+        if self.dummy_predict:
+            train_loader = DataLoader(
+                self.train,
+                batch_size=self.batch_size,
+                pin_memory=True,
+                num_workers=self.num_workers,
+                drop_last=True,
+                persistent_workers=True if self.num_workers > 0 else False,
+                shuffle=False,
+            )
+            if not self.combine_train_val:
+                valid_loader = DataLoader(
+                    self.train,
+                    batch_size=self.batch_size,
+                    pin_memory=True,
+                    num_workers=self.num_workers,
+                    drop_last=True,
+                    persistent_workers=True if self.num_workers > 0 else False,
+                    shuffle=False,
+                )
+
+                return (train_loader, valid_loader, test_loader)
+            return (train_loader, test_loader)
+        return test_loader
 
 
 class FLANetCLI(I2RInternshipCommonCLI):

@@ -80,6 +80,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         unet_activation: str | None = None,
         attention_reduction: REDUCE_TYPES = "sum",
         attention_only: bool = False,
+        dummy_predict: bool = False,
     ):
         """Initialise the Attention mechanism-based U-Net.
 
@@ -113,6 +114,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             unet_activation: Activation function for the U-Net.
             attention_reduction: Attention reduction type.
             attention_only: Whether to use attention only.
+            dummy_predict: Whether to predict the ground truth for visualisation.
 
         """
         super().__init__()
@@ -123,6 +125,19 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         self.classes = classes
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
+        self.dummy_predict = dummy_predict
+        self.residual_mode = residual_mode
+        self.optimizer = optimizer
+        self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
+        self.scheduler = scheduler
+        self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
+        self.loading_mode = loading_mode
+        self.multiplier = multiplier
+        self.total_epochs = total_epochs
+        self.alpha = alpha
+        self.learning_rate = learning_rate
+        self.dl_classification_mode = dl_classification_mode
+        self.eval_classification_mode = eval_classification_mode
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -164,12 +179,6 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 )
             case _:
                 raise NotImplementedError(f"{self.model_type} is not yet implemented!")
-        self.residual_mode = residual_mode
-        self.optimizer = optimizer
-        self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
-        self.scheduler = scheduler
-        self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
-        self.loading_mode = loading_mode
 
         # Sets loss if it's a string
         if isinstance(loss, str):
@@ -203,9 +212,6 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 )
             )
 
-        self.multiplier = multiplier
-        self.total_epochs = total_epochs
-        self.alpha = alpha
         self.de_transform = Compose(
             [
                 (
@@ -237,10 +243,6 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     dtype=torch.float32,
                 ).to(self.device.type),
             )
-
-        self.learning_rate = learning_rate
-        self.dl_classification_mode = dl_classification_mode
-        self.eval_classification_mode = eval_classification_mode
 
         # TODO: Move this to setup() method.
         # Sets metric if None.
@@ -589,15 +591,26 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         res_input = res_images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
-        masks_proba: torch.Tensor = self.model(
-            images_input, res_input
-        )  # pyright: ignore[reportCallIssue]
-
-        if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
-            masks_preds = masks_proba.argmax(dim=1)
-            masks_preds = F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2)
+        masks_preds: torch.Tensor
+        if self.dummy_predict:
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = (
+                    F.one_hot(masks, num_classes=4).permute(0, -1, 1, 2).bool()
+                )
+            else:
+                masks_preds = masks.bool()
         else:
-            masks_preds = masks_proba > 0.5
+            assert isinstance(self.model, nn.Module)
+
+            masks_proba: torch.Tensor = self.model(images_input, res_input)
+
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = masks_proba.argmax(dim=1)
+                masks_preds = (
+                    F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2).bool()
+                )
+            else:
+                masks_preds = masks_proba > 0.5
 
         return masks_preds.detach().cpu(), images.detach().cpu(), fn
 

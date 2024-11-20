@@ -23,6 +23,7 @@ from PIL import Image
 import torch
 from torch import Tensor
 from torch.nn import functional as F
+from torch.nn.common_types import _size_2_t
 from torch.utils.data import Dataset
 from torchvision import tv_tensors
 from torchvision.transforms import v2
@@ -61,6 +62,7 @@ class VivimDataset(
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         with_edge: bool = False,
+        image_size: _size_2_t = (224, 224),
     ) -> None:
         """Initialise the dataset for the Vivim implementation.
 
@@ -79,6 +81,7 @@ class VivimDataset(
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine the train/val sets.
             with_edge: Whether to return edgemaps.
+            image_size: Output image resolution.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -93,6 +96,10 @@ class VivimDataset(
 
         self.img_list: list[str] = os.listdir(self.img_dir)
         self.mask_list: list[str] = os.listdir(self.mask_dir)
+
+        height = image_size[0] if isinstance(image_size, tuple) else image_size
+        width = image_size[1] if isinstance(image_size, tuple) else image_size
+        self.image_size: tuple[int, int] = (height, width)
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
@@ -137,13 +144,13 @@ class VivimDataset(
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
         )
-        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        combined_video = torch.empty((30, *self.image_size), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, (224, 224))
+            img = cv2.resize(img, self.image_size)
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(30, 1, 224, 224)
+        combined_video = combined_video.view(30, 1, *self.image_size)
         combined_video = self.transform_img(combined_video)
 
         with Image.open(

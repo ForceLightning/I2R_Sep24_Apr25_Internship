@@ -10,6 +10,7 @@ from typing import Literal, override
 import lightning as L
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
+from torch.nn.common_types import _size_2_t
 from torch.utils.data import DataLoader
 
 # First party imports
@@ -33,6 +34,7 @@ class AFB_URRDataModule(L.LightningDataModule):
         test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
+        image_size: _size_2_t = (224, 224),
         frames: int = NUM_FRAMES,
         select_frame_method: Literal[
             "consecutive", "specific", "specific + last"
@@ -42,21 +44,24 @@ class AFB_URRDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
+        dummy_predict: bool = False,
     ) -> None:
         """Initialise the AFB-URR DataModule.
 
         Args:
-           data_dir: Path to data directory.
-           test_dir: Path to test data directory.
-           indices_dir: Path to train/val split indices directory.
-           batch_size: Batch size for dataloader.
-           frames: Number of frames to use.
-           select_frame_method: How to select frames if `frames` < 30.
-           classification_mode: How to load masks.
-           num_workers: Number of dataloader workers.
-           loading_mode: Image loading mode (RGB/GREYSCALE).
-           combine_train_val: Whether to combine train/val.
-           augment: Whether to augment data.
+            data_dir: Path to data directory.
+            test_dir: Path to test data directory.
+            indices_dir: Path to train/val split indices directory.
+            batch_size: Batch size for dataloader.
+            image_size: Dataloader output image resolution.
+            frames: Number of frames to use.
+            select_frame_method: How to select frames if `frames` < 30.
+            classification_mode: How to load masks.
+            num_workers: Number of dataloader workers.
+            loading_mode: Image loading mode (RGB/GREYSCALE).
+            combine_train_val: Whether to combine train/val.
+            augment: Whether to augment data.
+            dummy_predict: Whether to include train/val set in predict dataloader.
 
         """
         super().__init__()
@@ -65,6 +70,7 @@ class AFB_URRDataModule(L.LightningDataModule):
         self.test_dir = test_dir
         self.indices_dir = indices_dir
         self.batch_size = batch_size
+        self.image_size = image_size
         self.frames = frames
         self.select_frame_method: Literal[
             "consecutive", "specific", "specific + last"
@@ -74,6 +80,7 @@ class AFB_URRDataModule(L.LightningDataModule):
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
         self.augment = augment
+        self.dummy_predict = dummy_predict
 
     @override
     def setup(self, stage):
@@ -84,7 +91,9 @@ class AFB_URRDataModule(L.LightningDataModule):
 
         # Get transforms for the CINE images, masks, and combined transforms.
         transforms_img, transforms_mask, transforms_together = (
-            AFB_URRDataset.get_default_transforms(self.loading_mode, self.augment)
+            AFB_URRDataset.get_default_transforms(
+                self.loading_mode, self.augment, self.image_size
+            )
         )
 
         trainval_dataset = AFB_URRDataset(
@@ -99,6 +108,7 @@ class AFB_URRDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -117,6 +127,7 @@ class AFB_URRDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
 
         if self.combine_train_val:
@@ -143,6 +154,7 @@ class AFB_URRDataModule(L.LightningDataModule):
                 classification_mode=self.classification_mode,
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
+                image_size=self.image_size,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
@@ -188,13 +200,38 @@ class AFB_URRDataModule(L.LightningDataModule):
 
     @override
     def predict_dataloader(self):
-        return DataLoader(
+        test_loader = DataLoader(
             self.test,
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
             persistent_workers=False,
         )
+
+        if self.dummy_predict:
+            train_loader = DataLoader(
+                self.train,
+                batch_size=self.batch_size,
+                pin_memory=True,
+                num_workers=self.num_workers,
+                drop_last=True,
+                persistent_workers=True if self.num_workers > 0 else False,
+                shuffle=False,
+            )
+            if not self.combine_train_val:
+                valid_loader = DataLoader(
+                    self.train,
+                    batch_size=self.batch_size,
+                    pin_memory=True,
+                    num_workers=self.num_workers,
+                    drop_last=True,
+                    persistent_workers=True if self.num_workers > 0 else False,
+                    shuffle=False,
+                )
+
+                return (train_loader, valid_loader, test_loader)
+            return (train_loader, test_loader)
+        return test_loader
 
 
 class AFB_URR_CLI(CommonCLI):

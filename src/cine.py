@@ -10,6 +10,7 @@ from typing import override
 import lightning as L
 import torch
 from lightning.pytorch.cli import LightningArgumentParser
+from torch.nn.common_types import _size_2_t
 from torch.utils.data import DataLoader
 
 # First party imports
@@ -32,11 +33,13 @@ class CineBaselineDataModule(L.LightningDataModule):
         test_dir: str = "data/test/",
         indices_dir: str = "data/indices/",
         batch_size: int = BATCH_SIZE_TRAIN,
+        image_size: _size_2_t = (224, 224),
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         num_workers: int = 8,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
+        dummy_predict: bool = False,
     ):
         """Init the Cine baseline datamodule.
 
@@ -46,11 +49,13 @@ class CineBaselineDataModule(L.LightningDataModule):
             test_dir: Path to the directory containing the test data.
             indices_dir: Path to the directory containing the indices.
             batch_size: Batch size for the data loader.
+            image_size: Dataloader output image resolution.
             classification_mode: Classification mode for the data loader.
             num_workers: Number of workers for the data loader.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine train/val sets.
             augment: Whether to perform data augmentation during training.
+            dummy_predict: Whether to include train/val sets in the prediction.
 
         """
         super().__init__()
@@ -60,11 +65,13 @@ class CineBaselineDataModule(L.LightningDataModule):
         self.test_dir = test_dir
         self.indices_dir = indices_dir
         self.batch_size = batch_size
+        self.image_size = image_size
         self.classification_mode = classification_mode
         self.num_workers = num_workers
         self.loading_mode = loading_mode
         self.combine_train_val = combine_train_val
         self.augment = augment
+        self.dummy_predict = dummy_predict
 
     @override
     def setup(self, stage):
@@ -88,6 +95,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -105,6 +113,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             classification_mode=self.classification_mode,
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
+            image_size=self.image_size,
         )
 
         if self.combine_train_val:
@@ -130,6 +139,7 @@ class CineBaselineDataModule(L.LightningDataModule):
                 loading_mode=self.loading_mode,
                 combine_train_val=self.combine_train_val,
                 frames=self.frames,
+                image_size=self.image_size,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
@@ -175,13 +185,38 @@ class CineBaselineDataModule(L.LightningDataModule):
 
     @override
     def predict_dataloader(self):
-        return DataLoader(
+        test_loader = DataLoader(
             self.test,
             batch_size=self.batch_size,
             pin_memory=True,
             num_workers=self.num_workers,
             persistent_workers=False,
         )
+
+        if self.dummy_predict:
+            train_loader = DataLoader(
+                self.train,
+                batch_size=self.batch_size,
+                pin_memory=True,
+                num_workers=self.num_workers,
+                drop_last=True,
+                persistent_workers=True if self.num_workers > 0 else False,
+                shuffle=False,
+            )
+            if not self.combine_train_val:
+                valid_loader = DataLoader(
+                    self.train,
+                    batch_size=self.batch_size,
+                    pin_memory=True,
+                    num_workers=self.num_workers,
+                    drop_last=True,
+                    persistent_workers=True if self.num_workers > 0 else False,
+                    shuffle=False,
+                )
+
+                return (train_loader, valid_loader, test_loader)
+            return (train_loader, test_loader)
+        return test_loader
 
 
 class CineCLI(I2RInternshipCommonCLI):

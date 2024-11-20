@@ -20,6 +20,7 @@ from PIL import Image
 # PyTorch
 import torch
 from torch.nn import functional as F
+from torch.nn.common_types import _size_2_t
 from torch.utils.data import (
     DataLoader,
     Dataset,
@@ -45,7 +46,10 @@ class DefaultTransformsMixin:
 
     @classmethod
     def get_default_transforms(
-        cls, loading_mode: LoadingMode, augment: bool = False
+        cls,
+        loading_mode: LoadingMode,
+        augment: bool = False,
+        image_size: _size_2_t = (224, 224),
     ) -> tuple[Compose, Compose, Compose]:
         """Get default transformations for the dataset.
 
@@ -55,6 +59,7 @@ class DefaultTransformsMixin:
         Args:
             loading_mode: The loading mode for the images.
             augment: Whether to augment the images and masks together.
+            image_size: Output image resolution.
 
         Returns:
             tuple: The image, mask, combined, and final resize transformations
@@ -64,7 +69,7 @@ class DefaultTransformsMixin:
         transforms_img = Compose(
             [
                 v2.ToImage(),
-                v2.Resize(224, antialias=True),
+                v2.Resize(image_size, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                 v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
@@ -75,7 +80,7 @@ class DefaultTransformsMixin:
         transforms_mask = Compose(
             [
                 v2.ToImage(),
-                v2.Resize(224, antialias=True),
+                v2.Resize(image_size, antialias=True),
                 v2.ToDtype(torch.long, scale=False),
             ]
         )
@@ -133,6 +138,7 @@ class LGEDataset(
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
+        image_size: _size_2_t = (224, 224),
     ) -> None:
         """Initialise the LGE dataset object.
 
@@ -150,6 +156,7 @@ class LGEDataset(
             classification_mode: The classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine the train/val sets.
+            image_size: Output image resolution
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -164,6 +171,10 @@ class LGEDataset(
 
         self.img_list = os.listdir(self.img_dir)
         self.mask_list = os.listdir(self.mask_dir)
+
+        height = image_size[0] if isinstance(image_size, tuple) else image_size
+        width = image_size[1] if isinstance(image_size, tuple) else image_size
+        self.image_size: tuple[int, int] = (height, width)
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
@@ -277,6 +288,7 @@ class CineDataset(
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
+        image_size: _size_2_t = (224, 224),
     ) -> None:
         """Initialise the dataset for the Cine baseline implementation.
 
@@ -294,6 +306,7 @@ class CineDataset(
             classification_mode: Classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine the train/val sets.
+            image_size: Output image resolution.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -308,6 +321,10 @@ class CineDataset(
 
         self.img_list: list[str] = os.listdir(self.img_dir)
         self.mask_list: list[str] = os.listdir(self.mask_dir)
+
+        height = image_size[0] if isinstance(image_size, tuple) else image_size
+        width = image_size[1] if isinstance(image_size, tuple) else image_size
+        self.image_size: tuple[int, int] = (height, width)
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
@@ -348,13 +365,13 @@ class CineDataset(
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
         )
-        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        combined_video = torch.empty((30, *self.image_size), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, (224, 224))
+            img = cv2.resize(img, self.image_size)
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(30, 1, 224, 224)
+        combined_video = combined_video.view(30, 1, *self.image_size)
         combined_video = self.transform_img(combined_video)
 
         with Image.open(
@@ -416,6 +433,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
+        image_size: _size_2_t = (224, 224),
     ) -> None:
         """Init the cine CMR dataset.
 
@@ -435,6 +453,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
             classification_mode: The classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine the train/val sets.
+            image_size: Output image resolution.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -460,6 +479,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
             classification_mode,
             loading_mode=loading_mode,
             combine_train_val=combine_train_val,
+            image_size=image_size,
         )
 
     @override
@@ -472,13 +492,13 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
         )
-        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        combined_video = torch.empty((30, *self.image_size), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, (224, 224))
+            img = cv2.resize(img, self.image_size)
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(30, 1, 224, 224)
+        combined_video = combined_video.view(30, 1, *self.image_size)
         combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
@@ -545,6 +565,7 @@ class TwoStreamDataset(
         classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
+        image_size: _size_2_t = (224, 224),
     ):
         """Initialise the two stream dataset for the cardiac LGE + cine MRI images.
 
@@ -563,6 +584,7 @@ class TwoStreamDataset(
             classification_mode: The classification mode for the dataset.
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine the train/val sets.
+            image_size: Output image resolution.
 
         Raises:
             NotImplementedError: If the classification mode is not implemented.
@@ -581,6 +603,10 @@ class TwoStreamDataset(
         self.mask_list = os.listdir(self.mask_dir)
 
         self.img_dir = lge_dir
+
+        height = image_size[0] if isinstance(image_size, tuple) else image_size
+        width = image_size[1] if isinstance(image_size, tuple) else image_size
+        self.image_size: tuple[int, int] = (height, width)
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
@@ -632,23 +658,21 @@ class TwoStreamDataset(
 
         # Convert LGE to RGB or Greyscale
         with Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"]) as lge:
-            out_lge = self.transform_img(lge.convert("L"))
+            out_lge: torch.Tensor = self.transform_img(lge.convert("L"))
 
         # PERF: Initialise the output tensor ahead of time to reduce memory allocation
         # time.
         _, cine_list = cv2.imreadmulti(
             os.path.join(self.cine_dir, cine_name), flags=IMREAD_GRAYSCALE
         )
-        combined_cines = torch.empty((30, 224, 224), dtype=torch.uint8)
+        combined_cines = torch.empty((30, *self.image_size), dtype=torch.uint8)
         for i in range(30):
             img = cine_list[i]
-            img = cv2.resize(img, (224, 224))
+            img = cv2.resize(img, self.image_size)
             combined_cines[i, :, :] = torch.as_tensor(img)
 
-        combined_cines = combined_cines.view(self.num_frames, 1, 224, 224)
+        combined_cines = combined_cines.view(self.num_frames, 1, *self.image_size)
         combined_cines = self.transform_img(combined_cines)
-
-        out_lge.squeeze()
 
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
@@ -718,6 +742,7 @@ class ResidualTwoPlusOneDataset(
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         residual_mode: ResidualMode = ResidualMode.SUBTRACT_NEXT_FRAME,
+        image_size: _size_2_t = (224, 224),
     ) -> None:
         """Initialise the two stream dataset with residual frames.
 
@@ -738,6 +763,7 @@ class ResidualTwoPlusOneDataset(
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine the train/val sets.
             residual_mode: The mode of calculating the residual frames.
+            image_size: Output image resolution.
 
         """
         super().__init__()
@@ -751,6 +777,10 @@ class ResidualTwoPlusOneDataset(
 
         self.img_list: list[str] = os.listdir(self.img_dir)
         self.mask_list: list[str] = os.listdir(self.mask_dir)
+
+        height = image_size[0] if isinstance(image_size, tuple) else image_size
+        width = image_size[1] if isinstance(image_size, tuple) else image_size
+        self.image_size: tuple[int, int] = (height, width)
 
         self.transform_img = transform_img
         self.transform_mask = transform_mask
@@ -803,13 +833,13 @@ class ResidualTwoPlusOneDataset(
         _, img_list = cv2.imreadmulti(
             os.path.join(self.img_dir, img_name), flags=IMREAD_GRAYSCALE
         )
-        combined_video = torch.empty((30, 224, 224), dtype=torch.uint8)
+        combined_video = torch.empty((30, *self.image_size), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, (224, 224))
+            img = cv2.resize(img, self.image_size)
             combined_video[i, :, :] = torch.as_tensor(img)
 
-        combined_video = combined_video.view(30, 1, 224, 224)
+        combined_video = combined_video.view(30, 1, *self.image_size)
         combined_video = self.transform_img(combined_video)
 
         # Perform necessary operations on the mask
@@ -974,11 +1004,14 @@ class ResidualTwoPlusOneDataset(
         loading_mode: LoadingMode,
         residual_mode: ResidualMode,
         augment: bool = False,
+        image_size: _size_2_t = (224, 224),
     ) -> tuple[Compose, Compose, Compose, Compose | None]:
         match residual_mode:
             case ResidualMode.SUBTRACT_NEXT_FRAME:
                 transforms_img, transforms_mask, transforms_together = (
-                    DefaultTransformsMixin.get_default_transforms(loading_mode, augment)
+                    DefaultTransformsMixin.get_default_transforms(
+                        loading_mode, augment, image_size
+                    )
                 )
                 return transforms_img, transforms_mask, transforms_together, None
 
