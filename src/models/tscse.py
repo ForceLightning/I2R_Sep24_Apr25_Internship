@@ -156,11 +156,11 @@ class TSCSEBottleneck(Bottleneck):
             downsample: Downsample layer (default: None).
 
         """
-        conv1 = nn.Conv3d(
+        self.conv1 = nn.Conv3d(
             in_channels, out_channels * 2, kernel_size=1, bias=False, stride=stride
         )
-        bn1 = nn.BatchNorm3d(out_channels * 2)
-        conv2 = nn.Conv3d(
+        self.bn1 = nn.BatchNorm3d(out_channels * 2)
+        self.conv2 = nn.Conv3d(
             out_channels * 2,
             out_channels * 4,
             kernel_size=(1, 3, 3),
@@ -169,11 +169,15 @@ class TSCSEBottleneck(Bottleneck):
             groups=groups,
             bias=False,
         )
-        bn2 = nn.BatchNorm3d(out_channels * 4)
-        conv3 = nn.Conv3d(out_channels * 4, out_channels * 4, kernel_size=1, bias=False)
-        bn3 = nn.BatchNorm3d(out_channels * 4)
+        self.bn2 = nn.BatchNorm3d(out_channels * 4)
+        self.conv3 = nn.Conv3d(
+            out_channels * 4, out_channels * 4, kernel_size=1, bias=False
+        )
+        self.bn3 = nn.BatchNorm3d(out_channels * 4)
 
-        self.layers = nn.Sequential(conv1, bn1, conv2, bn2, conv3, bn3)
+        self.layers = nn.Sequential(
+            self.conv1, self.bn1, self.conv2, self.bn2, self.conv3, self.bn3
+        )
 
         self.relu = nn.ReLU(inplace=True)
         self.tscse = TSCSEModule(in_depth, out_channels * 4, height, width, reduction)
@@ -214,11 +218,11 @@ class TSCSEResNetBottleneck(Bottleneck):
 
         """
         super().__init__()
-        conv1 = nn.Conv3d(
+        self.conv1 = nn.Conv3d(
             in_channels, out_channels, kernel_size=1, bias=False, stride=stride
         )
-        bn1 = nn.BatchNorm3d(out_channels)
-        conv2 = nn.Conv3d(
+        self.bn1 = nn.BatchNorm3d(out_channels)
+        self.conv2 = nn.Conv3d(
             out_channels,
             out_channels,
             kernel_size=(1, 3, 3),
@@ -226,11 +230,15 @@ class TSCSEResNetBottleneck(Bottleneck):
             groups=groups,
             bias=False,
         )
-        bn2 = nn.BatchNorm3d(out_channels)
-        conv3 = nn.Conv3d(out_channels, out_channels * 4, kernel_size=1, bias=False)
-        bn3 = nn.BatchNorm3d(out_channels * 4)
+        self.bn2 = nn.BatchNorm3d(out_channels)
+        self.conv3 = nn.Conv3d(
+            out_channels, out_channels * 4, kernel_size=1, bias=False
+        )
+        self.bn3 = nn.BatchNorm3d(out_channels * 4)
 
-        self.layers = nn.Sequential(conv1, bn1, conv2, bn2, conv3, bn3)
+        self.layers = nn.Sequential(
+            self.conv1, self.bn1, self.conv2, self.bn2, self.conv3, self.bn3
+        )
 
         self.relu = nn.ReLU(inplace=True)
         self.tscse = TSCSEModule(in_depth, out_channels * 4, height, width, reduction)
