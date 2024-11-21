@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Utility functions for the project."""
 # Standard Library
-from typing import override
+from typing import Any, override
 
 # Third-Party
 from warmup_scheduler import GradualWarmupScheduler
@@ -161,7 +161,9 @@ def get_version_name(ckpt_path: str | None) -> str | None:
     return None
 
 
-def configure_optimizers(module: L.LightningModule):
+def configure_optimizers(
+    module: L.LightningModule,
+) -> dict[str, Optimizer | dict[str, Any]]:
     """Configure the optimizer and learning rate scheduler for the model.
 
     Args:

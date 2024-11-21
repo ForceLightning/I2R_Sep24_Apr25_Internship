@@ -148,7 +148,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         # convolutional networks. See: https://github.com/pytorch/pytorch/issues/126585
         match self.model_type:
             case ModelType.UNET:
-                self.model = ResidualAttentionUnet(
+                self.model = ResidualAttentionUnet(  # pyright: ignore[reportAttributeAccessIssue]
                     encoder_name=encoder_name,
                     encoder_depth=encoder_depth,
                     encoder_weights=encoder_weights,
@@ -163,7 +163,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     _attention_only=attention_only,
                 )
             case ModelType.UNET_PLUS_PLUS:
-                self.model = ResidualAttentionUnetPlusPlus(
+                self.model = ResidualAttentionUnetPlusPlus(  # pyright: ignore[reportAttributeAccessIssue]
                     encoder_name=encoder_name,
                     encoder_depth=encoder_depth,
                     encoder_weights=encoder_weights,

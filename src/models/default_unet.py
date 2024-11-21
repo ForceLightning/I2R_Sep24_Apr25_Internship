@@ -125,7 +125,7 @@ class LightningUnetWrapper(CommonModelMixin):
 
         match model_type:
             case ModelType.UNET:
-                self.model = smp.Unet(
+                self.model = smp.Unet(  # pyright: ignore[reportAttributeAccessIssue]
                     encoder_name=encoder_name,
                     encoder_depth=encoder_depth,
                     encoder_weights=encoder_weights,
@@ -133,12 +133,14 @@ class LightningUnetWrapper(CommonModelMixin):
                     classes=classes,
                 )
             case ModelType.UNET_PLUS_PLUS:
-                self.model = smp.UnetPlusPlus(
-                    encoder_name=encoder_name,
-                    encoder_depth=encoder_depth,
-                    encoder_weights=encoder_weights,
-                    in_channels=in_channels,
-                    classes=classes,
+                self.model = (
+                    smp.UnetPlusPlus(  # pyright: ignore[reportAttributeAccessIssue]
+                        encoder_name=encoder_name,
+                        encoder_depth=encoder_depth,
+                        encoder_weights=encoder_weights,
+                        in_channels=in_channels,
+                        classes=classes,
+                    )
                 )
             case ModelType.TRANS_UNET:
                 config = get_r50_b16_config()

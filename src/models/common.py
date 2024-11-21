@@ -1,11 +1,7 @@
 """Common definitions for the models module."""
 
 # Standard Library
-from typing import Literal, Union, override
-
-# Third-Party
-from huggingface_hub import ModelHubMixin
-from segmentation_models_pytorch.base.model import SegmentationModel
+from typing import Literal, override
 
 # PyTorch
 import lightning as L
@@ -26,7 +22,7 @@ class CommonModelMixin(L.LightningModule):
     eval_classification_mode: ClassificationMode
     dice_metrics: dict[str, MetricCollection | Metric]
     other_metrics: dict[str, MetricCollection]
-    model: Union[SegmentationModel, ModelHubMixin, nn.Module]
+    model: nn.Module
     model_type: ModelType
     de_transform: Compose | InverseNormalize
 

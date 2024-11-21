@@ -30,6 +30,7 @@ rich = "*"
 deepspeed = "*"
 jsonargparse = {extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"] }
 opencv-contrib-python-headless = {file = "../opencv-python/opencv_contrib_python_headless-4.10.0.84-cp312-cp312-linux_x86_64.whl"}
+torch-uncertainty = "*"
 
 [dev-packages]
 autopep8 = "*"

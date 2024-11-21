@@ -238,11 +238,13 @@ $RECYCLE.BIN/
 ### Project Specifics ###
 # Models (handles symlinks)
 checkpoints
+checkpoints-new
 .old_checkpoints
 lightning_logs
 pretrained_models
 
 checkpoints/
+checkpoints-new/
 .old_checkpoints/
 lightning_logs/
 pretrained_models/
@@ -250,6 +252,8 @@ pretrained_models/
 # Data (handles symlinks)
 data
 data/
+data-*
+data-*/
 
 # Type stubs
 typings/
