@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 # First party imports
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import TwoPlusOneDataset, get_trainval_data_subsets
-from models.two_plus_one import TwoPlusOneUnetLightning
+from models.two_plus_one import TwoPlusOneUnetLightning, get_temporal_conv_type
 from utils.types import ClassificationMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 4  # Default batch size for training.
@@ -204,6 +204,16 @@ class TwoPlusOneCLI(I2RInternshipCommonCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         super().add_arguments_to_parser(parser)
 
+        parser.add_argument(
+            "temporal_conv_type",
+            help="What kind of temporal convolutional layer to use.",
+        )
+        parser.link_arguments(
+            "temporal_conv_type",
+            "model.temporal_conv_type",
+            compute_fn=get_temporal_conv_type,
+        )
+
         defaults = self.default_arguments | {
             "image_loading_mode": "RGB",
             "dl_classification_mode": "MULTICLASS_MODE",
@@ -214,6 +224,7 @@ class TwoPlusOneCLI(I2RInternshipCommonCLI):
             "model.encoder_weights": "imagenet",
             "model.in_channels": 3,
             "model.classes": 4,
+            "temporal_conv_type": "ORIGINAL",
         }
 
         parser.set_defaults(defaults)

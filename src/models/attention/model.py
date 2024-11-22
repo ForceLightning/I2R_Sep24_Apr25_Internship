@@ -12,7 +12,13 @@ from torch.nn import functional as F
 
 # First party imports
 from models.attention.utils import REDUCE_TYPES
-from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
+from models.two_plus_one import (
+    DilatedOneD,
+    OneD,
+    Temporal3DConv,
+    compress_2,
+    compress_dilated,
+)
 
 __all__ = ["AttentionLayer", "SpatialAttentionBlock"]
 
@@ -175,7 +181,7 @@ class SpatialAttentionBlock(nn.Module):
 
     def __init__(
         self,
-        temporal_conv: OneD | DilatedOneD,
+        temporal_conv: OneD | DilatedOneD | Temporal3DConv,
         attention: AttentionLayer,
         num_frames: int,
         reduce: REDUCE_TYPES,
@@ -217,8 +223,10 @@ class SpatialAttentionBlock(nn.Module):
         # Output is of shape (B, C, H, W)
         if isinstance(self.temporal_conv, OneD):
             compress_output = compress_2(st_embeddings, self.temporal_conv)
-        else:
+        elif isinstance(self.temporal_conv, DilatedOneD):
             compress_output = compress_dilated(st_embeddings, self.temporal_conv)
+        else:
+            compress_output = self.temporal_conv(st_embeddings)
 
         attention_output: torch.Tensor = self.attention(
             q=compress_output, ks=res_embeddings, vs=res_embeddings

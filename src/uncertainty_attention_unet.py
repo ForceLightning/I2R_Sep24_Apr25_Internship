@@ -16,6 +16,7 @@ from cli.common import I2RInternshipCommonCLI
 from models.attention.uncertainty.uncertainty_lightning_module import (
     UncertaintyResidualAttentionLightningModule,
 )
+from models.two_plus_one import get_temporal_conv_type
 from utils import utils
 from utils.types import ResidualMode
 
@@ -63,6 +64,16 @@ class UncertaintyResidualAttentionCLI(I2RInternshipCommonCLI):
             "residual_mode", "data.residual_mode", compute_fn=utils.get_residual_mode
         )
 
+        parser.add_argument(
+            "temporal_conv_type",
+            help="What kind of temporal convolutional layer to use.",
+        )
+        parser.link_arguments(
+            "temporal_conv_type",
+            "model.temporal_conv_type",
+            compute_fn=get_temporal_conv_type,
+        )
+
         default_arguments = self.default_arguments | {
             "image_loading_mode": "RGB",
             "dl_classification_mode": "MULTICLASS_MODE",
@@ -74,6 +85,7 @@ class UncertaintyResidualAttentionCLI(I2RInternshipCommonCLI):
             "model.encoder_weights": "imagenet",
             "model.in_channels": 3,
             "model.classes": 4,
+            "temporal_conv_type": "ORIGINAL",
         }
 
         parser.set_defaults(default_arguments)

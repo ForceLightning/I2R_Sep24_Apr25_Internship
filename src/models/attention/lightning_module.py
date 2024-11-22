@@ -35,6 +35,7 @@ from models.attention.segmentation_model import (
     ResidualAttentionUnetPlusPlus,
 )
 from models.common import CommonModelMixin
+from models.two_plus_one import TemporalConvolutionalType
 from utils import utils
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
@@ -81,6 +82,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         attention_reduction: REDUCE_TYPES = "sum",
         attention_only: bool = False,
         dummy_predict: bool = False,
+        temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.ORIGINAL,
     ):
         """Initialise the Attention mechanism-based U-Net.
 
@@ -115,6 +117,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             attention_reduction: Attention reduction type.
             attention_only: Whether to use attention only.
             dummy_predict: Whether to predict the ground truth for visualisation.
+            temporal_conv_type: What kind of temporal convolutional layers to use.
 
         """
         super().__init__()
@@ -158,7 +161,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     num_frames=num_frames,
                     flat_conv=flat_conv,
                     activation=unet_activation,
-                    use_dilations=False,
+                    temporal_conv_type=temporal_conv_type,
                     reduce=attention_reduction,
                     _attention_only=attention_only,
                 )
@@ -173,7 +176,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     num_frames=num_frames,
                     flat_conv=flat_conv,
                     activation=unet_activation,
-                    use_dilations=True,
+                    temporal_conv_type=temporal_conv_type,
                     reduce=attention_reduction,
                     _attention_only=attention_only,
                 )

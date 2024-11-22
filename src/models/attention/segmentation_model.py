@@ -22,7 +22,7 @@ from utils.types import ResidualMode
 from ..common import ENCODER_OUTPUT_SHAPES
 from ..tscse import TSCSENetEncoder
 from ..tscse import get_encoder as tscse_get_encoder
-from ..two_plus_one import DilatedOneD, OneD
+from ..two_plus_one import DilatedOneD, OneD, Temporal3DConv, TemporalConvolutionalType
 from .model import REDUCE_TYPES, AttentionLayer, SpatialAttentionBlock
 from .utils import get_encoder as smp_get_encoder
 
@@ -52,11 +52,11 @@ class ResidualAttentionUnet(SegmentationModel):
         aux_params: dict[str, Any] | None = None,
         flat_conv: bool = False,
         res_conv_activation: str | None = None,
-        use_dilations: bool = False,
+        temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.TEMPORAL_3D,
         reduce: REDUCE_TYPES = "prod",
         _attention_only: bool = False,
     ):
-        """Initialise the model.
+        """Initialise the U-Net.
 
         Args:
             encoder_name: Name of the encoder.
@@ -76,7 +76,7 @@ class ResidualAttentionUnet(SegmentationModel):
             flat_conv: Whether to use flat convolutions.
             res_conv_activation: Activation function to use in the residual
                 convolutions.
-            use_dilations: Whether to use dilated conv.
+            temporal_conv_type: What kind of temporal convolutional layers to use.
             reduce: How to reduce the post-attention features and the original features.
             _attention_only: Whether to return only the attention output.
 
@@ -85,7 +85,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.num_frames = num_frames
         self.flat_conv = flat_conv
         self.activation = activation
-        self.use_dilations = use_dilations
+        self.temporal_conv_type = temporal_conv_type
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
         self.reduce: REDUCE_TYPES = reduce
@@ -201,9 +201,12 @@ class ResidualAttentionUnet(SegmentationModel):
         res_layers: list[nn.Module] = []
         for i, out_channels in enumerate(self.skip_conn_channels):
             # (1): Create the 1D temporal convolutional layer.
-            oned: OneD | DilatedOneD
+            oned: OneD | DilatedOneD | Temporal3DConv
             c, h, w = ENCODER_OUTPUT_SHAPES[self.encoder_name][i]
-            if self.use_dilations and self.num_frames in [5, 30]:
+            if (
+                self.temporal_conv_type == TemporalConvolutionalType.DILATED
+                and self.num_frames in [5, 30]
+            ):
                 oned = DilatedOneD(
                     1,
                     out_channels,
@@ -212,7 +215,14 @@ class ResidualAttentionUnet(SegmentationModel):
                     flat=self.flat_conv,
                     activation=self.res_conv_activation,
                 )
-
+            elif self.temporal_conv_type == TemporalConvolutionalType.TEMPORAL_3D:
+                oned = Temporal3DConv(
+                    1,
+                    out_channels,
+                    self.num_frames,
+                    flat=self.flat_conv,
+                    activation=self.res_conv_activation,
+                )
             else:
                 oned = OneD(
                     1,
@@ -350,15 +360,40 @@ class ResidualAttentionUnetPlusPlus(ResidualAttentionUnet):
         aux_params: dict[str, Any] | None = None,
         flat_conv: bool = False,
         res_conv_activation: str | None = None,
-        use_dilations: bool = False,
+        temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.TEMPORAL_3D,
         reduce: REDUCE_TYPES = "prod",
         _attention_only: bool = False,
     ):
+        """Initialise the U-Net++.
+
+        Args:
+            encoder_name: Name of the encoder.
+            encoder_depth: Depth of the encoder.
+            encoder_weights: Weights of the encoder.
+            residual_mode: Mode of the residual frames calculation.
+            decoder_use_batchnorm: Whether to use batch normalization in the decoder.
+            decoder_channels: Number of channels in the decoder.
+            decoder_attention_type: Type of attention in the decoder.
+            in_channels: Number of channels in the input image.
+            classes: Number of classes in the output mask.
+            activation: Activation function to use.
+            skip_conn_channels: Number of channels in each skip connection's temporal
+                convolutions.
+            num_frames: Number of frames in the sequence.
+            aux_params: Auxiliary parameters for the classification head.
+            flat_conv: Whether to use flat convolutions.
+            res_conv_activation: Activation function to use in the residual
+                convolutions.
+            temporal_conv_type: What kind of temporal convolutional layers to use.
+            reduce: How to reduce the post-attention features and the original features.
+            _attention_only: Whether to return only the attention output.
+
+        """
         super().__init__()
         self.num_frames = num_frames
         self.flat_conv = flat_conv
         self.activation = activation
-        self.use_dilations = use_dilations
+        self.temporal_conv_type = temporal_conv_type
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
         self.reduce: REDUCE_TYPES = reduce

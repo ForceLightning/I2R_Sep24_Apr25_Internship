@@ -38,7 +38,12 @@ from metrics.logging import (
     shared_metric_logging_epoch_end,
 )
 from models.common import ENCODER_OUTPUT_SHAPES, CommonModelMixin
-from models.two_plus_one import DilatedOneD, OneD, compress_2, compress_dilated
+from models.two_plus_one import (
+    DilatedOneD,
+    OneD,
+    Temporal3DConv,
+    TemporalConvolutionalType,
+)
 from utils import utils
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
@@ -831,7 +836,7 @@ class TSCSEUnet(SegmentationModel):
         aux_params: dict[str, Any] | None = None,
         flat_conv: bool = False,
         res_conv_activation: str | None = None,
-        use_dilations: bool = False,
+        temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.DILATED,
     ) -> None:
         """Initialise the TSCSE-U-Net model.
 
@@ -851,15 +856,14 @@ class TSCSEUnet(SegmentationModel):
             aux_params: Auxiliary parameters for the model.
             flat_conv: If True, only one convolutional layer is used.
             res_conv_activation: Activation function to use in the U-Net.
-            use_dilations: If True, use dilated convolutions in the temporal
-                convolutions.
+            temporal_conv_type: What kind of temporal convolutional layers to use.
 
         """
         super().__init__()
         self.num_frames = num_frames
         self.flat_conv = flat_conv
         self.activation = activation
-        self.use_dilations = use_dilations
+        self.temporal_conv_type = temporal_conv_type
         self.encoder_name = encoder_name
         self.res_conv_activation = res_conv_activation
         self.skip_conn_channels = skip_conn_channels
@@ -903,12 +907,15 @@ class TSCSEUnet(SegmentationModel):
         super().initialize()
 
         # INFO: Parameter tuning for output channels
-        onedlayers: list[OneD | DilatedOneD] = []
+        onedlayers: list[OneD | DilatedOneD | Temporal3DConv] = []
         for i, out_channels in enumerate(self.skip_conn_channels):
-            mod: OneD | DilatedOneD
-            if self.use_dilations and self.num_frames in [5, 30]:
-                _channels, h, w = ENCODER_OUTPUT_SHAPES[self.encoder_name][i]
-                mod = DilatedOneD(
+            oned: OneD | DilatedOneD | Temporal3DConv
+            _c, h, w = ENCODER_OUTPUT_SHAPES[self.encoder_name][i]
+            if (
+                self.temporal_conv_type == TemporalConvolutionalType.DILATED
+                and self.num_frames in [5, 30]
+            ):
+                oned = DilatedOneD(
                     1,
                     out_channels,
                     self.num_frames,
@@ -916,17 +923,23 @@ class TSCSEUnet(SegmentationModel):
                     flat=self.flat_conv,
                     activation=self.res_conv_activation,
                 )
-                self.compress = compress_dilated
+            elif self.temporal_conv_type == TemporalConvolutionalType.TEMPORAL_3D:
+                oned = Temporal3DConv(
+                    1,
+                    out_channels,
+                    self.num_frames,
+                    flat=self.flat_conv,
+                    activation=self.res_conv_activation,
+                )
             else:
-                mod = OneD(
+                oned = OneD(
                     1,
                     out_channels,
                     self.num_frames,
                     self.flat_conv,
                     self.res_conv_activation,
                 )
-                self.compress = compress_2
-            onedlayers.append(mod)
+            onedlayers.append(oned)
 
         self.onedlayers = nn.ModuleList(onedlayers)
 

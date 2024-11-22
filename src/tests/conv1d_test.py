@@ -1,3 +1,5 @@
+"""Testing various Temporal Conv1D replacements."""
+
 # Standard Library
 import os
 from itertools import product
@@ -25,6 +27,7 @@ class TestNewCompress:
     height = 7
     width = 7
 
+    @torch.no_grad()
     def _test_with_num_frames(self, num_frames: int):
         input_original = torch.randn(
             self.batch_size, num_frames, self.num_channels, self.height, self.width
@@ -67,6 +70,7 @@ class TestNewOneD:
     @pytest.mark.parametrize(
         "num_frames,resnet,layer", product(num_frames, resnets, range(5))
     )
+    @torch.no_grad()
     def test_dilated_conv1d(
         self,
         num_frames: int,
@@ -138,7 +142,14 @@ class TestConv3D:
     height = 7
     width = 7
 
-    def _test_with_num_frames(self, num_frames: int):
+    @pytest.mark.parametrize("num_frames", range(5, 35, 5))
+    @torch.no_grad()
+    def test_conv3d(self, num_frames: int):
+        """Test the Temporal Conv3D model with different approaches to compressing the input.
+
+        This test is performed for frames in (5, 30), with a step of 5.
+
+        """
         input_original = torch.randn(
             self.batch_size, num_frames, self.num_channels, self.height, self.width
         ).to(DEVICE)
@@ -164,15 +175,6 @@ class TestConv3D:
             ) from e
 
         assert allclose, "Values of the operations are not the same."
-
-    def test_conv3d(self):
-        """Test the Temporal Conv3D model with different approaches to compressing the input.
-
-        This test is performed for frames in (5, 30), with a step of 5.
-
-        """
-        for num_frames in range(5, 35, 5):
-            self._test_with_num_frames(num_frames)
 
 
 def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
