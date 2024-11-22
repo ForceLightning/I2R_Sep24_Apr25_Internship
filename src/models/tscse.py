@@ -141,6 +141,7 @@ class TSCSEBottleneck(Bottleneck):
         reduction: int,
         stride: _size_3_t = 1,
         downsample: nn.Module | None = None,
+        dropout_p: float = 0.2,
     ):
         """Initialise the bottleneck block.
 
@@ -154,6 +155,7 @@ class TSCSEBottleneck(Bottleneck):
             reduction: Reduction ratio for the squeeze operation.
             stride: Stride of the first convolution (default: 1).
             downsample: Downsample layer (default: None).
+            dropout_p: Dropout rate (default: 0.2).
 
         """
         self.conv1 = nn.Conv3d(
@@ -174,12 +176,21 @@ class TSCSEBottleneck(Bottleneck):
             out_channels * 4, out_channels * 4, kernel_size=1, bias=False
         )
         self.bn3 = nn.BatchNorm3d(out_channels * 4)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout2d(p=dropout_p)
 
         self.layers = nn.Sequential(
-            self.conv1, self.bn1, self.conv2, self.bn2, self.conv3, self.bn3
+            self.conv1,
+            self.bn1,
+            self.relu,
+            self.conv2,
+            self.bn2,
+            self.dropout,
+            self.relu,
+            self.conv3,
+            self.bn3,
         )
 
-        self.relu = nn.ReLU(inplace=True)
         self.tscse = TSCSEModule(in_depth, out_channels * 4, height, width, reduction)
         self.downsample = downsample
         self.stride = stride
@@ -202,6 +213,7 @@ class TSCSEResNetBottleneck(Bottleneck):
         reduction: int,
         stride: _size_3_t = 1,
         downsample: nn.Module | None = None,
+        dropout_p: float = 0.2,
     ):
         """Initialise the bottleneck block.
 
@@ -215,6 +227,7 @@ class TSCSEResNetBottleneck(Bottleneck):
             reduction: Reduction ratio for the squeeze operation.
             stride: Stride of the first convolution (default: 1).
             downsample: Downsample layer (default: None).
+            dropout_p: Dropout rate (default: 0.2).
 
         """
         super().__init__()
@@ -231,16 +244,25 @@ class TSCSEResNetBottleneck(Bottleneck):
             bias=False,
         )
         self.bn2 = nn.BatchNorm3d(out_channels)
+        self.dropout = nn.Dropout2d(p=dropout_p)
         self.conv3 = nn.Conv3d(
             out_channels, out_channels * 4, kernel_size=1, bias=False
         )
         self.bn3 = nn.BatchNorm3d(out_channels * 4)
+        self.relu = nn.ReLU(inplace=True)
 
         self.layers = nn.Sequential(
-            self.conv1, self.bn1, self.conv2, self.bn2, self.conv3, self.bn3
+            self.conv1,
+            self.bn1,
+            self.relu,
+            self.conv2,
+            self.bn2,
+            self.dropout,
+            self.relu,
+            self.conv3,
+            self.bn3,
         )
 
-        self.relu = nn.ReLU(inplace=True)
         self.tscse = TSCSEModule(in_depth, out_channels * 4, height, width, reduction)
         self.downsample = downsample
         self.stride = stride
@@ -1074,7 +1096,7 @@ class TSCSEUnetLightning(CommonModelMixin):
 
         # PERF: The model can be `torch.compile()`'d but layout issues occur with
         # convolutional networks. See: https://github.com/pytorch/pytorch/issues/126585
-        self.model = TSCSEUnet(
+        self.model = TSCSEUnet(  # pyright: ignore[reportAttributeAccessIssue]
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             in_channels=in_channels,

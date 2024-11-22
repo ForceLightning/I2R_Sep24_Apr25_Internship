@@ -10,19 +10,21 @@ from segmentation_models_pytorch.base.heads import ClassificationHead, Segmentat
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
-from segmentation_models_pytorch.encoders import get_encoder as smp_get_encoder
 
 # PyTorch
 import torch
 from torch import nn
 
 # First party imports
-from models.attention.model import REDUCE_TYPES, AttentionLayer, SpatialAttentionBlock
-from models.common import ENCODER_OUTPUT_SHAPES
-from models.tscse import TSCSENetEncoder
-from models.tscse import get_encoder as tscse_get_encoder
-from models.two_plus_one import DilatedOneD, OneD
 from utils.types import ResidualMode
+
+# Local folders
+from ..common import ENCODER_OUTPUT_SHAPES
+from ..tscse import TSCSENetEncoder
+from ..tscse import get_encoder as tscse_get_encoder
+from ..two_plus_one import DilatedOneD, OneD
+from .model import REDUCE_TYPES, AttentionLayer, SpatialAttentionBlock
+from .utils import get_encoder as smp_get_encoder
 
 __all__ = ["ResidualAttentionUnet", "ResidualAttentionUnetPlusPlus"]
 
