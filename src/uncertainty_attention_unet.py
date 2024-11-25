@@ -13,7 +13,7 @@ from lightning.pytorch.cli import LightningArgumentParser
 # First party imports
 from attention_unet import ResidualTwoPlusOneDataModule
 from cli.common import I2RInternshipCommonCLI
-from models.attention.uncertainty.uncertainty_lightning_module import (
+from models.attention.uncertainty.lightning_module import (
     UncertaintyResidualAttentionLightningModule,
 )
 from models.two_plus_one import get_temporal_conv_type
