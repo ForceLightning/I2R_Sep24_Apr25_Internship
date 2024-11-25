@@ -14,6 +14,7 @@ from segmentation_models_pytorch.base import (
     SegmentationModel,
 )
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
+from segmentation_models_pytorch.encoders import encoders as smp_encoders
 from segmentation_models_pytorch.encoders._base import EncoderMixin
 from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 
@@ -25,6 +26,7 @@ from torch.nn import functional as F
 from torch.nn.common_types import _size_3_t
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
+from torch.utils import model_zoo
 from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Metric, MetricCollection
 from torchvision.transforms.v2 import Compose
@@ -38,6 +40,7 @@ from metrics.logging import (
     shared_metric_logging_epoch_end,
 )
 from models.common import ENCODER_OUTPUT_SHAPES, CommonModelMixin
+from models.tscse.utils import LUT_2D_3D
 from models.two_plus_one import (
     DilatedOneD,
     OneD,
@@ -773,11 +776,47 @@ TSCSENET_ENCODERS = {
 }
 
 
+def load_base_to_tscse(old: nn.Module, new: TSCSENetEncoder) -> TSCSENetEncoder:
+    """Load a base model's weights to the tscSE module.
+
+    Args:
+        old: Base model (senet, resnet).
+        new: tscSE encoder to load weights into.
+
+    Returns:
+        TSCSENetEncoder: New tscSE encoder.
+
+    """
+    resnet_mods = dict(old.named_modules())
+    tscse_mods = dict(new.named_modules())
+
+    intersection = set(resnet_mods.keys()).intersection(set(tscse_mods.keys()))
+
+    for r_mod, t_mod, k in zip(
+        [resnet_mods[k] for k in intersection],
+        [tscse_mods[k] for k in intersection],
+        intersection,
+        strict=True,
+    ):
+        if isinstance(r_mod, nn.Sequential) and isinstance(t_mod, nn.Sequential):
+            pass
+        elif isinstance(r_mod, (tuple(LUT_2D_3D.keys()))):
+            func = LUT_2D_3D[type(r_mod)]["func"]
+            new_mod = func(r_mod)
+            new.set_submodule(k, new_mod)
+
+            if isinstance(new_mod, nn.Conv3d):
+                assert (dict(new.named_modules())[k].weight == new_mod.weight).all()
+
+    return new
+
+
 def get_encoder(
     name: str,
     num_frames: int,
     in_channels: int = 3,
     depth: int = 5,
+    weights: str | None = None,
     output_stride: _size_3_t = 32,
 ) -> TSCSENetEncoder:
     """Get a TSCSENet encoder by name.
@@ -787,12 +826,14 @@ def get_encoder(
         num_frames: Number of frames in the input tensor.
         in_channels: Number of input channels (default: 3).
         depth: Depth of the model (default: 5).
+        weights: Name of pretrained weights.
         output_stride: Output stride (default: 32).
 
     Returns:
         TSCSENet encoder.
 
     """
+    encoders = smp_encoders | TSCSENET_ENCODERS
     try:
         encoder: Type[TSCSENetEncoder] = TSCSENET_ENCODERS[name]["encoder"]
     except KeyError as e:
@@ -807,6 +848,34 @@ def get_encoder(
         "name": name,
     }
     encoder_obj = encoder(**params)
+
+    if weights is not None:
+        settings = None
+        try:
+            if "resnet" in name:
+                old_name = name.replace("tscse_resnet", "resnet")
+                settings = encoders[old_name][weights]
+            elif "senet" in name:
+                old_name = name.replace("tscsenet", "senet")
+                settings = encoders[old_name][weights]
+            else:
+                raise KeyError(f"{name} not suitable for loading base class weights.")
+        except KeyError as e:
+            raise KeyError(
+                "Wrong pretrained weights `{}` for encoder `{}`. Available options are: {}".format(
+                    weights, name, list(encoders[name]["pretrained_settings"].keys())
+                )
+            ) from e
+
+        assert settings is not None
+        encoder_base = encoders[old_name]["encoder"]
+        encoder_base.load_state_dict(
+            model_zoo.load_url(  # pyright: ignore[reportPrivateImportUsage]
+                settings["url"]
+            )
+        )
+        encoder_obj = load_base_to_tscse(encoder_base, encoder_obj)
+        del encoder_base
 
     encoder_obj.set_in_channels(in_channels, pretrained=False)
     if output_stride != 32:

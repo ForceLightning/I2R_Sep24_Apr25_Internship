@@ -183,6 +183,8 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             case _:
                 raise NotImplementedError(f"{self.model_type} is not yet implemented!")
 
+        torch.cuda.empty_cache()
+
         # Sets loss if it's a string
         if isinstance(loss, str):
             match loss:
