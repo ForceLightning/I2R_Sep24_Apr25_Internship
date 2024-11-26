@@ -92,6 +92,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self.skip_conn_channels = skip_conn_channels
         self.residual_mode = residual_mode
         self._attention_only = _attention_only
+        self.classes = classes
 
         # Define encoder, decoder, segmentation head, and classification head.
         #
@@ -400,6 +401,7 @@ class ResidualAttentionUnetPlusPlus(ResidualAttentionUnet):
         self.skip_conn_channels = skip_conn_channels
         self.residual_mode = residual_mode
         self._attention_only = _attention_only
+        self.classes = classes
 
         # Define encoder, decoder, segmentation head, and classification head.
         #
