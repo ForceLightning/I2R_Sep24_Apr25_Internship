@@ -29,7 +29,7 @@ class BasicBlock(BasicBlockBase):
         inplanes: int,
         planes: int,
         stride: int = 1,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
         downsample: Optional[nn.Module] = None,
         groups: int = 1,
         base_width: int = 64,
@@ -84,7 +84,7 @@ class Bottleneck(BottleneckBase):
         inplanes: int,
         planes: int,
         stride: int = 1,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
         downsample: Optional[nn.Module] = None,
         groups: int = 1,
         base_width: int = 64,
@@ -142,7 +142,7 @@ class ResNet(ResNetBase):
         layers: List[int],
         num_classes: int = 1000,
         zero_init_residual: bool = False,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
         groups: int = 1,
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
@@ -228,7 +228,7 @@ class ResNet(ResNetBase):
         blocks: int,
         stride: int = 1,
         dilate: bool = False,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
     ) -> nn.Sequential:
         norm_layer = self._norm_layer
         downsample = None

@@ -149,7 +149,7 @@ class TSCSEBottleneck(Bottleneck):
         reduction: int,
         stride: _size_3_t = 1,
         downsample: nn.Module | None = None,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
     ):
         """Initialise the bottleneck block.
 
@@ -221,7 +221,7 @@ class TSCSEResNetBottleneck(Bottleneck):
         reduction: int,
         stride: _size_3_t = 1,
         downsample: nn.Module | None = None,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
     ):
         """Initialise the bottleneck block.
 
@@ -290,7 +290,7 @@ class TSCSENet(nn.Module):
         num_frames: int,
         groups: int,
         reduction: int,
-        dropout_p: float = 0.2,
+        dropout_p: float = 0.05,
         inplanes: int = 128,
         input_3x3: bool = True,
         downsample_kernel_size: int | _size_3_t = (1, 3, 3),
