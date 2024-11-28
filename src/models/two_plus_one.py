@@ -559,7 +559,7 @@ class TwoPlusOneUnet(SegmentationModel):
             self.classification_head = None
 
         self.name = f"u-{encoder_name}"
-        self.compress: Callable[..., torch.Tensor]
+        self.compress: Callable[..., torch.Tensor] | None
         self.initialize()
 
     @override
@@ -597,6 +597,7 @@ class TwoPlusOneUnet(SegmentationModel):
                     flat=self.flat_conv,
                     activation=self.res_conv_activation,
                 )
+                self.compress = compress_dilated
             elif self.temporal_conv_type == TemporalConvolutionalType.TEMPORAL_3D:
                 oned = Temporal3DConv(
                     1,
@@ -605,6 +606,7 @@ class TwoPlusOneUnet(SegmentationModel):
                     flat=self.flat_conv,
                     activation=self.res_conv_activation,
                 )
+                self.compress = None
             else:
                 oned = OneD(
                     1,
@@ -613,6 +615,7 @@ class TwoPlusOneUnet(SegmentationModel):
                     self.flat_conv,
                     self.res_conv_activation,
                 )
+                self.compress = compress_2
             onedlayers.append(oned)
 
         self.onedlayers = nn.ModuleList(onedlayers)
@@ -659,7 +662,10 @@ class TwoPlusOneUnet(SegmentationModel):
             ]  # pyright: ignore[reportAssignmentType] False positive
 
             # Applies the compress_2 function to resize and reorder channels.
-            compressed_output = self.compress(layer_output, block)
+            if self.compress:
+                compressed_output = self.compress(layer_output, block)
+            else:
+                compressed_output = block(layer_output)
             compressed_features.append(compressed_output)
 
         # Send the compressed features up the decoder
@@ -705,6 +711,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         classes: int = 1,
         num_frames: int = 5,
         weights_from_ckpt_path: str | None = None,
+        temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.ORIGINAL,
         optimizer: Optimizer | str = "adamw",
         optimizer_kwargs: dict[str, Any] | None = None,
         scheduler: LRScheduler | str = "gradual_warmup_scheduler",
@@ -735,6 +742,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             classes: The number of classes.
             num_frames: The number of frames to use.
             weights_from_ckpt_path: The path to the checkpoint to load weights from.
+            temporal_conv_type: What kind of layer to use for temporal convolutions.
             optimizer: The optimizer to use.
             optimizer_kwargs: The optimizer keyword arguments.
             scheduler: The learning rate scheduler to use.
@@ -764,6 +772,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
         self.model_type = model_type
+        self.temporal_conv_type = temporal_conv_type
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -773,7 +782,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
 
         # PERF: The model can be `torch.compile()`'d but layout issues occur with
         # convolutional networks. See: https://github.com/pytorch/pytorch/issues/126585
-        self.model = TwoPlusOneUnet(
+        self.model: TwoPlusOneUnet = TwoPlusOneUnet(  # pyright: ignore
             encoder_name=encoder_name,
             encoder_depth=encoder_depth,
             encoder_weights=encoder_weights,
@@ -783,6 +792,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             flat_conv=flat_conv,
             activation=unet_activation,
             model_type=model_type,
+            temporal_conv_type=temporal_conv_type,
         )
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}

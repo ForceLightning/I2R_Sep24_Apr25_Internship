@@ -6,8 +6,6 @@ from __future__ import annotations
 from typing import Any, Literal, OrderedDict, override
 
 # Third-Party
-from huggingface_hub import ModelHubMixin
-from segmentation_models_pytorch.base import SegmentationModel
 from segmentation_models_pytorch.losses import FocalLoss
 
 # PyTorch
@@ -140,19 +138,21 @@ class VivimLightningModule(CommonModelMixin):
                 enabled="all", context="all", stacks="python"
             )
 
-        self.model: nn.Module | SegmentationModel | ModelHubMixin = Vivim(
-            in_chans=in_channels,
-            out_chans=classes,
-            depths=depths,
-            feat_size=feat_size,
-            drop_path_rate=drop_path_rate,  # pyright: ignore[reportArgumentType]
-            layer_scale_init_value=layer_scale_init_value,
-            hidden_size=hidden_size,
-            norm_name=norm_name,
-            conv_block=conv_block,
-            res_block=res_block,
-            spatial_dims=spatial_dims,
-            with_edge=with_edge,
+        self.model: Vivim = (  # pyright: ignore[reportIncompatibleVariableOverride]
+            Vivim(
+                in_chans=in_channels,
+                out_chans=classes,
+                depths=depths,
+                feat_size=feat_size,
+                drop_path_rate=drop_path_rate,  # pyright: ignore[reportArgumentType]
+                layer_scale_init_value=layer_scale_init_value,
+                hidden_size=hidden_size,
+                norm_name=norm_name,
+                conv_block=conv_block,
+                res_block=res_block,
+                spatial_dims=spatial_dims,
+                with_edge=with_edge,
+            )
         )
 
         if optimizer is None and optimizer_kwargs is None:

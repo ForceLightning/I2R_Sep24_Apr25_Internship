@@ -261,7 +261,6 @@ class VivimCLI(CommonCLI):
             "dl_classification_mode": "MULTICLASS_MODE",
             "eval_classification_mode": "MULTILABEL_MODE",
             "trainer.max_epochs": 50,
-            "model_architecture": "UNET",
             "model.encoder_name": "timm-res2net50_26w_4s",
             "model.encoder_weights": "imagenet",
             "model.in_channels": 3,

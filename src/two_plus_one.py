@@ -57,6 +57,7 @@ class TwoPlusOneDataModule(L.LightningDataModule):
             loading_mode: Determines the cv2.imread flags for the images.
             combine_train_val: Whether to combine train/val sets.
             augment: Whether to augment images and masks together.
+            temporal_conv_type: What layer to use for temporal convolutions.
 
         """
         super().__init__()
