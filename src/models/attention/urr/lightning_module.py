@@ -21,11 +21,7 @@ from torchvision.transforms.v2 import Compose
 
 # First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
-from metrics.logging import (
-    setup_metrics,
-    shared_metric_calculation,
-    shared_metric_logging_epoch_end,
-)
+from metrics.logging import setup_metrics, shared_metric_calculation
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
@@ -273,7 +269,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             else:
                 loss_seg = self.alpha * self.loss(masks_proba, masks)
 
-            loss_uncertainty = self.beta * final_uncertainty
+            loss_uncertainty = self.beta * final_uncertainty.mean()
             loss_all = loss_seg + loss_uncertainty
 
         self.log(
@@ -361,7 +357,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         else:
             loss_seg = self.alpha * self.loss(masks_proba, masks)
 
-        loss_uncertainty = self.beta * final_uncertainty
+        loss_uncertainty = self.beta * final_uncertainty.mean()
         loss_all = loss_seg + loss_uncertainty
 
         self.log(

@@ -123,8 +123,6 @@ class RegionRefiner(nn.Module):
         self.mdim_local = mdim_local
         self.classes = classes
 
-        self.pred2 = nn.Conv2d(mdim_global, 2, kernel_size=3, padding=1, stride=1)
-
         self.local_avg = nn.AvgPool2d(local_size, stride=1, padding=local_size // 2)
         self.local_max = nn.MaxPool2d(local_size, stride=1, padding=local_size // 2)
         self.local_conv_fm = nn.Conv2d(
@@ -139,36 +137,44 @@ class RegionRefiner(nn.Module):
 
     @override
     def forward(
-        self, p: Tensor, rough_seg: Tensor, r1: Tensor
+        self, unet_decoder_output: Tensor, spatial_encoder_r1: Tensor
     ) -> tuple[Tensor, Tensor]:
-        bs, *_ = p.shape
-        p = p.unsqueeze(1).expand(-1, self.classes, -1, -1, -1)
-        p = rearrange(p, "b k c h w -> (b k) c h w")
-        p = self.pred2(F.relu(p))
-        p = rearrange(p, "(b k) c h w -> b k c h w", b=bs)
-        rough_seg = F.softmax(p, dim=2)[:, :, 1]
+        bs, *_ = unet_decoder_output.shape
+        unet_decoder_output = rearrange(
+            unet_decoder_output, "b (k c) h w -> b k c h w", k=self.classes
+        )
+        rough_seg = F.softmax(unet_decoder_output, dim=2)[:, :, 1]  # Over channel dim
+        rough_seg = F.softmax(rough_seg, dim=1)  # Object-level normalisation
         uncertainty = calc_uncertainty(rough_seg).expand(-1, self.classes, -1, -1)
         rough_seg = rearrange(rough_seg.unsqueeze(2), "b k c h w -> (b k) c h w")
-        r1 = F.interpolate(r1, scale_factor=2, mode="bilinear", align_corners=False)
-        r1 = r1.unsqueeze(1).expand(-1, self.classes, -1, -1, -1)
-        r1 = rearrange(r1, "b k c h w -> (b k) c h w")
-        r1_weighted = r1 * rough_seg  # (B x K, C, H, W) * (B x K, 1, H, W)
+        spatial_encoder_r1 = F.interpolate(
+            spatial_encoder_r1, scale_factor=2, mode="bilinear", align_corners=False
+        )
+        spatial_encoder_r1 = spatial_encoder_r1.unsqueeze(1).expand(
+            -1, self.classes, -1, -1, -1
+        )
+        spatial_encoder_r1 = rearrange(spatial_encoder_r1, "b k c h w -> (b k) c h w")
+        r1_weighted = (
+            spatial_encoder_r1 * rough_seg
+        )  # (B x K, C, H, W) * (B x K, 1, H, W)
 
         # Neighbourhood reference.
         r1_local = self.local_avg(r1_weighted)
-        r1_local = r1_local / self.local_avg(rough_seg) + 1e-8
+        r1_local = r1_local / (self.local_avg(rough_seg) + 1e-8)
         r1_conf = self.local_max(rough_seg)  # (B x K, 1, H, W)
 
-        local_match = torch.cat([r1, r1_local], dim=1)  # (B x K, 2, H, W)
+        local_match = torch.cat(
+            [spatial_encoder_r1, r1_local], dim=1
+        )  # (B x K, 2, H, W)
         q = self.local_res_mm(self.local_conv_fm(local_match))
         q = r1_conf * self.local_pred2(F.relu(q))  # (B x K, 2, H, W)
 
         q = rearrange(q, "(b k) c h w -> b k c h w", b=bs)  # (B, K, C, H, W)
 
-        p = p + uncertainty.unsqueeze(2) * q
-        p = F.softmax(p, dim=2)[:, :, 1]
+        ret = unet_decoder_output + uncertainty.unsqueeze(2) * q
+        ret = F.softmax(ret, dim=2)[:, :, 1]
 
-        return p, uncertainty
+        return ret, uncertainty
 
 
 class URRResidualAttentionUnet(ResidualAttentionUnet):
@@ -273,7 +279,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
 
         self.segmentation_head = SegmentationHead(
             in_channels=decoder_channels[-1],
-            out_channels=classes,
+            out_channels=classes * 2,
             activation=activation,
             kernel_size=3,
         )
@@ -350,18 +356,17 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
 
             residual_outputs.append(skip_output)
 
-        decoder_output, decoder_outputs = self.decoder(*residual_outputs)
+        decoder_output, _ = self.decoder(*residual_outputs)
         rough_seg = self.segmentation_head(decoder_output)
 
-        score, initial_uncertainty = self.region_refiner(
-            decoder_outputs[0], rough_seg, residual_outputs[1]
-        )
+        score: Tensor
+        initial_uncertainty: Tensor
+        score, initial_uncertainty = self.region_refiner(rough_seg, residual_outputs[1])
 
         uncertainty: Tensor = calc_uncertainty(F.softmax(score, dim=1))
         uncertainty = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(
             regular_frames.shape[-2] * regular_frames.shape[-1]
-        )  # [B,1,H,W]
-        uncertainty = uncertainty.mean()  # pyright: ignore[reportOptionalMemberAccess]
+        )  # (B, 1, H, W)
 
         score = torch.clamp(score, 1e-7, 1 - 1e-7)
         score = torch.log((score / (1 - score)))

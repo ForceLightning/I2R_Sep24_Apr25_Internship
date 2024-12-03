@@ -4,7 +4,7 @@
 from math import sqrt
 from typing import Union
 
-# Third-Party
+# Scientific Libraries
 import numpy as np
 from numpy import typing as npt
 
@@ -580,9 +580,10 @@ class Decoder(nn.Module):
         p = p.reshape(b, f, k, *p.shape[1:])
 
         bs, f, obj_n, h, w = feature_shape
-        rough_seg = F.softmax(p, dim=3)
+        rough_seg = F.softmax(p, dim=3)  # Over channel dim
         rough_seg = rough_seg[:, :, :, 1]
         rough_seg = rough_seg.view(bs * f, obj_n, h, w)
+        # Softmax over obj dim
         rough_seg = F.softmax(rough_seg, dim=1)  # object-level normalization
 
         # Local refinement
