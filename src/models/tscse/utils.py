@@ -78,7 +78,6 @@ def pool2d_to_pool3d(
     kernel_size = size_2_t_to_size_3_t(old.kernel_size, 1)
     stride = size_2_t_to_size_3_t(old.stride, 1)
     padding = size_2_t_to_size_3_t(old.padding, 0)
-    dilation = size_2_t_to_size_3_t(old.dilation, 1)
 
     if isinstance(old, nn.AvgPool2d):
         new = nn.AvgPool3d(
@@ -92,6 +91,7 @@ def pool2d_to_pool3d(
     elif isinstance(old, nn.AdaptiveAvgPool2d):
         new = nn.AdaptiveAvgPool3d(old.output_size)
     elif isinstance(old, nn.MaxPool2d):
+        dilation = size_2_t_to_size_3_t(old.dilation, 1)
         new = nn.MaxPool3d(
             kernel_size, stride, padding, dilation, old.return_indices, old.ceil_mode
         )

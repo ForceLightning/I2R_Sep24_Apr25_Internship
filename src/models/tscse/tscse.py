@@ -109,7 +109,7 @@ class TSCSEModule(nn.Module):
         cSE = self.cSE(x).sigmoid()
         sSE = self.sSE(x).sigmoid()
         tSE = self.tSE(x).sigmoid()
-        return x * cSE + x * sSE + x * tSE
+        return x * cSE + x * sSE + x * tSE + x
 
 
 class Bottleneck(nn.Module, abc.ABC):
@@ -780,24 +780,26 @@ def load_base_to_tscse(old: nn.Module, new: TSCSENetEncoder) -> TSCSENetEncoder:
     """Load a base model's weights to the tscSE module.
 
     Args:
-        old: Base model (senet, resnet).
+        old: Base model (senet, se_resnet).
         new: tscSE encoder to load weights into.
 
     Returns:
         TSCSENetEncoder: New tscSE encoder.
 
     """
-    resnet_mods = dict(old.named_modules())
+    se_resnet_mods = dict(old.named_modules())
     tscse_mods = dict(new.named_modules())
 
-    intersection = set(resnet_mods.keys()).intersection(set(tscse_mods.keys()))
+    intersection = set(se_resnet_mods.keys()).intersection(set(tscse_mods.keys()))
 
     for r_mod, t_mod, k in zip(
-        [resnet_mods[k] for k in intersection],
+        [se_resnet_mods[k] for k in intersection],
         [tscse_mods[k] for k in intersection],
         intersection,
         strict=True,
     ):
+        if "se_module" in k:
+            continue
         if isinstance(r_mod, nn.Sequential) and isinstance(t_mod, nn.Sequential):
             pass
         elif isinstance(r_mod, (tuple(LUT_2D_3D.keys()))):
@@ -852,8 +854,8 @@ def get_encoder(
     if weights is not None:
         settings = None
         try:
-            if "resnet" in name:
-                old_name = name.replace("tscse_resnet", "resnet")
+            if "se_resnet" in name:
+                old_name = name.replace("se_resnet", "resnet")
                 settings = encoders[old_name][weights]
             elif "senet" in name:
                 old_name = name.replace("tscsenet", "senet")
