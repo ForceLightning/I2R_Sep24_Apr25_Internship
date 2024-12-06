@@ -8,7 +8,7 @@ import torch
 
 # First party imports
 from attention_unet import ResidualAttentionCLI, ResidualTwoPlusOneDataModule
-from models.attention.urr.lightning_module import URRResidualAttentionLightningModule
+from models.attention.urr import URRResidualAttentionLightningModule
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.

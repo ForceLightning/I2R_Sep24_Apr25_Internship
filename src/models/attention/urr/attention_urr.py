@@ -171,10 +171,55 @@ class RegionRefiner(nn.Module):
 
         q = rearrange(q, "(b k) c h w -> b k c h w", b=bs)  # (B, K, C, H, W)
 
+        # (B, K, 2, H, W)
         ret = unet_decoder_output + uncertainty.unsqueeze(2) * q
-        ret = F.softmax(ret, dim=2)[:, :, 1]
+        ret = F.softmax(ret, dim=2)[:, :, 1]  # (B, K, H, W)
 
         return ret, uncertainty
+
+
+class URRDecoder(nn.Module):
+    """Wrapper for the decoder, segmentation head, and region refiner."""
+
+    def __init__(
+        self,
+        decoder: UnetDecoderURR | UnetPlusPlusDecoderURR,
+        segmentation_head: SegmentationHead,
+        refiner: RegionRefiner,
+        num_classes: int,
+    ):
+        """Initialise the wrapper with dependency injection.
+
+        Args:
+            decoder: U-Net or UNet++ (URR) decoder.
+            segmentation_head: SMP segmentation head.
+            refiner: uncertain-regions refiner.
+            num_classes: Number of classes.
+
+        """
+        super().__init__()
+        self.decoder = decoder
+        self.segmentation_head = segmentation_head
+        self.refiner = refiner
+        self.num_classes = num_classes
+
+    @override
+    def forward(self, *features: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        b, _, h, w = features[1].shape
+        decoder_output, _ = self.decoder(*features)
+        rough_seg = self.segmentation_head(decoder_output)
+
+        score: Tensor
+        initial_uncertainty: Tensor
+        score, initial_uncertainty = self.refiner(rough_seg, features[1])
+
+        uncertainty: Tensor = calc_uncertainty(F.softmax(score, dim=1))
+        uncertainty = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(h * w * 4)
+
+        score = torch.clamp(score, 1e-7, 1 - 1e-7)
+        score = torch.log((score / (1 - score)))
+
+        return score, initial_uncertainty, uncertainty
 
 
 class URRResidualAttentionUnet(ResidualAttentionUnet):
@@ -268,7 +313,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
             if self.reduce == "cat"
             else self.spatial_encoder.out_channels
         )
-        self.decoder = UnetDecoderURR(
+        decoder = UnetDecoderURR(
             encoder_channels=encoder_channels,
             decoder_channels=decoder_channels,
             n_blocks=encoder_depth,
@@ -276,13 +321,16 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
             center=encoder_name.startswith("vgg"),
             attention_type=decoder_attention_type,
         )
-
-        self.segmentation_head = SegmentationHead(
+        segmentation_head = SegmentationHead(
             in_channels=decoder_channels[-1],
             out_channels=classes * 2,
             activation=activation,
             kernel_size=3,
         )
+
+        region_refiner = RegionRefiner(7, 16, 32, self.classes)
+
+        self.decoder = URRDecoder(decoder, segmentation_head, region_refiner, classes)
 
         if aux_params is not None:
             self.classification_head = ClassificationHead(
@@ -293,8 +341,6 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
 
         # NOTE: Necessary for the SegmentationModel class.
         self.name = f"u-{encoder_name}"
-
-        self.region_refiner = RegionRefiner(7, 16, 32, self.classes)
 
         self.initialize()
 
@@ -356,20 +402,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
 
             residual_outputs.append(skip_output)
 
-        decoder_output, _ = self.decoder(*residual_outputs)
-        rough_seg = self.segmentation_head(decoder_output)
-
-        score: Tensor
-        initial_uncertainty: Tensor
-        score, initial_uncertainty = self.region_refiner(rough_seg, residual_outputs[1])
-
-        uncertainty: Tensor = calc_uncertainty(F.softmax(score, dim=1))
-        uncertainty = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(
-            regular_frames.shape[-2] * regular_frames.shape[-1]
-        )  # (B, 1, H, W)
-
-        score = torch.clamp(score, 1e-7, 1 - 1e-7)
-        score = torch.log((score / (1 - score)))
+        score, initial_uncertainty, uncertainty = self.decoder(*residual_outputs)
 
         return score, initial_uncertainty, uncertainty
 
@@ -466,7 +499,7 @@ class URRResidualAttentionUnetPlusPlus(URRResidualAttentionUnet):
             else self.spatial_encoder.out_channels
         )
 
-        self.decoder = UnetPlusPlusDecoderURR(
+        decoder = UnetPlusPlusDecoderURR(
             encoder_channels=encoder_channels,
             decoder_channels=decoder_channels,
             n_blocks=encoder_depth,
@@ -474,13 +507,15 @@ class URRResidualAttentionUnetPlusPlus(URRResidualAttentionUnet):
             center=encoder_name.startswith("vgg"),
             attention_type=decoder_attention_type,
         )
-
-        self.segmentation_head = SegmentationHead(
+        segmentation_head = SegmentationHead(
             in_channels=decoder_channels[-1],
-            out_channels=classes,
+            out_channels=classes * 2,
             activation=activation,
             kernel_size=3,
         )
+        region_refiner = RegionRefiner(7, 16, 32, self.classes)
+
+        self.decoder = URRDecoder(decoder, segmentation_head, region_refiner, classes)
 
         if aux_params is not None:
             self.classification_head = ClassificationHead(
@@ -490,8 +525,6 @@ class URRResidualAttentionUnetPlusPlus(URRResidualAttentionUnet):
             self.classification_head = None
 
         self.name = f"unetplusplus-{encoder_name}"
-
-        self.region_refiner = RegionRefiner(7, 16, 32, self.classes)
 
         self.initialize()
 

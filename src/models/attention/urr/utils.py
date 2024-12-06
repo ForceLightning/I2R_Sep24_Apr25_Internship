@@ -1,3 +1,5 @@
+"""Utility functions for URR-augmented attention model."""
+
 # PyTorch
 import torch
 from torch import Tensor

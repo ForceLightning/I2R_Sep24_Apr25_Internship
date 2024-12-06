@@ -61,8 +61,8 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         scheduler_kwargs: dict[str, Any] | None = None,
         multiplier: int = 2,
         total_epochs: int = 50,
-        alpha: float = 1,
-        beta: float = 0,
+        alpha: float = 0.95,
+        beta: float = 0.05,
         learning_rate: float = 0.0001,
         dl_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
@@ -265,12 +265,12 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
                 self.loss, FocalLoss
             ):
-                loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+                loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
             else:
-                loss_seg = self.alpha * self.loss(masks_proba, masks)
+                loss_seg = self.loss(masks_proba, masks)
 
-            loss_uncertainty = self.beta * final_uncertainty.mean()
-            loss_all = loss_seg + loss_uncertainty
+            loss_uncertainty = final_uncertainty.mean()
+            loss_all = self.alpha * loss_seg + self.beta * loss_uncertainty
 
         self.log(
             "loss/train",
@@ -353,12 +353,12 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
             self.loss, FocalLoss
         ):
-            loss_seg = self.alpha * self.loss(masks_proba, masks.squeeze(dim=1))
+            loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
         else:
-            loss_seg = self.alpha * self.loss(masks_proba, masks)
+            loss_seg = self.loss(masks_proba, masks)
 
-        loss_uncertainty = self.beta * final_uncertainty.mean()
-        loss_all = loss_seg + loss_uncertainty
+        loss_uncertainty = final_uncertainty.mean()
+        loss_all = self.alpha * loss_seg + self.beta * loss_uncertainty
 
         self.log(
             f"loss/{prefix}",
@@ -370,7 +370,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         )
         self.log(
             f"loss/{prefix}/{self.loss.__class__.__name__.lower()}",
-            loss_all.detach().cpu().item(),
+            loss_seg.detach().cpu().item(),
             batch_size=bs,
             on_epoch=True,
             sync_dist=True,
