@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "f49571d2f5c0d065171f6e402c7975181c968d75a6edb20e6438ffe6dd078fba"
+            "sha256": "74f0d655b9614b3776af60d29007445ddba07c5a26288004a2b95334edc3a441"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -2083,15 +2083,6 @@
             ],
             "index": "downloadpytorch",
             "version": "==2.5.1+cu121"
-        },
-        "torch-uncertainty": {
-            "hashes": [
-                "sha256:70c39a909be7ff6150bb5103c026f6a6a179b13f33bf55e9c317a7ec83eb7f2f",
-                "sha256:8948a74bd17852669572bb25aa8f11143616db1978e06a00937228f2447b88ba"
-            ],
-            "index": "pypi",
-            "markers": "python_version >= '3.10'",
-            "version": "==0.3.1"
         },
         "torchmetrics": {
             "hashes": [
