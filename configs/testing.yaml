@@ -10,6 +10,8 @@ trainer:
   - class_path: utils.global_progress_bar.BetterProgressBar
 model:
   classes: 4
+data:
+  batch_size: 1
 model_checkpoint_val_loss:
   save_last: false
   save_top_k: 0
