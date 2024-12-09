@@ -10,6 +10,7 @@ from segmentation_models_pytorch.base.heads import ClassificationHead, Segmentat
 from segmentation_models_pytorch.base.model import SegmentationModel
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
+from segmentation_models_pytorch.encoders import get_encoder as smp_get_encoder
 
 # PyTorch
 import torch
@@ -24,7 +25,6 @@ from ..tscse.tscse import TSCSENetEncoder
 from ..tscse.tscse import get_encoder as tscse_get_encoder
 from ..two_plus_one import DilatedOneD, OneD, Temporal3DConv, TemporalConvolutionalType
 from .model import REDUCE_TYPES, AttentionLayer, SpatialAttentionBlock
-from .utils import get_encoder as smp_get_encoder
 
 __all__ = ["ResidualAttentionUnet", "ResidualAttentionUnetPlusPlus"]
 

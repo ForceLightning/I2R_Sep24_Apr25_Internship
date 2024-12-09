@@ -11,6 +11,7 @@ from einops import rearrange
 from segmentation_models_pytorch.base.heads import ClassificationHead, SegmentationHead
 from segmentation_models_pytorch.decoders.unet.model import UnetDecoder
 from segmentation_models_pytorch.decoders.unetplusplus.model import UnetPlusPlusDecoder
+from segmentation_models_pytorch.encoders import get_encoder as smp_get_encoder
 
 # PyTorch
 import torch
@@ -30,7 +31,6 @@ from ...tscse.tscse import TSCSENetEncoder
 from ...tscse.tscse import get_encoder as tscse_get_encoder
 from ..model import SpatialAttentionBlock
 from ..segmentation_model import ResidualAttentionUnet
-from ..utils import get_encoder as smp_get_encoder
 from .utils import calc_uncertainty
 
 
