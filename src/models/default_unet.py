@@ -43,6 +43,7 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    MetricMode,
     ModelType,
 )
 
@@ -77,6 +78,8 @@ class LightningUnetWrapper(CommonModelMixin):
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
         dummy_predict: bool = False,
+        metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
+        metric_div_zero: float = 1.0,
     ):
         """Init the UNet model.
 
@@ -106,6 +109,8 @@ class LightningUnetWrapper(CommonModelMixin):
             loading_mode: Image loading mode.
             dump_memory_snapshot: Whether to dump a memory snapshot after training.
             dummy_predict: Whether to predict ground truth masks for visualisation.
+            metric_mode: Metric calculation mode.
+            metric_div_zero: How to handle division by zero operations.
 
         """
         # Trace memory usage
@@ -231,7 +236,7 @@ class LightningUnetWrapper(CommonModelMixin):
         # Sets metric if None.
         self.dice_metrics = {}
         self.other_metrics = {}
-        setup_metrics(self, metric, classes)
+        setup_metrics(self, metric, classes, metric_mode, metric_div_zero)
 
         self.weights_from_ckpt_path = weights_from_ckpt_path
         if self.weights_from_ckpt_path:

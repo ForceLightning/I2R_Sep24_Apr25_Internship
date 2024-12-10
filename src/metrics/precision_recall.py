@@ -6,6 +6,7 @@ from typing import Any, Literal, Optional, override
 # PyTorch
 import torch
 from torch import Tensor
+from torch.nn import functional as F
 from torchmetrics.classification import (
     MulticlassF1Score,
     MulticlassPrecision,
@@ -29,6 +30,13 @@ from torchmetrics.functional.classification.stat_scores import (
     _multilabel_stat_scores_tensor_validation,
     _multilabel_stat_scores_update,
 )
+from torchmetrics.utilities.compute import _safe_divide
+
+# First party imports
+from utils.types import MetricMode
+
+# Local folders
+from .utils import _get_nonzeros_classwise
 
 
 class MulticlassMPrecision(MulticlassPrecision):
@@ -46,6 +54,7 @@ class MulticlassMPrecision(MulticlassPrecision):
         multidim_average: Literal["global", "samplewise"] = "global",
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
+        metric_mode: MetricMode = MetricMode.IGNORE_EMPTY_CLASS,
         **kwargs: Any,
     ):
         zero_division = kwargs.pop("zero_division", 0)
@@ -59,6 +68,7 @@ class MulticlassMPrecision(MulticlassPrecision):
                 ignore_index,
                 zero_division,
             )
+        self.metric_mode = metric_mode
         self.num_classes = num_classes
         self.top_k = top_k
         self.average: Optional[Literal["macro", "none"]] = average
@@ -72,17 +82,29 @@ class MulticlassMPrecision(MulticlassPrecision):
             torch.zeros(num_classes, dtype=torch.float32),
             dist_reduce_fx="sum",
         )
-        self.add_state(
-            "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
-        )
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.add_state(
+                "samples",
+                torch.zeros(num_classes, dtype=torch.long),
+                dist_reduce_fx="sum",
+            )
+        else:
+            self.add_state(
+                "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
+            )
 
     @override
     def compute(self) -> Tensor:
-        avg = self.mPrecision_running / self.samples
+        avg = _safe_divide(self.mPrecision_running, self.samples, self.zero_division)
         return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
+        bs = preds.shape[0]
+        target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
+            0, -1, *(range(1, len(target.shape)))
+        )
+        target_nonzeros = _get_nonzeros_classwise(target_nonzeros).sum(dim=0)
         if self.validate_args:
             _multiclass_stat_scores_tensor_validation(
                 preds,
@@ -114,13 +136,25 @@ class MulticlassMPrecision(MulticlassPrecision):
             zero_division=self.zero_division,
         )
 
-        match self.multidim_average:
-            case "global":
-                self.samples += preds.shape[0]
-                self.mPrecision_running += mPrecision * preds.shape[0]
-            case "samplewise":
-                self.samples += preds.shape[0]
-                self.mPrecision_running += mPrecision.sum(dim=0)
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            match self.multidim_average:
+                case "global":
+                    self.samples += bs * target_nonzeros
+                    self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum()
+                case "samplewise":
+                    self.samples += bs * target_nonzeros
+                    self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum(
+                        dim=0
+                    )
+
+        else:
+            match self.multidim_average:
+                case "global":
+                    self.samples += preds.shape[0]
+                    self.mPrecision_running += mPrecision * preds.shape[0]
+                case "samplewise":
+                    self.samples += preds.shape[0]
+                    self.mPrecision_running += mPrecision.sum(dim=0)
 
 
 class MultilabelMPrecision(MultilabelPrecision):
@@ -138,6 +172,7 @@ class MultilabelMPrecision(MultilabelPrecision):
         multidim_average: Literal["global", "samplewise"] = "global",
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
+        metric_mode: MetricMode = MetricMode.IGNORE_EMPTY_CLASS,
         **kwargs: Any,
     ):
         zero_division = kwargs.pop("zero_division", 0)
@@ -151,6 +186,7 @@ class MultilabelMPrecision(MultilabelPrecision):
                 ignore_index,
                 zero_division,
             )
+        self.metric_mode = metric_mode
         self.num_labels = num_labels
         self.threshold = threshold
         self.average: Optional[Literal["macro", "none"]] = average
@@ -204,13 +240,24 @@ class MultilabelMPrecision(MultilabelPrecision):
             zero_division=self.zero_division,
         )
 
-        match self.multidim_average:
-            case "global":
-                self.samples += preds.shape[0]
-                self.mPrecision_running += mPrecision * preds.shape[0]
-            case "samplewise":
-                self.samples += preds.shape[0]
-                self.mPrecision_running += mPrecision.sum(dim=0)
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            target_nonzeros = _get_nonzeros_classwise(target).sum(dim=0)
+            match self.multidim_average:
+                case "global":
+                    self.samples += preds.shape[0] * target_nonzeros
+                    self.mPrecision_running += mPrecision * preds.shape[0]
+                case "samplewise":
+                    self.samples += preds.shape[0] * target_nonzeros
+                    self.mPrecision_running += mPrecision.sum(dim=0)
+
+        else:
+            match self.multidim_average:
+                case "global":
+                    self.samples += preds.shape[0]
+                    self.mPrecision_running += mPrecision * preds.shape[0]
+                case "samplewise":
+                    self.samples += preds.shape[0]
+                    self.mPrecision_running += mPrecision.sum(dim=0)
 
 
 class MulticlassMRecall(MulticlassRecall):
@@ -228,6 +275,7 @@ class MulticlassMRecall(MulticlassRecall):
         multidim_average: Literal["global", "samplewise"] = "global",
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
+        metric_mode: MetricMode = MetricMode.IGNORE_EMPTY_CLASS,
         **kwargs: Any,
     ):
         zero_division = kwargs.pop("zero_division", 0)
@@ -241,6 +289,7 @@ class MulticlassMRecall(MulticlassRecall):
                 ignore_index,
                 zero_division,
             )
+        self.metric_mode = metric_mode
         self.num_classes = num_classes
         self.top_k = top_k
         self.average: Optional[Literal["macro", "none"]] = average
@@ -254,9 +303,16 @@ class MulticlassMRecall(MulticlassRecall):
             torch.zeros(num_classes, dtype=torch.float32),
             dist_reduce_fx="sum",
         )
-        self.add_state(
-            "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
-        )
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.add_state(
+                "samples",
+                torch.zeros(num_classes, dtype=torch.long),
+                dist_reduce_fx="sum",
+            )
+        else:
+            self.add_state(
+                "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
+            )
 
     @override
     def compute(self) -> Tensor:
@@ -265,6 +321,11 @@ class MulticlassMRecall(MulticlassRecall):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
+        bs = preds.shape[0]
+        target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
+            0, -1, *(range(1, len(target.shape)))
+        )
+        target_nonzeros = _get_nonzeros_classwise(target_nonzeros).sum(dim=0)
         if self.validate_args:
             _multiclass_stat_scores_tensor_validation(
                 preds,
@@ -296,13 +357,23 @@ class MulticlassMRecall(MulticlassRecall):
             zero_division=self.zero_division,
         )
 
-        match self.multidim_average:
-            case "global":
-                self.samples += preds.shape[0]
-                self.mRecall_running += mRecall * preds.shape[0]
-            case "samplewise":
-                self.samples += preds.shape[0]
-                self.mRecall_running += mRecall.sum(dim=0)
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            match self.multidim_average:
+                case "global":
+                    self.samples += bs * target_nonzeros
+                    self.mRecall_running += (mRecall * bs * target_nonzeros).sum()
+                case "samplewise":
+                    self.samples += bs * target_nonzeros
+                    self.mRecall_running += (mRecall * bs * target_nonzeros).sum(dim=0)
+
+        else:
+            match self.multidim_average:
+                case "global":
+                    self.samples += preds.shape[0]
+                    self.mRecall_running += mRecall * preds.shape[0]
+                case "samplewise":
+                    self.samples += preds.shape[0]
+                    self.mRecall_running += mRecall.sum(dim=0)
 
 
 class MultilabelMRecall(MultilabelRecall):
@@ -320,6 +391,7 @@ class MultilabelMRecall(MultilabelRecall):
         multidim_average: Literal["global", "samplewise"] = "global",
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
+        metric_mode: MetricMode = MetricMode.IGNORE_EMPTY_CLASS,
         **kwargs: Any,
     ):
         zero_division = kwargs.pop("zero_division", 0)
@@ -333,6 +405,7 @@ class MultilabelMRecall(MultilabelRecall):
                 ignore_index,
                 zero_division,
             )
+        self.metric_mode = metric_mode
         self.num_labels = num_labels
         self.threshold = threshold
         self.average: Optional[Literal["macro", "none"]] = average
@@ -386,13 +459,24 @@ class MultilabelMRecall(MultilabelRecall):
             zero_division=self.zero_division,
         )
 
-        match self.multidim_average:
-            case "global":
-                self.samples += preds.shape[0]
-                self.mRecall_running += mRecall * preds.shape[0]
-            case "samplewise":
-                self.samples += preds.shape[0]
-                self.mRecall_running += mRecall.sum(dim=0)
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            target_nonzeros = _get_nonzeros_classwise(target).sum(dim=0)
+            match self.multidim_average:
+                case "global":
+                    self.samples += preds.shape[0] * target_nonzeros
+                    self.mRecall_running += mRecall * preds.shape[0]
+                case "samplewise":
+                    self.samples += preds.shape[0] * target_nonzeros
+                    self.mRecall_running += mRecall.sum(dim=0)
+
+        else:
+            match self.multidim_average:
+                case "global":
+                    self.samples += preds.shape[0]
+                    self.mRecall_running += mRecall * preds.shape[0]
+                case "samplewise":
+                    self.samples += preds.shape[0]
+                    self.mRecall_running += mRecall.sum(dim=0)
 
 
 class MulticlassMF1Score(MulticlassF1Score):

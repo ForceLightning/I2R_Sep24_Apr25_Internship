@@ -97,3 +97,17 @@ class ModelType(Enum):
     UNET = auto()
     UNET_PLUS_PLUS = auto()
     TRANS_UNET = auto()
+
+
+class MetricMode(Enum):
+    """Metric calculation mode.
+
+    Attributes:
+        INCLUDE_EMPTY_CLASS: Includes samples with no instances of class.
+        IGNORE_EMPTY_CLASS: Ignores samples with no instances of class for metrics for
+            that class.
+
+    """
+
+    INCLUDE_EMPTY_CLASS = auto()
+    IGNORE_EMPTY_CLASS = auto()

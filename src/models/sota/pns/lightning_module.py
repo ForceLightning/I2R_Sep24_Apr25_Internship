@@ -33,6 +33,7 @@ from utils.types import (
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
     LoadingMode,
+    MetricMode,
 )
 
 
@@ -64,6 +65,8 @@ class PNSLightningModule(CommonModelMixin):
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTICLASS_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
+        metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
+        metric_div_zero: float = 1.0,
     ):
         """Initialise the PNS+ Lightning Module wrapper.
 
@@ -91,6 +94,8 @@ class PNSLightningModule(CommonModelMixin):
             eval_classification_mode: The classification mode for evaluation.
             loading_mode: The loading mode.
             dump_memory_snapshot: Whether to dump memory snapshot.
+            metric_mode: Metric calculation mode.
+            metric_div_zero: How to handle division by zero operations.
 
         """
         super().__init__()
@@ -174,7 +179,7 @@ class PNSLightningModule(CommonModelMixin):
         # Sets metric if None.
         self.dice_metrics = {}
         self.other_metrics = {}
-        setup_metrics(self, metric, classes)
+        setup_metrics(self, metric, classes, metric_mode, metric_div_zero)
 
         # Attempts to load checkpoint if provided.
         self.weights_from_ckpt_path = weights_from_ckpt_path

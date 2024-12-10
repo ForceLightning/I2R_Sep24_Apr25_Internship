@@ -6,11 +6,13 @@ from typing import Any, Literal, override
 # PyTorch
 import torch
 from torch import Tensor
+from torchmetrics.functional.segmentation.utils import _ignore_background
 from torchmetrics.segmentation import GeneralizedDiceScore
-from torchmetrics.segmentation.generalized_dice import (
-    _generalized_dice_update,  # pyright: ignore[reportPrivateImportUsage]
-)
+from torchmetrics.utilities.checks import _check_same_shape
 from torchmetrics.utilities.compute import _safe_divide
+
+# First party imports
+from utils.types import MetricMode
 
 
 class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
@@ -33,6 +35,8 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         only_for_classes: list[bool] | list[int] | None = None,
         return_type: Literal["weighted_avg", "macro_avg", "per_class"] = "weighted_avg",
         dist_sync_on_step: bool = False,
+        zero_division: float = 1.0,
+        metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
         **kwargs: Any,
     ) -> None:
         """Initialise the Generalized Dice score metric.
@@ -47,6 +51,8 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             return_type: Type of score to return.
             dist_sync_on_step: Whether to synchronise on step.
             kwargs: Additional keyword arguments.
+            zero_division: What to replace division by 0 results with.
+            metric_mode: Determines how samples with empty classes are handled.
 
         """
         super().__init__(
@@ -57,6 +63,20 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             dist_sync_on_step=dist_sync_on_step,
             **kwargs,
         )
+
+        self.metric_mode = metric_mode
+
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.add_state(
+                "samples", default=torch.zeros((num_classes)), dist_reduce_fx="sum"
+            )
+            self.add_state("count", default=torch.zeros((1)), dist_reduce_fx="sum")
+
+            assert (
+                zero_division >= 0.0 and zero_division <= 1.0
+            ), f"zero_division must be 0 <= zero_division <= 1.0, but is {zero_division} instead."
+
+        self.zero_division = zero_division
 
         self.num_classes = num_classes if include_background else num_classes - 1
         if only_for_classes:
@@ -126,13 +146,22 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             + f"class distribution: {class_distribution if self.include_background else class_distribution[1:]}"
         )
 
-        self.weighted_avg_metric = (
-            _safe_divide(class_distribution @ self.score_running, self.samples)
-            if self.include_background
-            else _safe_divide(
-                class_distribution[1:] @ self.score_running[1:], self.samples
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.weighted_avg_metric = (
+                _safe_divide(class_distribution @ self.score_running, self.count).mean()
+                if self.include_background
+                else _safe_divide(
+                    class_distribution[1:] @ self.score_running[1:], self.count
+                ).mean()
             )
-        )
+        else:
+            self.weighted_avg_metric = (
+                _safe_divide(class_distribution @ self.score_running, self.samples)
+                if self.include_background
+                else _safe_divide(
+                    class_distribution[1:] @ self.score_running[1:], self.samples
+                )
+            )
 
         # Set params
         self.macro_avg_metric = self._compute_macro_avg()
@@ -151,24 +180,40 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         score = score[1:] if not self.include_background else score
         score = score[
             (
-                self.class_weights[1:] == 1.0
-                if not self.include_background
-                else self.class_weights == 1.0
+                self.class_weights == 1.0
+                if self.include_background
+                else self.class_weights[1:] == 1.0
             )
         ]
-        score = _safe_divide(score, self.samples).mean()
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            samples = self.samples if self.include_background else self.samples[1:]
+            samples = samples[
+                (
+                    self.class_weights == 1.0
+                    if self.include_background
+                    else self.class_weights[1:] == 1.0
+                )
+            ]
+        else:
+            samples = self.samples
+        score = _safe_divide(score, samples, self.zero_division).mean()
 
         return score
 
     def _compute_per_class(self) -> torch.Tensor:
         score = self.score_running * self.class_weights
-        score = _safe_divide(score, self.samples)
+        ret = _safe_divide(score, self.samples, self.zero_division)
 
-        return score
+        return ret
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        self.samples += preds.shape[0]
+        target_nonzeros = (
+            target.reshape(*target.shape[:2], -1).count_nonzero(dim=2).bool().long()
+        )
+
+        self.samples += target_nonzeros.sum(dim=0)
+        self.count += target.shape[0]
 
         for pred_sample, target_sample in zip(preds, target, strict=True):
             n_classes = (
@@ -184,9 +229,12 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 True,
                 self.weight_type,  # pyright: ignore[reportArgumentType]
             )
-            dice = _generalized_dice_compute(
-                numerator, denominator, self.per_class
-            ).sum(dim=0)
+            dice, weights = _generalized_dice_compute(
+                numerator, denominator, self.per_class, zero_division=self.zero_division
+            )
+            if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+                dice = dice * weights
+            dice = (dice * target_nonzeros.sum(dim=0).bool().long()).sum(dim=0)
 
             if self.weighted_average:
                 self.score_running += dice
@@ -208,18 +256,80 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 self.score += dice
 
 
+def _generalized_dice_update(
+    preds: Tensor,
+    target: Tensor,
+    num_classes: int,
+    include_background: bool,
+    weight_type: Literal["square", "simple", "linear"] = "square",
+    input_format: Literal["one-hot", "index"] = "one-hot",
+) -> tuple[Tensor, Tensor]:
+    """Update the state with the current prediction and target."""
+    _check_same_shape(preds, target)
+
+    if input_format == "index":
+        preds = torch.nn.functional.one_hot(preds, num_classes=num_classes).movedim(
+            -1, 1
+        )
+        target = torch.nn.functional.one_hot(target, num_classes=num_classes).movedim(
+            -1, 1
+        )
+
+    if preds.ndim < 3:
+        raise ValueError(
+            f"Expected both `preds` and `target` to have at least 3 dimensions, but got {preds.ndim}."
+        )
+
+    if not include_background:
+        preds, target = _ignore_background(preds, target)
+
+    reduce_axis = list(range(2, target.ndim))
+    intersection = torch.sum(preds * target, dim=reduce_axis)
+    target_sum = torch.sum(target, dim=reduce_axis)
+    pred_sum = torch.sum(preds, dim=reduce_axis)
+    cardinality = target_sum + pred_sum
+    if weight_type == "simple":
+        weights = 1.0 / target_sum
+    elif weight_type == "linear":
+        weights = torch.ones_like(target_sum)
+    elif weight_type == "square":
+        weights = 1.0 / (target_sum**2)
+    else:
+        raise ValueError(
+            f"Expected argument `weight_type` to be one of 'simple', 'linear', 'square', but got {weight_type}."
+        )
+
+    w_shape = weights.shape
+    weights_flatten = weights.flatten()
+    infs = torch.isinf(weights_flatten)
+    weights_flatten[infs] = 0
+    w_max = torch.max(weights, 0).values.repeat(w_shape[0], 1).T.flatten()
+    weights_flatten[infs] = w_max[infs]
+    weights = weights_flatten.reshape(w_shape)
+
+    numerator = 2.0 * intersection * weights
+    denominator = cardinality * weights
+    return numerator, denominator
+
+
 def _generalized_dice_compute(
-    numerator: Tensor, denominator: Tensor, per_class: bool = True
-) -> Tensor:
+    numerator: Tensor,
+    denominator: Tensor,
+    per_class: bool = True,
+    zero_division: float = 1.0,
+) -> tuple[Tensor, Tensor]:
     """Override the default computation by setting undefined behaviour to return `1.0`.
 
     Args:
         numerator: The numerator tensor.
         denominator: The denominator tensor.
         per_class: Whether to compute the per-class score.
+        zero_division: What to replace division by 0 results with.
 
     """
     if not per_class:
         numerator = torch.sum(numerator, 1)
         denominator = torch.sum(denominator, 1)
-    return _safe_divide(numerator, denominator, 1.0)
+    ret = _safe_divide(numerator, denominator, zero_division), denominator.bool().long()
+
+    return ret

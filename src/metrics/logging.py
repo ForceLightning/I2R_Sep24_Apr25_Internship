@@ -27,8 +27,9 @@ from metrics.jaccard import (
     MulticlassMJaccardIndex,
     MultilabelMJaccardIndex,
 )
+from metrics.precision_recall import MulticlassMPrecision, MulticlassMRecall
 from models.common import CommonModelMixin
-from utils.types import ClassificationMode
+from utils.types import ClassificationMode, MetricMode
 
 
 @torch.no_grad()
@@ -89,20 +90,32 @@ def shared_metric_calculation(
     return masks_preds_one_hot, masks_one_hot.bool()
 
 
-def setup_metrics(module: CommonModelMixin, metric: Metric | None, classes: int):
-    """Set up the metrics (dice scores) for the model.
+def setup_metrics(
+    module: CommonModelMixin,
+    metric: Metric | None,
+    classes: int,
+    metric_mode: MetricMode,
+    division_by_zero: float,
+):
+    """Set up the metrics (dice, jaccard, precision, recall) for the model.
 
     Args:
         module: The LightningModule instance.
         metric: The metric to use. If None, the default is the GeneralizedDiceScoreVariant.
         classes: The number of classes in the dataset.
+        metric_mode: Metric calculation mode.
+        division_by_zero: How to handle division by zero operations.
 
     """
     # Create the metrics for the model.
     for stage in ["train", "val", "test"]:
         # (1) Setup Dice collection.
         dice_combined_dict = _setup_dice(
-            metric, classes, module.eval_classification_mode
+            metric,
+            classes,
+            module.eval_classification_mode,
+            metric_mode,
+            division_by_zero,
         )
         dice_combined = MetricCollection(
             dice_combined_dict, prefix=f"{stage}/", compute_groups=True
@@ -111,8 +124,12 @@ def setup_metrics(module: CommonModelMixin, metric: Metric | None, classes: int)
         module.dice_metrics[stage] = dice_combined
 
         # (2) Setup Jaccard Index, Precision, and Recall collection.
-        jaccard_combined_dict = _setup_jaccard(module, classes)
-        prec_recall_combined_dict = _setup_precision_recall(module, classes)
+        jaccard_combined_dict = _setup_jaccard(
+            module, classes, metric_mode, division_by_zero
+        )
+        prec_recall_combined_dict = _setup_precision_recall(
+            module, classes, metric_mode, division_by_zero
+        )
         jacc_pred_rec_combined_dict = jaccard_combined_dict | prec_recall_combined_dict
         metrics_combined = MetricCollection(
             jacc_pred_rec_combined_dict,  # pyright: ignore[reportArgumentType]
@@ -127,7 +144,11 @@ def setup_metrics(module: CommonModelMixin, metric: Metric | None, classes: int)
 
 
 def _setup_dice(
-    metric: Metric | None, classes: int, eval_classification_mode: ClassificationMode
+    metric: Metric | None,
+    classes: int,
+    eval_classification_mode: ClassificationMode,
+    metric_mode: MetricMode,
+    division_by_zero: float,
 ) -> dict[str, Metric]:
     match eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE | ClassificationMode.MULTILABEL_MODE:
@@ -140,6 +161,8 @@ def _setup_dice(
                     include_background=False,
                     weight_type="linear",
                     weighted_average=True,
+                    zero_division=division_by_zero,
+                    metric_mode=metric_mode,
                 )
             )
 
@@ -150,6 +173,8 @@ def _setup_dice(
                 weight_type="linear",
                 weighted_average=True,
                 return_type="macro_avg",
+                zero_division=division_by_zero,
+                metric_mode=metric_mode,
             )
 
             dice_classes = GeneralizedDiceScoreVariant(
@@ -159,6 +184,8 @@ def _setup_dice(
                 weight_type="linear",
                 weighted_average=True,
                 return_type="per_class",
+                zero_division=division_by_zero,
+                metric_mode=metric_mode,
             )
 
             dice_class_2_3_weighted = GeneralizedDiceScoreVariant(
@@ -169,6 +196,8 @@ def _setup_dice(
                 weighted_average=True,
                 only_for_classes=[0, 0, 1, 1],
                 return_type="weighted_avg",
+                zero_division=division_by_zero,
+                metric_mode=metric_mode,
             )
 
             dice_class_2_3_macro = GeneralizedDiceScoreVariant(
@@ -179,6 +208,8 @@ def _setup_dice(
                 weighted_average=True,
                 only_for_classes=[0, 0, 1, 1],
                 return_type="macro_avg",
+                zero_division=division_by_zero,
+                metric_mode=metric_mode,
             )
 
             return {
@@ -192,23 +223,38 @@ def _setup_dice(
         case ClassificationMode.BINARY_CLASS_3_MODE:
             assert classes == 1 or classes == 2
             dice = BinaryF1Score(
-                multidim_average="samplewise", ignore_index=0, zero_division=1.0
+                multidim_average="samplewise",
+                ignore_index=0,
+                zero_division=division_by_zero,
             )
             return {"dice": dice}
 
 
-def _setup_jaccard(module: CommonModelMixin, classes: int):
+def _setup_jaccard(
+    module: CommonModelMixin,
+    classes: int,
+    metric_mode: MetricMode,
+    division_by_zero: float,
+):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
             non_agg_jaccard = MulticlassMJaccardIndex(
-                num_classes=classes, average="none", zero_division=1.0
+                num_classes=classes,
+                average="none",
+                metric_mode=metric_mode,
+                zero_division=division_by_zero,
             )
         case ClassificationMode.MULTILABEL_MODE:
             non_agg_jaccard = MultilabelMJaccardIndex(
-                num_labels=classes, average="none", zero_division=1.0
+                num_labels=classes,
+                average="none",
+                zero_division=division_by_zero,
             )
         case ClassificationMode.BINARY_CLASS_3_MODE:
-            jaccard = BinaryMJaccardIndex(ignore_index=0, zero_division=1.0)
+            jaccard = BinaryMJaccardIndex(
+                ignore_index=0,
+                zero_division=division_by_zero,
+            )
             return {"jaccard": jaccard}
 
     return {
@@ -216,20 +262,37 @@ def _setup_jaccard(module: CommonModelMixin, classes: int):
     }
 
 
-def _setup_precision_recall(module: CommonModelMixin, classes: int):
+def _setup_precision_recall(
+    module: CommonModelMixin,
+    classes: int,
+    metric_mode: MetricMode,
+    division_by_zero: float,
+):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
-            non_agg_recall = MulticlassRecall(
-                classes,
-                average="none",
-                multidim_average="samplewise",
-                zero_division=1.0,
+            recall = (
+                MulticlassMRecall
+                if metric_mode == MetricMode.IGNORE_EMPTY_CLASS
+                else MulticlassRecall
             )
-            non_agg_precision = MulticlassPrecision(
+            precision = (
+                MulticlassMPrecision
+                if metric_mode == MetricMode.IGNORE_EMPTY_CLASS
+                else MulticlassPrecision
+            )
+            non_agg_recall = recall(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=1.0,
+                metric_mode=metric_mode,
+                zero_division=division_by_zero,
+            )
+            non_agg_precision = precision(
+                classes,
+                average="none",
+                multidim_average="samplewise",
+                metric_mode=metric_mode,
+                zero_division=division_by_zero,
             )
 
         case ClassificationMode.MULTILABEL_MODE:
@@ -237,21 +300,27 @@ def _setup_precision_recall(module: CommonModelMixin, classes: int):
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=1.0,
+                metric_mode=metric_mode,
+                zero_division=division_by_zero,
             )
             non_agg_precision = MultilabelPrecision(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=1.0,
+                metric_mode=metric_mode,
+                zero_division=division_by_zero,
             )
 
         case ClassificationMode.BINARY_CLASS_3_MODE:
             recall = BinaryRecall(
-                multidim_average="samplewise", ignore_index=0, zero_division=1.0
+                multidim_average="samplewise",
+                ignore_index=0,
+                zero_division=division_by_zero,
             )
             precision = BinaryPrecision(
-                multidim_average="samplewise", ignore_index=0, zero_division=1.0
+                multidim_average="samplewise",
+                ignore_index=0,
+                zero_division=division_by_zero,
             )
             return {"recall": recall, "precision": precision}
 

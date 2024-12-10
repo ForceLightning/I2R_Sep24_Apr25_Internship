@@ -6,6 +6,7 @@ from typing import Any, Literal, Optional, override
 # PyTorch
 import torch
 from torch import Tensor
+from torch.nn import functional as F
 from torchmetrics.classification import (
     BinaryJaccardIndex,
     MulticlassConfusionMatrix,
@@ -33,6 +34,12 @@ from torchmetrics.functional.classification.jaccard import (
 )
 from torchmetrics.utilities.compute import _safe_divide
 
+# First party imports
+from utils.types import MetricMode
+
+# Local folders
+from .utils import _get_nonzeros_classwise
+
 
 class MulticlassMJaccardIndex(MulticlassJaccardIndex):
     """Calculate the mJaccard Index for multiclass tasks."""
@@ -48,6 +55,7 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
         zero_division: float = 0,
+        metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
         **kwargs: Any,
     ) -> None:
         super(MulticlassConfusionMatrix, self).__init__(**kwargs)
@@ -56,6 +64,7 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
                 num_classes, ignore_index, normalize=None
             )
             _multiclass_jaccard_index_arg_validation(num_classes, ignore_index, average)
+        self.metric_mode = metric_mode
         self.num_classes = num_classes
         self.ignore_index = ignore_index
         self.validate_args = validate_args
@@ -67,21 +76,35 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
             torch.zeros(num_classes, dtype=torch.float32),
             dist_reduce_fx="sum",
         )
-        self.add_state(
-            "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
-        )
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.add_state(
+                "samples",
+                torch.zeros(num_classes, dtype=torch.long),
+                dist_reduce_fx="sum",
+            )
+        else:
+            self.add_state(
+                "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
+            )
 
     @override
     def compute(self):
-        avg = self.mJaccard_running / self.samples
+        print(self.mJaccard_running, self.samples)
+        avg = _safe_divide(self.mJaccard_running, self.samples, self.zero_division)
         return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
         bs = preds.shape[0]
         self.samples += bs
+        target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
+            0, -1, *(range(1, len(target.shape)))
+        )
+        target_nonzeros = _get_nonzeros_classwise(target_nonzeros)
 
-        for pred_sample, target_sample in zip(preds, target, strict=True):
+        for i, (pred_sample, target_sample) in enumerate(
+            zip(preds, target, strict=True)
+        ):
             p_sample = pred_sample.view(1, self.num_classes, -1)
             t_sample = target_sample.view(1, -1)
 
@@ -99,7 +122,15 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
                 confmat, average=None, zero_division=self.zero_division
             )
 
-            self.mJaccard_running += jaccard
+            if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+                self.mJaccard_running += jaccard * target_nonzeros[i]
+            else:
+                self.mJaccard_running += jaccard
+
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.samples += (bs * target_nonzeros).sum(dim=0)
+        else:
+            self.samples += preds.shape[0]
 
 
 class MultilabelMJaccardIndex(MultilabelJaccardIndex):
