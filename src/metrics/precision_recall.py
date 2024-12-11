@@ -48,6 +48,7 @@ class MulticlassMPrecision(MulticlassPrecision):
         multidim_average: Literal["global", "samplewise"] = "global",
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
+        ignore_empty: bool = False,
         **kwargs: Any,
     ):
         zero_division = kwargs.pop("zero_division", 0)
@@ -68,13 +69,14 @@ class MulticlassMPrecision(MulticlassPrecision):
         self.ignore_index = ignore_index
         self.validate_args = validate_args
         self.zero_division = zero_division
+        self.ignore_empty = ignore_empty
 
         self.add_state(
             "mPrecision_running",
             torch.zeros(num_classes, dtype=torch.float32),
             dist_reduce_fx="sum",
         )
-        if zero_division == 0.0:
+        if ignore_empty:
             self.add_state(
                 "samples",
                 torch.zeros(num_classes, dtype=torch.long),
@@ -128,21 +130,20 @@ class MulticlassMPrecision(MulticlassPrecision):
             zero_division=self.zero_division,
         )
 
-        if self.zero_division == 0.0:
+        if self.ignore_empty:
+            self.samples += bs * target_nonzeros
             match self.multidim_average:
                 case "global":
-                    self.samples += bs * target_nonzeros
                     self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum()
                 case "samplewise":
-                    self.samples += bs * target_nonzeros
                     self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum(
                         dim=0
                     )
 
         else:
+            self.samples += preds.shape[0]
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
                     self.samples += preds.shape[0]
@@ -230,23 +231,21 @@ class MultilabelMPrecision(MultilabelPrecision):
             zero_division=self.zero_division,
         )
 
-        if self.zero_division == 0.0:
+        if self.ignore_empty:
             target_nonzeros = _get_nonzeros_classwise(target).sum(dim=0)
+            self.samples += preds.shape[0] * target_nonzeros
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0] * target_nonzeros
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0] * target_nonzeros
                     self.mPrecision_running += mPrecision.sum(dim=0)
 
         else:
+            self.samples += preds.shape[0]
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision.sum(dim=0)
 
 
@@ -265,6 +264,7 @@ class MulticlassMRecall(MulticlassRecall):
         multidim_average: Literal["global", "samplewise"] = "global",
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
+        ignore_empty: bool = False,
         **kwargs: Any,
     ):
         zero_division = kwargs.pop("zero_division", 0)
@@ -285,13 +285,14 @@ class MulticlassMRecall(MulticlassRecall):
         self.ignore_index = ignore_index
         self.validate_args = validate_args
         self.zero_division = zero_division
+        self.ignore_empty = ignore_empty
 
         self.add_state(
             "mRecall_running",
             torch.zeros(num_classes, dtype=torch.float32),
             dist_reduce_fx="sum",
         )
-        if zero_division == 0.0:
+        if self.ignore_empty:
             self.add_state(
                 "samples",
                 torch.zeros(num_classes, dtype=torch.long),
@@ -345,22 +346,20 @@ class MulticlassMRecall(MulticlassRecall):
             zero_division=self.zero_division,
         )
 
-        if self.zero_division == 0.0:
+        if self.ignore_empty:
+            self.samples += bs * target_nonzeros
             match self.multidim_average:
                 case "global":
-                    self.samples += bs * target_nonzeros
                     self.mRecall_running += (mRecall * bs * target_nonzeros).sum()
                 case "samplewise":
-                    self.samples += bs * target_nonzeros
                     self.mRecall_running += (mRecall * bs * target_nonzeros).sum(dim=0)
 
         else:
+            self.samples += preds.shape[0]
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0]
                     self.mRecall_running += mRecall * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0]
                     self.mRecall_running += mRecall.sum(dim=0)
 
 
@@ -445,10 +444,9 @@ class MultilabelMRecall(MultilabelRecall):
             zero_division=self.zero_division,
         )
 
+        self.samples += preds.shape[0]
         match self.multidim_average:
             case "global":
-                self.samples += preds.shape[0]
                 self.mRecall_running += mRecall * preds.shape[0]
             case "samplewise":
-                self.samples += preds.shape[0]
                 self.mRecall_running += mRecall.sum(dim=0)

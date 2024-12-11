@@ -47,6 +47,7 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         ignore_index: Optional[int] = None,
         validate_args: bool = True,
         zero_division: float = 0,
+        ignore_empty: bool = False,
         **kwargs: Any,
     ) -> None:
         super(MulticlassConfusionMatrix, self).__init__(**kwargs)
@@ -61,12 +62,15 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         self.average: Optional[Literal["macro", "none"]] = average
         self.zero_division = zero_division
         self.normalize = None
+        self.ignore_empty = ignore_empty
+
         self.add_state(
             "mJaccard_running",
             torch.zeros(num_classes, dtype=torch.float32),
             dist_reduce_fx="sum",
         )
-        if zero_division == 0.0:
+
+        if self.ignore_empty:
             self.add_state(
                 "samples",
                 torch.zeros(num_classes, dtype=torch.long),
@@ -86,7 +90,6 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
     @override
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
         bs = preds.shape[0]
-        self.samples += bs
         target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
             0, -1, *(range(1, len(target.shape)))
         )
@@ -112,12 +115,12 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
                 confmat, average=None, zero_division=self.zero_division
             )
 
-            if self.zero_division == 0.0:
+            if self.ignore_empty:
                 self.mJaccard_running += jaccard * target_nonzeros[i]
             else:
                 self.mJaccard_running += jaccard
 
-        if self.zero_division == 0.0:
+        if self.ignore_empty:
             self.samples += (bs * target_nonzeros).sum(dim=0)
         else:
             self.samples += preds.shape[0]
