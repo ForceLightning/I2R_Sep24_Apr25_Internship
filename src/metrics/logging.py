@@ -117,7 +117,8 @@ def _setup_dice(
             include_background=False,
             weight_type="linear",
             weighted_average=True,
-            zero_division=0.0,
+            zero_division=1.0,
+            ignore_empty=True,
         )
     )
 
@@ -128,7 +129,8 @@ def _setup_dice(
         weight_type="linear",
         weighted_average=True,
         return_type="macro_avg",
-        zero_division=0.0,
+        zero_division=1.0,
+        ignore_empty=True,
     )
 
     dice_classes = GeneralizedDiceScoreVariant(
@@ -138,7 +140,8 @@ def _setup_dice(
         weight_type="linear",
         weighted_average=True,
         return_type="per_class",
-        zero_division=0.0,
+        zero_division=1.0,
+        ignore_empty=True,
     )
 
     dice_class_2_3_weighted = GeneralizedDiceScoreVariant(
@@ -149,7 +152,8 @@ def _setup_dice(
         weighted_average=True,
         only_for_classes=[0, 0, 1, 1],
         return_type="weighted_avg",
-        zero_division=0.0,
+        zero_division=1.0,
+        ignore_empty=True,
     )
 
     dice_class_2_3_macro = GeneralizedDiceScoreVariant(
@@ -160,7 +164,8 @@ def _setup_dice(
         weighted_average=True,
         only_for_classes=[0, 0, 1, 1],
         return_type="macro_avg",
-        zero_division=0.0,
+        zero_division=1.0,
+        ignore_empty=True,
     )
 
     return {
@@ -176,11 +181,17 @@ def _setup_jaccard(module: CommonModelMixin, classes: int):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
             non_agg_jaccard = MulticlassMJaccardIndex(
-                num_classes=classes, average="none", zero_division=0.0
+                num_classes=classes,
+                average="none",
+                zero_division=1.0,
+                ignore_empty=True,
             )
         case ClassificationMode.MULTILABEL_MODE:
             non_agg_jaccard = MultilabelMJaccardIndex(
-                num_labels=classes, average="none", zero_division=0.0
+                num_labels=classes,
+                average="none",
+                zero_division=1.0,
+                ignore_empty=True,
             )
 
     return {
@@ -195,13 +206,15 @@ def _setup_precision_recall(module: CommonModelMixin, classes: int):
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=0.0,
+                zero_division=1.0,
+                ignore_empty=True,
             )
             non_agg_precision = MulticlassMPrecision(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                zero_division=0.0,
+                zero_division=1.0,
+                ignore_empty=True,
             )
 
         case ClassificationMode.MULTILABEL_MODE:

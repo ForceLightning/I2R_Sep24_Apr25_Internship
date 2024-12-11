@@ -33,6 +33,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
         return_type: Literal["weighted_avg", "macro_avg", "per_class"] = "weighted_avg",
         dist_sync_on_step: bool = False,
         zero_division: float = 1.0,
+        ignore_empty: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialise the Generalized Dice score metric.
@@ -48,6 +49,8 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             dist_sync_on_step: Whether to synchronise on step.
             kwargs: Additional keyword arguments.
             zero_division: What to replace division by 0 results with.
+            ignore_empty: Whether to ignore metrics for a class in a sample when there
+                are no pixels of that class.
 
         """
         super().__init__(
@@ -58,8 +61,9 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             dist_sync_on_step=dist_sync_on_step,
             **kwargs,
         )
+        self.ignore_empty = ignore_empty
 
-        if zero_division == 0.0:
+        if self.ignore_empty:
             self.add_state(
                 "samples", default=torch.zeros((num_classes)), dist_reduce_fx="sum"
             )
@@ -139,7 +143,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             + f"class distribution: {class_distribution if self.include_background else class_distribution[1:]}"
         )
 
-        if self.zero_division == 0.0:
+        if self.ignore_empty:
             self.weighted_avg_metric = (
                 _safe_divide(class_distribution @ self.score_running, self.count).mean()
                 if self.include_background
@@ -178,7 +182,7 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 else self.class_weights[1:] == 1.0
             )
         ]
-        if self.zero_division == 0.0:
+        if self.ignore_empty:
             samples = self.samples if self.include_background else self.samples[1:]
             samples = samples[
                 (
@@ -201,11 +205,14 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        target_nonzeros = (
-            target.reshape(*target.shape[:2], -1).count_nonzero(dim=2).bool().long()
-        )
-
-        self.samples += target_nonzeros.sum(dim=0)
+        target_nonzeros = None
+        if self.ignore_empty:
+            target_nonzeros = (
+                target.reshape(*target.shape[:2], -1).count_nonzero(dim=2).bool().long()
+            )
+            self.samples += target_nonzeros.sum(dim=0)
+        else:
+            self.samples += target.shape[0]
         self.count += target.shape[0]
 
         for pred_sample, target_sample in zip(preds, target, strict=True):
@@ -225,9 +232,10 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             dice, weights = _generalized_dice_compute(
                 numerator, denominator, self.per_class, zero_division=self.zero_division
             )
-            if self.zero_division == 0.0:
-                dice = dice * weights
-            dice = (dice * target_nonzeros.sum(dim=0).bool().long()).sum(dim=0)
+            if self.ignore_empty:
+                assert target_nonzeros is not None
+                dice *= weights
+                dice = (dice * target_nonzeros.sum(dim=0).bool().long()).sum(dim=0)
 
             if self.weighted_average:
                 self.score_running += dice
