@@ -7,12 +7,15 @@ from typing import Any, Literal, Optional, override
 import torch
 from torch import Tensor
 from torchmetrics.classification import (
+    MulticlassF1Score,
     MulticlassPrecision,
     MulticlassRecall,
+    MultilabelF1Score,
     MultilabelPrecision,
     MultilabelRecall,
 )
 from torchmetrics.classification.stat_scores import _AbstractStatScores
+from torchmetrics.functional.classification.f_beta import _fbeta_reduce
 from torchmetrics.functional.classification.precision_recall import (
     _precision_recall_reduce,
 )
@@ -390,3 +393,181 @@ class MultilabelMRecall(MultilabelRecall):
             case "samplewise":
                 self.samples += preds.shape[0]
                 self.mRecall_running += mRecall.sum(dim=0)
+
+
+class MulticlassMF1Score(MulticlassF1Score):
+    """Compute mF1 Score for multiclass tasks."""
+
+    mF1_running: Tensor
+    samples: Tensor
+
+    @override
+    def __init__(
+        self,
+        num_classes: int,
+        top_k: int = 1,
+        average: Literal["macro", "none"] = "macro",
+        multidim_average: Literal["global", "samplewise"] = "global",
+        ignore_index: Optional[int] = None,
+        validate_args: bool = True,
+        zero_division: float = 0.0,
+        **kwargs: Any,
+    ):
+        super(_AbstractStatScores, self).__init__(**kwargs)
+        if validate_args:
+            _multiclass_stat_scores_arg_validation(
+                num_classes,
+                top_k,
+                average,
+                multidim_average,
+                ignore_index,
+                zero_division,
+            )
+        self.num_classes = num_classes
+        self.top_k = top_k
+        self.average: Literal["macro", "none"] = average
+        self.multidim_average: Literal["global", "samplewise"] = multidim_average
+        self.ignore_index = ignore_index
+        self.validate_args = validate_args
+        self.zero_division = zero_division
+
+        self.add_state(
+            "mF1_running",
+            torch.zeros(num_classes, dtype=torch.float32),
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
+            "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
+        )
+
+    @override
+    def compute(self) -> Tensor:
+        avg = self.mF1_running / self.samples
+        return avg
+
+    @override
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        bs = preds.shape[0]
+        if self.validate_args:
+            _multiclass_stat_scores_tensor_validation(
+                preds,
+                target,
+                self.num_classes,
+                self.multidim_average,
+                self.ignore_index,
+            )
+        preds, target = _multiclass_stat_scores_format(preds, target, self.top_k)
+        tp, fp, tn, fn = _multiclass_stat_scores_update(
+            preds,
+            target,
+            self.num_classes,
+            self.top_k,
+            None,
+            self.multidim_average,
+            self.ignore_index,
+        )
+
+        mF1 = _fbeta_reduce(
+            tp,
+            fp,
+            tn,
+            fn,
+            beta=1.0,
+            average=None,
+            multidim_average=self.multidim_average,
+            multilabel=False,
+            zero_division=self.zero_division,
+        )
+
+        self.samples += bs
+        match self.multidim_average:
+            case "global":
+                self.mF1_running += mF1 * bs
+            case "samplewise":
+                self.mF1_running += mF1.sum(dim=0)
+
+
+class MultilabelMF1Score(MultilabelF1Score):
+    """Compute mF1 Score for multilabel tasks."""
+
+    mF1_running: Tensor
+    samples: Tensor
+
+    @override
+    def __init__(
+        self,
+        num_labels: int,
+        threshold: float = 0.5,
+        average: Optional[Literal["macro", "none"]] = "macro",
+        multidim_average: Literal["global", "samplewise"] = "global",
+        ignore_index: Optional[int] = None,
+        validate_args: bool = True,
+        zero_division: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
+        super(_AbstractStatScores, self).__init__(**kwargs)
+        if validate_args:
+            _multilabel_stat_scores_arg_validation(
+                num_labels,
+                threshold,
+                average,
+                multidim_average,
+                ignore_index,
+                zero_division,
+            )
+
+        self.num_labels = num_labels
+        self.threshold = threshold
+        self.average: Optional[Literal["macro", "none"]] = average
+        self.multidim_average: Literal["global", "samplewise"] = multidim_average
+        self.ignore_index = ignore_index
+        self.validate_args = validate_args
+        self.zero_division = zero_division
+
+        self.add_state(
+            "mF1_running",
+            torch.zeros(num_labels, dtype=torch.float32),
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
+            "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
+        )
+
+    @override
+    def compute(self) -> Tensor:
+        avg = self.mF1_running / self.samples
+        return avg
+
+    @override
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        bs = preds.shape[0]
+        if self.validate_args:
+            _multilabel_stat_scores_tensor_validation(
+                preds, target, self.num_labels, self.multidim_average, self.ignore_index
+            )
+
+        preds, target = _multilabel_stat_scores_format(
+            preds, target, self.num_labels, self.threshold, self.ignore_index
+        )
+        tp, fp, tn, fn = _multilabel_stat_scores_update(
+            preds, target, self.multidim_average
+        )
+
+        mF1 = _fbeta_reduce(
+            tp,
+            fp,
+            tn,
+            fn,
+            beta=1.0,
+            average=None,
+            multidim_average=self.multidim_average,
+            multilabel=True,
+            zero_division=self.zero_division,
+        )
+
+        self.samples += bs
+        match self.multidim_average:
+            case "global":
+                self.mF1_running += mF1 * bs
+            case "samplewise":
+                self.mF1_running += mF1.sum(dim=0)
