@@ -89,14 +89,12 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
 
     @override
     def compute(self):
-        print(self.mJaccard_running, self.samples)
         avg = _safe_divide(self.mJaccard_running, self.samples, self.zero_division)
         return avg
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
         bs = preds.shape[0]
-        self.samples += bs
         target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
             0, -1, *(range(1, len(target.shape)))
         )

@@ -208,12 +208,15 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
 
     @override
     def update(self, preds: Tensor, target: Tensor) -> None:
-        target_nonzeros = (
-            target.reshape(*target.shape[:2], -1).count_nonzero(dim=2).bool().long()
-        )
-
-        self.samples += target_nonzeros.sum(dim=0)
-        self.count += target.shape[0]
+        target_nonzeros = None
+        if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            target_nonzeros = (
+                target.reshape(*target.shape[:2], -1).count_nonzero(dim=2).bool().long()
+            )
+            self.samples += target_nonzeros.sum(dim=0)
+            self.count += target.shape[0]
+        else:
+            self.samples += target.shape[0]
 
         for pred_sample, target_sample in zip(preds, target, strict=True):
             n_classes = (
@@ -233,8 +236,11 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
                 numerator, denominator, self.per_class, zero_division=self.zero_division
             )
             if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
-                dice = dice * weights
-            dice = (dice * target_nonzeros.sum(dim=0).bool().long()).sum(dim=0)
+                assert target_nonzeros is not None
+                dice *= weights
+                dice = dice * target_nonzeros.sum(dim=0).bool().long()
+
+            dice = dice.sum(dim=0)
 
             if self.weighted_average:
                 self.score_running += dice

@@ -280,34 +280,34 @@ def _setup_precision_recall(
                 if metric_mode == MetricMode.IGNORE_EMPTY_CLASS
                 else MulticlassPrecision
             )
-            non_agg_recall = recall(
-                classes,
-                average="none",
-                multidim_average="samplewise",
-                metric_mode=metric_mode,
-                zero_division=division_by_zero,
+
+            default_kwargs = {
+                "num_classes": classes,
+                "average": "none",
+                "multidim_average": "samplewise",
+                "zero_division": division_by_zero,
+            }
+
+            default_kwargs = (
+                default_kwargs | {"metric_mode": metric_mode}
+                if metric_mode == MetricMode.IGNORE_EMPTY_CLASS
+                else default_kwargs
             )
-            non_agg_precision = precision(
-                classes,
-                average="none",
-                multidim_average="samplewise",
-                metric_mode=metric_mode,
-                zero_division=division_by_zero,
-            )
+
+            non_agg_recall = recall(**default_kwargs)
+            non_agg_precision = precision(**default_kwargs)
 
         case ClassificationMode.MULTILABEL_MODE:
             non_agg_recall = MultilabelRecall(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                metric_mode=metric_mode,
                 zero_division=division_by_zero,
             )
             non_agg_precision = MultilabelPrecision(
                 classes,
                 average="none",
                 multidim_average="samplewise",
-                metric_mode=metric_mode,
                 zero_division=division_by_zero,
             )
 
@@ -444,7 +444,7 @@ def _grouped_generalized_metric_logging(
                 per_class, torch.Tensor
             ), f"Metric `per_class` is of an invalid type: {type(per_class)}"
 
-            if metric_type in ["recall", "precision"]:
+            if metric_type in ["recall", "precision"] and per_class.ndim > 1:
                 per_class = per_class.mean(dim=0)
 
             avg = torch.zeros(1).to(module.device.type)

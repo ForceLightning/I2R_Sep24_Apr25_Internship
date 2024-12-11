@@ -139,18 +139,16 @@ class MulticlassMPrecision(MulticlassPrecision):
         if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
             match self.multidim_average:
                 case "global":
-                    self.samples += bs * target_nonzeros
                     self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum()
                 case "samplewise":
-                    self.samples += bs * target_nonzeros
                     self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum(
                         dim=0
                     )
 
         else:
+            self.samples += preds.shape[0]
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
                     self.samples += preds.shape[0]
@@ -206,7 +204,7 @@ class MultilabelMPrecision(MultilabelPrecision):
 
     @override
     def compute(self) -> Tensor:
-        avg = self.mPrecision_running / self.samples
+        avg = _safe_divide(self.mPrecision_running, self.samples, self.zero_division)
         return avg
 
     @override
@@ -242,21 +240,19 @@ class MultilabelMPrecision(MultilabelPrecision):
 
         if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
             target_nonzeros = _get_nonzeros_classwise(target).sum(dim=0)
+            self.samples += preds.shape[0] * target_nonzeros
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0] * target_nonzeros
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0] * target_nonzeros
                     self.mPrecision_running += mPrecision.sum(dim=0)
 
         else:
+            self.samples += preds.shape[0]
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision.sum(dim=0)
 
 
@@ -316,7 +312,7 @@ class MulticlassMRecall(MulticlassRecall):
 
     @override
     def compute(self) -> Tensor:
-        avg = self.mRecall_running / self.samples
+        avg = _safe_divide(self.mRecall_running, self.samples, self.zero_division)
         return avg
 
     @override
@@ -360,19 +356,16 @@ class MulticlassMRecall(MulticlassRecall):
         if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
             match self.multidim_average:
                 case "global":
-                    self.samples += bs * target_nonzeros
                     self.mRecall_running += (mRecall * bs * target_nonzeros).sum()
                 case "samplewise":
-                    self.samples += bs * target_nonzeros
                     self.mRecall_running += (mRecall * bs * target_nonzeros).sum(dim=0)
 
         else:
+            self.samples += preds.shape[0]
             match self.multidim_average:
                 case "global":
-                    self.samples += preds.shape[0]
                     self.mRecall_running += mRecall * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0]
                     self.mRecall_running += mRecall.sum(dim=0)
 
 
@@ -425,7 +418,7 @@ class MultilabelMRecall(MultilabelRecall):
 
     @override
     def compute(self) -> Tensor:
-        avg = self.mRecall_running / self.samples
+        avg = _safe_divide(self.mRecall_running, self.samples, self.zero_division)
         return avg
 
     @override
@@ -526,7 +519,7 @@ class MulticlassMF1Score(MulticlassF1Score):
 
     @override
     def compute(self) -> Tensor:
-        avg = self.mF1_running / self.samples
+        avg = _safe_divide(self.mF1_running, self.samples, self.zero_division)
         return avg
 
     @override
@@ -619,7 +612,7 @@ class MultilabelMF1Score(MultilabelF1Score):
 
     @override
     def compute(self) -> Tensor:
-        avg = self.mF1_running / self.samples
+        avg = _safe_divide(self.mF1_running, self.samples, self.zero_division)
         return avg
 
     @override
