@@ -115,6 +115,7 @@ class AFB_URRLightningModule(CommonModelMixin):
         self.budget = budget
         self._use_original = use_original
         self.loading_mode = loading_mode
+        self.classes = classes
 
         if self._use_original:
             assert batch_size == 1, "Batch size must be 1 for the original model."
@@ -334,7 +335,10 @@ class AFB_URRLightningModule(CommonModelMixin):
 
             uncertainty = uncertainty if uncertainty else 0.0
 
-            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            if (
+                self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
                 # GUARD: Check that the sizes match.
                 assert (
                     masks_proba.size() == masks.size()

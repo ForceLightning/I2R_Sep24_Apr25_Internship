@@ -142,6 +142,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
+        self.classes = classes
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -222,17 +223,16 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                         f"Loss type of {loss} is not implemented!"
                     )
         # Otherwise, set if nn.Module
+        elif isinstance(loss, nn.Module):
+            self.loss = loss
         else:
-            self.loss = (
-                loss
-                if isinstance(loss, nn.Module)
-                # If none
-                else (
-                    DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
-                    if dl_classification_mode == ClassificationMode.MULTILABEL_MODE
-                    else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
-                )
-            )
+            match dl_classification_mode:
+                case ClassificationMode.MULTICLASS_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+                case ClassificationMode.MULTILABEL_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+                case ClassificationMode.BINARY_CLASS_3_MODE:
+                    self.loss = DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
         self.de_transform = Compose(
             [
@@ -331,7 +331,10 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 images_input, res_input
             )  # pyright: ignore[reportCallIssue] # False positive
 
-            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            if (
+                self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
                 # GUARD: Check that the sizes match.
                 assert (
                     masks_proba.size() == masks.size()
@@ -436,7 +439,10 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             images_input, res_input
         )  # pyright: ignore[reportCallIssue] # False positive
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()

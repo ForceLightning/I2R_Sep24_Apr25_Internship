@@ -8,7 +8,7 @@ import pickle
 import random
 from typing import Any, Literal, Protocol, override
 
-# Third-Party
+# Scientific Libraries
 import numpy as np
 from numpy import typing as npt
 
@@ -253,6 +253,11 @@ class LGEDataset(
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
+            case ClassificationMode.BINARY_CLASS_3_MODE:
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
+                out_mask = lab_mask_one_hot[:, :, 3].bool()
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
@@ -260,7 +265,11 @@ class LGEDataset(
 
         out_img, out_mask = self.transform_together(out_img, out_mask)
 
-        return out_img, out_mask.squeeze().long(), img_name
+        out_mask = out_mask.squeeze().long()
+        if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            out_mask = out_mask.unsqueeze(0)
+
+        return out_img, out_mask, img_name
 
     def __len__(self) -> int:
         """Get the length of the dataset."""
@@ -397,6 +406,11 @@ class CineDataset(
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
+            case ClassificationMode.BINARY_CLASS_3_MODE:
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
+                out_mask = lab_mask_one_hot[:, :, 3].bool()
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
@@ -408,7 +422,11 @@ class CineDataset(
         f, c, h, w = out_video.shape
         out_video = out_video.reshape(f * c, h, w)
 
-        return out_video, out_mask.squeeze().long(), img_name
+        out_mask = out_mask.squeeze().long()
+        if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            out_mask = out_mask.unsqueeze(0)
+
+        return out_video, out_mask, img_name
 
     def __len__(self) -> int:
         """Get the length of the dataset."""
@@ -525,6 +543,11 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
+            case ClassificationMode.BINARY_CLASS_3_MODE:
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
+                out_mask = lab_mask_one_hot[:, :, 3].bool()
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
@@ -539,8 +562,11 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
         out_video = concatenate_imgs(
             self.frames, self.select_frame_method, combined_video
         )
+        out_mask = out_mask.squeeze().long()
+        if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            out_mask = out_mask.unsqueeze(0)
 
-        return out_video, out_mask.squeeze().long(), img_name
+        return out_video, out_mask, img_name
 
 
 class TwoStreamDataset(
@@ -697,6 +723,11 @@ class TwoStreamDataset(
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
+            case ClassificationMode.BINARY_CLASS_3_MODE:
+                lab_mask_one_hot = F.one_hot(
+                    mask_t.squeeze(), num_classes=4
+                )  # H x W x C
+                out_mask = lab_mask_one_hot[:, :, 3].bool()
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
@@ -707,11 +738,15 @@ class TwoStreamDataset(
             out_lge, combined_cines, mask_t
         )
 
+        # Combine the Cine channels.
         f, c, h, w = combined_cines.shape
         out_cine = combined_cines.reshape(f * c, h, w)
 
-        # Combine the Cine channels.
-        return out_lge, out_cine, out_mask.squeeze().long(), lge_name
+        out_mask = out_mask.squeeze().long()
+        if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            out_mask = out_mask.unsqueeze(0)
+
+        return out_lge, out_cine, out_mask, lge_name
 
     def __len__(self):
         """Get the length of the dataset."""
@@ -866,6 +901,12 @@ class ResidualTwoPlusOneDataset(
 
             case ClassificationMode.MULTICLASS_MODE:
                 pass
+            case ClassificationMode.BINARY_CLASS_3_MODE:
+                lab_mask_one_hot = F.one_hot(
+                    out_mask.squeeze(), num_classes=4
+                )  # H x W x C
+                out_mask = lab_mask_one_hot[:, :, 3].bool()
+
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
@@ -882,7 +923,11 @@ class ResidualTwoPlusOneDataset(
         )
         out_residuals = out_video - torch.roll(out_video, -1, 0)
 
-        return out_video, out_residuals, out_mask.squeeze().long(), img_name
+        out_mask = out_mask.squeeze().long()
+        if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            out_mask = out_mask.unsqueeze(0)
+
+        return out_video, out_residuals, out_mask, img_name
 
     def _get_opticalflow(
         self, index: int

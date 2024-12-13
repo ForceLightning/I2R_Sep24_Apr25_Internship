@@ -5,13 +5,18 @@ from typing import Any, Literal, Optional, override
 
 # PyTorch
 import torch
+from torch import Tensor
 from torchmetrics.classification import (
+    BinaryJaccardIndex,
     MulticlassConfusionMatrix,
     MulticlassJaccardIndex,
     MultilabelConfusionMatrix,
     MultilabelJaccardIndex,
 )
 from torchmetrics.functional.classification.confusion_matrix import (
+    _binary_confusion_matrix_format,
+    _binary_confusion_matrix_tensor_validation,
+    _binary_confusion_matrix_update,
     _multiclass_confusion_matrix_arg_validation,
     _multiclass_confusion_matrix_format,
     _multiclass_confusion_matrix_tensor_validation,
@@ -26,13 +31,14 @@ from torchmetrics.functional.classification.jaccard import (
     _multiclass_jaccard_index_arg_validation,
     _multilabel_jaccard_index_arg_validation,
 )
+from torchmetrics.utilities.compute import _safe_divide
 
 
 class MulticlassMJaccardIndex(MulticlassJaccardIndex):
     """Calculate the mJaccard Index for multiclass tasks."""
 
-    mJaccard_running: torch.Tensor
-    samples: torch.Tensor
+    mJaccard_running: Tensor
+    samples: Tensor
 
     @override
     def __init__(
@@ -71,7 +77,7 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
         return avg
 
     @override
-    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+    def update(self, preds: Tensor, target: Tensor) -> None:
         bs = preds.shape[0]
         self.samples += bs
 
@@ -99,8 +105,8 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
 class MultilabelMJaccardIndex(MultilabelJaccardIndex):
     """Calculate the mJaccard Index for multilabel tasks."""
 
-    mJaccard_running: torch.Tensor
-    samples: torch.Tensor
+    mJaccard_running: Tensor
+    samples: Tensor
 
     @override
     def __init__(
@@ -142,7 +148,7 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
         return avg
 
     @override
-    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+    def update(self, preds: Tensor, target: Tensor) -> None:
         bs = preds.shape[0]
         self.samples += bs
 
@@ -163,6 +169,60 @@ class MultilabelMJaccardIndex(MultilabelJaccardIndex):
             )
             jaccard = _jaccard_index_reduce(
                 confmat, average=None, zero_division=self.zero_division
+            )
+
+            self.mJaccard_running += jaccard
+
+
+class BinaryMJaccardIndex(BinaryJaccardIndex):
+    """Calculate the mJaccard Index for binary tasks."""
+
+    mJaccard_running: Tensor
+    samples: Tensor
+
+    @override
+    def __init__(
+        self,
+        threshold: float = 0.5,
+        ignore_index: Optional[int] = None,
+        validate_args: bool = True,
+        zero_division: float = 1.0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(threshold, ignore_index, validate_args, zero_division)
+        self.add_state(
+            "mJaccard_running",
+            torch.zeros(1, dtype=torch.float32),
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
+            "samples", torch.zeros(1, dtype=torch.long), dist_reduce_fx="sum"
+        )
+
+    @override
+    def compute(self):
+        avg = _safe_divide(self.mJaccard_running, self.samples, self.zero_division)
+        return avg
+
+    @override
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        bs = preds.shape[0]
+        self.samples += bs
+
+        for pred_sample, target_sample in zip(preds, target, strict=True):
+            p_sample = pred_sample.view(1, -1)
+            t_sample = target_sample.view(1, -1)
+
+            if self.validate_args:
+                _binary_confusion_matrix_tensor_validation(
+                    p_sample, t_sample, self.ignore_index
+                )
+            p_sample, t_sample = _binary_confusion_matrix_format(
+                p_sample, t_sample, self.threshold, self.ignore_index
+            )
+            confmat = _binary_confusion_matrix_update(p_sample, t_sample)
+            jaccard = _jaccard_index_reduce(
+                confmat, average="binary", zero_division=self.zero_division
             )
 
             self.mJaccard_running += jaccard

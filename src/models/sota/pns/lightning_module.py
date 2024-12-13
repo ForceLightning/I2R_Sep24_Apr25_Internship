@@ -100,6 +100,7 @@ class PNSLightningModule(CommonModelMixin):
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
         self.in_channels = in_channels
+        self.classes = classes
 
         # Trace memory usage.
         if self.dump_memory_snapshot:
@@ -107,7 +108,9 @@ class PNSLightningModule(CommonModelMixin):
                 enabled="all", context="all", stacks="python"
             )
 
-        self.model = PNSSegModel((224, 224), classes, num_frames)
+        self.model = PNSSegModel(
+            (224, 224), classes, num_frames
+        )  # pyright: ignore[reportAttributeAccessIssue]
 
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
@@ -219,7 +222,10 @@ class PNSLightningModule(CommonModelMixin):
                 images_input
             )  # pyright: ignore[reportCallIssue]
 
-            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            if (
+                self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
                 # GUARD: Check that the sizes match.
                 assert (
                     masks_proba.size() == masks.size()
@@ -315,7 +321,10 @@ class PNSLightningModule(CommonModelMixin):
                 images_input
             )  # pyright: ignore[reportCallIssue]
 
-            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            if (
+                self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
                 # GUARD: Check that the sizes match.
                 assert (
                     masks_proba.size() == masks.size()
