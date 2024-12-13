@@ -12,7 +12,7 @@ from lightning.pytorch.cli import LightningArgumentParser
 
 # First party imports
 from cli.common import I2RInternshipCommonCLI
-from models.tscse import TSCSEUnetLightning
+from models.tscse.tscse import TSCSEUnetLightning
 from models.two_plus_one import get_temporal_conv_type
 from two_plus_one import TwoPlusOneDataModule
 

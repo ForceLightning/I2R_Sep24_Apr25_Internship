@@ -131,6 +131,7 @@ class VivimLightningModule(CommonModelMixin):
         self.classes = classes
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
+        self.classes = classes
 
         # Trace memory usage.
         if self.dump_memory_snapshot:
@@ -283,7 +284,10 @@ class VivimLightningModule(CommonModelMixin):
         masks_proba = masks_proba.reshape(bs, self.num_frames, self.classes, h, w)
         masks_proba = masks_proba[:, 0, :, :, :]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
@@ -383,7 +387,10 @@ class VivimLightningModule(CommonModelMixin):
         masks_proba = masks_proba.reshape(bs, self.num_frames, self.classes, h, w)
         masks_proba = masks_proba[:, 0, :, :, :]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()

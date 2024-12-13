@@ -807,6 +807,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
         self.loading_mode = loading_mode
+        self.classes = classes
 
         # Sets loss if it's a string
         if isinstance(loss, str):
@@ -846,17 +847,16 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
                         f"Loss type of {loss} is not implemented!"
                     )
         # Otherwise, set if nn.Module
+        elif isinstance(loss, nn.Module):
+            self.loss = loss
         else:
-            self.loss = (
-                loss
-                if isinstance(loss, nn.Module)
-                # If none
-                else (
-                    DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
-                    if dl_classification_mode == ClassificationMode.MULTILABEL_MODE
-                    else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
-                )
-            )
+            match dl_classification_mode:
+                case ClassificationMode.MULTICLASS_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+                case ClassificationMode.MULTILABEL_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+                case ClassificationMode.BINARY_CLASS_3_MODE:
+                    self.loss = DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
@@ -942,7 +942,10 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
                 images_input
             )  # pyright: ignore[reportCallIssue] False positive
 
-            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            if (
+                self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
                 # GUARD: Check that the sizes match.
                 assert (
                     masks_proba.size() == masks.size()
@@ -1021,7 +1024,10 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             images_input
         )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()

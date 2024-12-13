@@ -125,6 +125,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         """Learning rate for training."""
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
+        self.classes = classes
         self.urr_source = urr_source
         """URR low level features source."""
         self.uncertainty_mode = uncertainty_mode
@@ -213,17 +214,16 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                         f"Loss type of {loss} is not implemented!"
                     )
         # Otherwise, set if nn.Module
+        elif isinstance(loss, nn.Module):
+            self.loss = loss
         else:
-            self.loss = (
-                loss
-                if isinstance(loss, nn.Module)
-                # If none
-                else (
-                    DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
-                    if dl_classification_mode == ClassificationMode.MULTILABEL_MODE
-                    else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
-                )
-            )
+            match dl_classification_mode:
+                case ClassificationMode.MULTICLASS_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+                case ClassificationMode.MULTILABEL_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+                case ClassificationMode.BINARY_CLASS_3_MODE:
+                    self.loss = DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
         self.de_transform = Compose(
             [

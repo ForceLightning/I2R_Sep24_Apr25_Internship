@@ -47,11 +47,13 @@ class ClassificationMode(Enum):
     Attributes:
         MULTICLASS_MODE: The model is trained to predict a single class for each pixel.
         MULTILABEL_MODE: The model is trained to predict multiple classes for each pixel.
-
+        BINARY_CLASS_3_MODE: The model is trained to predict a single class for a binary
+            classification task for each pixel.
     """
 
     MULTICLASS_MODE = auto()
     MULTILABEL_MODE = auto()
+    BINARY_CLASS_3_MODE = auto()
 
 
 class ResidualMode(Enum):

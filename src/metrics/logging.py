@@ -10,15 +10,22 @@ import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from torch.nn import functional as F
 from torchmetrics import Metric, MetricCollection
+from torchmetrics.classification import (
+    BinaryF1Score,
+    BinaryPrecision,
+    BinaryRecall,
+    MulticlassPrecision,
+    MulticlassRecall,
+    MultilabelPrecision,
+    MultilabelRecall,
+)
 
 # First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
-from metrics.jaccard import MulticlassMJaccardIndex, MultilabelMJaccardIndex
-from metrics.precision_recall import (
-    MulticlassMPrecision,
-    MulticlassMRecall,
-    MultilabelMPrecision,
-    MultilabelMRecall,
+from metrics.jaccard import (
+    BinaryMJaccardIndex,
+    MulticlassMJaccardIndex,
+    MultilabelMJaccardIndex,
 )
 from models.common import CommonModelMixin
 from utils.types import ClassificationMode
@@ -41,30 +48,43 @@ def shared_metric_calculation(
         prefix: The runtime mode (train, val, test).
 
     """
-    masks_one_hot = F.one_hot(masks.squeeze(dim=1), num_classes=4).permute(0, -1, 1, 2)
+    if module.eval_classification_mode != ClassificationMode.BINARY_CLASS_3_MODE:
+        masks_one_hot = F.one_hot(
+            masks.squeeze(dim=1), num_classes=module.classes
+        ).permute(0, -1, 1, 2)
+    else:
+        masks_one_hot = masks
 
     # HACK: I'd be lying if I said otherwise. This checks the 4 possibilities (for now)
     # of the combinations of classification modes and sets the metrics correctly.
-    if module.eval_classification_mode == ClassificationMode.MULTILABEL_MODE:
-        masks_preds_one_hot = masks_proba.sigmoid()  # BS x C x H x W
-        if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
-            module.dice_metrics[prefix].update(masks_preds_one_hot > 0.5, masks_one_hot)
-            module.other_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
-        else:
-            module.dice_metrics[prefix].update(masks_preds_one_hot > 0.5, masks)
-            module.other_metrics[prefix].update(masks_preds_one_hot, masks)
-    elif module.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
-        # Output: BS x C x H x W
-        masks_preds = masks_proba.softmax(dim=1)
-        masks_preds_one_hot = F.one_hot(
-            masks_preds.argmax(dim=1), num_classes=4
-        ).permute(0, -1, 1, 2)
-        module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
-        module.other_metrics[prefix].update(masks_preds, masks)
-    else:
-        raise NotImplementedError(
-            f"The mode {module.eval_classification_mode.name} is not implemented."
-        )
+    match module.eval_classification_mode:
+        case ClassificationMode.MULTILABEL_MODE:
+            masks_preds_one_hot = masks_proba.sigmoid()  # BS x C x H x W
+            if module.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                module.dice_metrics[prefix].update(
+                    masks_preds_one_hot > 0.5, masks_one_hot
+                )
+                module.other_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+            else:
+                module.dice_metrics[prefix].update(masks_preds_one_hot > 0.5, masks)
+                module.other_metrics[prefix].update(masks_preds_one_hot, masks)
+        case ClassificationMode.MULTICLASS_MODE:
+            # Output: BS x C x H x W
+            masks_preds = masks_proba.softmax(dim=1)
+            masks_preds_one_hot = F.one_hot(
+                masks_preds.argmax(dim=1), num_classes=4
+            ).permute(0, -1, 1, 2)
+            module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+            module.other_metrics[prefix].update(masks_preds, masks)
+        case ClassificationMode.BINARY_CLASS_3_MODE:
+            masks_preds = masks_proba.sigmoid()
+            masks_preds_one_hot = masks_preds > 0.5
+            module.dice_metrics[prefix].update(masks_preds, masks_one_hot)
+            module.other_metrics[prefix].update(masks_preds, masks)
+        case _:
+            raise NotImplementedError(
+                f"The mode {module.eval_classification_mode.name} is not implemented."
+            )
 
     return masks_preds_one_hot, masks_one_hot.bool()
 
@@ -81,7 +101,9 @@ def setup_metrics(module: CommonModelMixin, metric: Metric | None, classes: int)
     # Create the metrics for the model.
     for stage in ["train", "val", "test"]:
         # (1) Setup Dice collection.
-        dice_combined_dict = _setup_dice(metric, classes)
+        dice_combined_dict = _setup_dice(
+            metric, classes, module.eval_classification_mode
+        )
         dice_combined = MetricCollection(
             dice_combined_dict, prefix=f"{stage}/", compute_groups=True
         )
@@ -105,66 +127,74 @@ def setup_metrics(module: CommonModelMixin, metric: Metric | None, classes: int)
 
 
 def _setup_dice(
-    metric: Metric | None,
-    classes: int,
-):
-    dice_weighted = (
-        metric
-        if metric
-        else GeneralizedDiceScoreVariant(
-            num_classes=classes,
-            per_class=True,
-            include_background=False,
-            weight_type="linear",
-            weighted_average=True,
-        )
-    )
+    metric: Metric | None, classes: int, eval_classification_mode: ClassificationMode
+) -> dict[str, Metric]:
+    match eval_classification_mode:
+        case ClassificationMode.MULTICLASS_MODE | ClassificationMode.MULTILABEL_MODE:
+            dice_weighted = (
+                metric
+                if metric
+                else GeneralizedDiceScoreVariant(
+                    num_classes=classes,
+                    per_class=True,
+                    include_background=False,
+                    weight_type="linear",
+                    weighted_average=True,
+                )
+            )
 
-    dice_macro = GeneralizedDiceScoreVariant(
-        num_classes=classes,
-        per_class=True,
-        include_background=False,
-        weight_type="linear",
-        weighted_average=True,
-        return_type="macro_avg",
-    )
+            dice_macro = GeneralizedDiceScoreVariant(
+                num_classes=classes,
+                per_class=True,
+                include_background=False,
+                weight_type="linear",
+                weighted_average=True,
+                return_type="macro_avg",
+            )
 
-    dice_classes = GeneralizedDiceScoreVariant(
-        num_classes=classes,
-        per_class=True,
-        include_background=False,
-        weight_type="linear",
-        weighted_average=True,
-        return_type="per_class",
-    )
+            dice_classes = GeneralizedDiceScoreVariant(
+                num_classes=classes,
+                per_class=True,
+                include_background=False,
+                weight_type="linear",
+                weighted_average=True,
+                return_type="per_class",
+            )
 
-    dice_class_2_3_weighted = GeneralizedDiceScoreVariant(
-        num_classes=classes,
-        per_class=True,
-        include_background=False,
-        weight_type="linear",
-        weighted_average=True,
-        only_for_classes=[0, 0, 1, 1],
-        return_type="weighted_avg",
-    )
+            dice_class_2_3_weighted = GeneralizedDiceScoreVariant(
+                num_classes=classes,
+                per_class=True,
+                include_background=False,
+                weight_type="linear",
+                weighted_average=True,
+                only_for_classes=[0, 0, 1, 1],
+                return_type="weighted_avg",
+            )
 
-    dice_class_2_3_macro = GeneralizedDiceScoreVariant(
-        num_classes=classes,
-        per_class=True,
-        include_background=False,
-        weight_type="linear",
-        weighted_average=True,
-        only_for_classes=[0, 0, 1, 1],
-        return_type="macro_avg",
-    )
+            dice_class_2_3_macro = GeneralizedDiceScoreVariant(
+                num_classes=classes,
+                per_class=True,
+                include_background=False,
+                weight_type="linear",
+                weighted_average=True,
+                only_for_classes=[0, 0, 1, 1],
+                return_type="macro_avg",
+            )
 
-    return {
-        "dice_weighted_avg": dice_weighted,
-        "dice_macro_avg": dice_macro,
-        "dice_per_class": dice_classes,
-        "dice_weighted_class_2_3": dice_class_2_3_weighted,
-        "dice_macro_class_2_3": dice_class_2_3_macro,
-    }
+            return {
+                "dice_weighted_avg": dice_weighted,
+                "dice_macro_avg": dice_macro,
+                "dice_per_class": dice_classes,
+                "dice_weighted_class_2_3": dice_class_2_3_weighted,
+                "dice_macro_class_2_3": dice_class_2_3_macro,
+            }
+
+        case ClassificationMode.BINARY_CLASS_3_MODE:
+            assert classes == 1 or classes == 2
+            dice = BinaryF1Score(
+                multidim_average="samplewise", ignore_index=0, zero_division=1.0
+            )
+            return {"dice": dice}
 
 
 def _setup_jaccard(module: CommonModelMixin, classes: int):
@@ -177,6 +207,9 @@ def _setup_jaccard(module: CommonModelMixin, classes: int):
             non_agg_jaccard = MultilabelMJaccardIndex(
                 num_labels=classes, average="none", zero_division=1.0
             )
+        case ClassificationMode.BINARY_CLASS_3_MODE:
+            jaccard = BinaryMJaccardIndex(ignore_index=0, zero_division=1.0)
+            return {"jaccard": jaccard}
 
     return {
         "jaccard_per_class": non_agg_jaccard,
@@ -186,13 +219,13 @@ def _setup_jaccard(module: CommonModelMixin, classes: int):
 def _setup_precision_recall(module: CommonModelMixin, classes: int):
     match module.eval_classification_mode:
         case ClassificationMode.MULTICLASS_MODE:
-            non_agg_recall = MulticlassMRecall(
+            non_agg_recall = MulticlassRecall(
                 classes,
                 average="none",
                 multidim_average="samplewise",
                 zero_division=1.0,
             )
-            non_agg_precision = MulticlassMPrecision(
+            non_agg_precision = MulticlassPrecision(
                 classes,
                 average="none",
                 multidim_average="samplewise",
@@ -200,18 +233,27 @@ def _setup_precision_recall(module: CommonModelMixin, classes: int):
             )
 
         case ClassificationMode.MULTILABEL_MODE:
-            non_agg_recall = MultilabelMRecall(
+            non_agg_recall = MultilabelRecall(
                 classes,
                 average="none",
                 multidim_average="samplewise",
                 zero_division=1.0,
             )
-            non_agg_precision = MultilabelMPrecision(
+            non_agg_precision = MultilabelPrecision(
                 classes,
                 average="none",
                 multidim_average="samplewise",
                 zero_division=1.0,
             )
+
+        case ClassificationMode.BINARY_CLASS_3_MODE:
+            recall = BinaryRecall(
+                multidim_average="samplewise", ignore_index=0, zero_division=1.0
+            )
+            precision = BinaryPrecision(
+                multidim_average="samplewise", ignore_index=0, zero_division=1.0
+            )
+            return {"recall": recall, "precision": precision}
 
     return {
         "recall_per_class": non_agg_recall,
@@ -292,7 +334,7 @@ def _single_generalized_dice_logging(
 
 
 def _grouped_generalized_metric_logging(
-    module: L.LightningModule,
+    module: CommonModelMixin,
     dice_metric_obj: MetricCollection,
     other_metric_obj: MetricCollection,
     prefix: str,
@@ -333,6 +375,9 @@ def _grouped_generalized_metric_logging(
                 per_class, torch.Tensor
             ), f"Metric `per_class` is of an invalid type: {type(per_class)}"
 
+            if metric_type in ["recall", "precision"]:
+                per_class = per_class.mean(dim=0)
+
             avg = torch.zeros(1).to(module.device.type)
             for i, class_metric in enumerate(per_class):
                 if i == 0:  # NOTE: Skips background class.
@@ -348,14 +393,23 @@ def _grouped_generalized_metric_logging(
 
             # Remove the per_class metric from the results.
             del results[f"{prefix}/{metric_type}_per_class"]
+        elif module.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            if (
+                metric_result := results.get(f"{prefix}/{metric_type}", None)
+            ) is not None:
+                results[f"{prefix}/{metric_type}_class_3"] = (
+                    metric_result if metric_type == "jaccard" else metric_result[1]
+                )
+                if prefix == "val":
+                    results[f"hp/{prefix}/{metric_type}_class_3"] = (
+                        metric_result if metric_type == "jaccard" else metric_result[1]
+                    )
+                del results[f"{prefix}/{metric_type}"]
 
     # GUARD: Ensure that the metrics are of the correct type. Just use the basic
     # Python primatives and torch Tensors.
     assert all(
-        isinstance(metric, float)
-        or isinstance(metric, int)
-        or isinstance(metric, bool)
-        or isinstance(metric, torch.Tensor)
+        isinstance(metric, (float, int, bool, torch.Tensor))
         for _, metric in results.items()
     ), f"Invalid metric primative type for dict: {results}"
 

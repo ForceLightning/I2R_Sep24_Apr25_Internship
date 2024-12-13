@@ -265,6 +265,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
         self.model_type = model_type
+        self.classes = classes
 
         if self.dump_memory_snapshot:
             torch.cuda.memory._record_memory_history(
@@ -285,6 +286,7 @@ class TwoStreamUnetLightning(CommonModelMixin):
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
         self.loading_mode = loading_mode
+        self.classes = classes
 
         # Sets loss if it's a string
         if isinstance(loss, str):
@@ -324,16 +326,16 @@ class TwoStreamUnetLightning(CommonModelMixin):
                         f"Loss type of {loss} is not implemented!"
                     )
         # Otherwise, set if nn.Module
+        elif isinstance(loss, nn.Module):
+            self.loss = loss
         else:
-            self.loss = (
-                loss
-                if isinstance(loss, nn.Module)
-                else (
-                    DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
-                    if dl_classification_mode == ClassificationMode.MULTILABEL_MODE
-                    else DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
-                )
-            )
+            match dl_classification_mode:
+                case ClassificationMode.MULTICLASS_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+                case ClassificationMode.MULTILABEL_MODE:
+                    self.loss = DiceLoss(smp.losses.MULTILABEL_MODE, from_logits=True)
+                case ClassificationMode.BINARY_CLASS_3_MODE:
+                    self.loss = DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
         self.multiplier = multiplier
         self.total_epochs = total_epochs
@@ -419,7 +421,10 @@ class TwoStreamUnetLightning(CommonModelMixin):
                 lges, cines
             )  # pyright: ignore[reportCallIssue]
 
-            if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+            if (
+                self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
                 # GUARD: Check that the sizes match.
                 assert (
                     masks_proba.size() == masks.size()
@@ -498,7 +503,10 @@ class TwoStreamUnetLightning(CommonModelMixin):
             lges, cines
         )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()

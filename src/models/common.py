@@ -43,13 +43,37 @@ class CommonModelMixin(L.LightningModule):
     """The architecture of the model, if appropriate."""
     de_transform: Compose | InverseNormalize
     """The inverse transformation from augmentation of the samples by the dataloaders."""
+    classes: int
+
+    @override
+    def setup(self, stage: str) -> None:
+        if any(
+            mode == ClassificationMode.BINARY_CLASS_3_MODE
+            for mode in [self.dl_classification_mode, self.eval_classification_mode]
+        ):
+            assert self.dl_classification_mode == self.eval_classification_mode, (
+                "If using binary classification mode, both dl and eval modes must be the"
+                + f" same, but are {self.dl_classification_mode} and "
+                + f"{self.eval_classification_mode} respectively."
+            )
+        return super().setup(stage)
 
     @override
     def on_train_start(self):
         if isinstance(self.logger, TensorBoardLogger):
-            self.logger.log_hyperparams(
-                self.hparams,  # pyright: ignore[reportArgumentType]
-                {
+            if (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                params = {
+                    "hp/val_loss": 0,
+                    "hp/val/dice_class_3": 0,
+                    "hp/val/jaccard_class_3": 0,
+                    "hp/val/precision_class_3": 0,
+                    "hp/val/recall_class_3": 0,
+                }
+            else:
+                params = {
                     # (1) Validation Loss
                     "hp/val_loss": 0,
                     # (2) Dice score
@@ -75,7 +99,9 @@ class CommonModelMixin(L.LightningModule):
                     "hp/val/recall_class_1": 0,
                     "hp/val/recall_class_2": 0,
                     "hp/val/recall_class_3": 0,
-                },
+                }
+            self.logger.log_hyperparams(
+                self.hparams, params  # pyright: ignore[reportArgumentType]
             )
 
     def log_metrics(self, prefix: Literal["train", "val", "test"]) -> None:
