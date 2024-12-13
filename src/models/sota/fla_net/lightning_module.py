@@ -130,6 +130,7 @@ class FLANetLightningModule(CommonModelMixin):
         self.classes = classes
         self.num_frames = num_frames
         self.dump_memory_snapshot = dump_memory_snapshot
+        self.classes = classes
 
         # Trace memory usage.
         if self.dump_memory_snapshot:
@@ -140,13 +141,15 @@ class FLANetLightningModule(CommonModelMixin):
         self.model: nn.Module | SegmentationModel | ModelHubMixin
         match self.model_type:
             case ModelType.UNET:
-                self.model = Unet(
-                    encoder_name=encoder_name,
-                    encoder_depth=encoder_depth,
-                    encoder_weights=encoder_weights,
-                    in_channels=in_channels,
-                    classes=classes,
-                    activation=unet_activation,
+                self.model = (  # pyright: ignore[reportIncompatibleVariableOverride]
+                    Unet(
+                        encoder_name=encoder_name,
+                        encoder_depth=encoder_depth,
+                        encoder_weights=encoder_weights,
+                        in_channels=in_channels,
+                        classes=classes,
+                        activation=unet_activation,
+                    )
                 )
             case _:
                 raise NotImplementedError(f"{self.model_type} not yet implemented!")
@@ -257,7 +260,10 @@ class FLANetLightningModule(CommonModelMixin):
                 images_input
             )  # pyright: ignore[reportCallIssue] False positive
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
@@ -350,7 +356,10 @@ class FLANetLightningModule(CommonModelMixin):
             images_input
         )  # pyright: ignore[reportCallIssue]
 
-        if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
+        if (
+            self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE
+            or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             # GUARD: Check that the sizes match.
             assert (
                 masks_proba.size() == masks.size()
