@@ -22,6 +22,7 @@ from torchvision.transforms.v2 import Compose
 # First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import setup_metrics, shared_metric_calculation
+from metrics.loss import WeightedDiceLoss
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
@@ -158,6 +159,22 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
+                case "weighted_dice":
+                    class_weights = torch.Tensor(
+                        [
+                            0.000019931143,
+                            0.001904109430,
+                            0.010289336432,
+                            0.987786622995,
+                        ],
+                    ).to(self.device.type)
+                    self.loss = (
+                        WeightedDiceLoss("multiclass", class_weights, from_logits=True)
+                        if dl_classification_mode == ClassificationMode.MULTICLASS_MODE
+                        else WeightedDiceLoss(
+                            "multilabel", class_weights, from_logits=True
+                        )
+                    )
                 case _:
                     raise NotImplementedError(
                         f"Loss type of {loss} is not implemented!"
