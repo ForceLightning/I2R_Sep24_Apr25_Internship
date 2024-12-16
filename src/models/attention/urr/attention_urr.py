@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # Standard Library
 from math import sqrt
-from typing import Any, Literal, override
+from typing import Any, Literal, Optional, Sequence, override
 
 # Third-Party
 from einops import rearrange
@@ -31,7 +31,7 @@ from ...tscse.tscse import TSCSENetEncoder
 from ...tscse.tscse import get_encoder as tscse_get_encoder
 from ..model import SpatialAttentionBlock
 from ..segmentation_model import ResidualAttentionUnet
-from .utils import calc_uncertainty
+from .utils import URRSource, calc_uncertainty
 
 
 class UnetDecoderURR(UnetDecoder):
@@ -204,14 +204,22 @@ class URRDecoder(nn.Module):
         self.num_classes = num_classes
 
     @override
-    def forward(self, *features: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        b, _, h, w = features[1].shape
+    def forward(
+        self, features: Sequence[Tensor], low_level_feature: Optional[Tensor] = None
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        if low_level_feature is not None:
+            b, _, h, w = low_level_feature.shape
+        else:
+            b, _, h, w = features[1].shape
         decoder_output, _ = self.decoder(*features)
         rough_seg = self.segmentation_head(decoder_output)
 
         score: Tensor
         initial_uncertainty: Tensor
-        score, initial_uncertainty = self.refiner(rough_seg, features[1])
+        if low_level_feature is not None:
+            score, initial_uncertainty = self.refiner(rough_seg, low_level_feature)
+        else:
+            score, initial_uncertainty = self.refiner(rough_seg, features[1])
 
         uncertainty: Tensor = calc_uncertainty(F.softmax(score, dim=1))
         uncertainty = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(h * w * 4)
@@ -248,6 +256,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
         res_conv_activation: str | None = None,
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.TEMPORAL_3D,
         reduce: REDUCE_TYPES = "prod",
+        urr_source: URRSource = URRSource.O3,
         _attention_only: bool = False,
     ):
         super().__init__()
@@ -262,6 +271,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
         self.residual_mode = residual_mode
         self._attention_only = _attention_only
         self.classes = classes
+        self.urr_source = urr_source
 
         # Define encoder, decoder, segmentation head, and classification head.
         #
@@ -377,6 +387,8 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
 
         residual_outputs: list[Tensor | list[str]] = [["EMPTY"]]
 
+        o1_outputs: list[Tensor] = []
+
         for i in range(1, 6):
             if isinstance(self.encoder, TSCSENetEncoder):
                 img_outputs = rearrange(img_features_list[i], "b c f h w -> b f c h w")
@@ -393,16 +405,24 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
                 i - 1
             ]  # pyright: ignore[reportAssignmentType] False positive
 
-            skip_output = res_block(
-                st_embeddings=img_outputs, res_embeddings=res_outputs
+            skip_output, o1_output = res_block(
+                st_embeddings=img_outputs, res_embeddings=res_outputs, return_o1=True
             )
+
+            o1_outputs.append(o1_output)
 
             if self.reduce == "cat":
                 skip_output = rearrange(skip_output, "d b c h w -> b (d c) h w")
 
             residual_outputs.append(skip_output)
 
-        score, initial_uncertainty, uncertainty = self.decoder(*residual_outputs)
+        match self.urr_source:
+            case URRSource.O1:
+                score, initial_uncertainty, uncertainty = self.decoder(
+                    residual_outputs, o1_outputs[0]
+                )
+            case URRSource.O3:
+                score, initial_uncertainty, uncertainty = self.decoder(residual_outputs)
 
         return score, initial_uncertainty, uncertainty
 
@@ -433,6 +453,7 @@ class URRResidualAttentionUnetPlusPlus(URRResidualAttentionUnet):
         res_conv_activation: str | None = None,
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.TEMPORAL_3D,
         reduce: REDUCE_TYPES = "prod",
+        urr_source: URRSource = URRSource.O3,
         _attention_only: bool = False,
     ):
         super(URRResidualAttentionUnet, self).__init__()
@@ -447,6 +468,7 @@ class URRResidualAttentionUnetPlusPlus(URRResidualAttentionUnet):
         self.residual_mode = residual_mode
         self._attention_only = _attention_only
         self.classes = classes
+        self.urr_source = urr_source
 
         # Define encoder, decoder, segmentation head, and classification head.
         #

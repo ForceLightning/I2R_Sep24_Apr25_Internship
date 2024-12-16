@@ -7,7 +7,7 @@ from typing import override
 
 # PyTorch
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 # First party imports
@@ -83,9 +83,7 @@ class AttentionLayer(nn.Module):
         self.attentions = nn.ModuleList(attentions)
 
     @override
-    def forward(
-        self, q: torch.Tensor, ks: torch.Tensor, vs: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, q: Tensor, ks: Tensor, vs: Tensor) -> Tensor:
         # Get the dimensions of the input tensors.
         if ks.ndim == 4:
             q = q.view(1, *q.shape)
@@ -107,7 +105,7 @@ class AttentionLayer(nn.Module):
             1, 3, 0, 2
         )  # (F, H * W, B, C)
 
-        attn_outputs: list[torch.Tensor] = []
+        attn_outputs: list[Tensor] = []
         for i in range(f):  # Iterate over the frames in the sequence.
             # Input to attention is:
             # Q: (H * W, B, C) or (H * W, C)
@@ -164,7 +162,7 @@ class WeightedAverage(nn.Module):
             )
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         assert x.shape[-1] == self.in_features, (
             f"Input of shape {x.shape} does not have last dimension "
             + f"matching in_features {self.in_features}"
@@ -212,12 +210,15 @@ class SpatialAttentionBlock(nn.Module):
             case "weighted_learnable":
                 self.reduce = WeightedAverage(num_frames + 1, True)
 
-    def forward(self, st_embeddings: torch.Tensor, res_embeddings: torch.Tensor):
+    def forward(
+        self, st_embeddings: Tensor, res_embeddings: Tensor, return_o1: bool = False
+    ) -> Tensor | tuple[Tensor, Tensor]:
         """Forward pass of the residual block.
 
         Args:
             st_embeddings: Spatio-temporal embeddings from raw frames.
             res_embeddings: Spatial embeddings from residual frames.
+            return_o1: Whether to return o1.
 
         """
         # Output is of shape (B, C, H, W)
@@ -228,7 +229,7 @@ class SpatialAttentionBlock(nn.Module):
         else:
             compress_output = self.temporal_conv(st_embeddings)
 
-        attention_output: torch.Tensor = self.attention(
+        attention_output: Tensor = self.attention(
             q=compress_output, ks=res_embeddings, vs=res_embeddings
         )
 
@@ -245,5 +246,12 @@ class SpatialAttentionBlock(nn.Module):
         attention_output = attention_output.view(-1, b, c, h, w)
         out = torch.cat((compress_output, attention_output), dim=0)
         if self._reduce == "sum":
-            return torch.sum(input=out, dim=0).view(b, c, h, w)
+            out = torch.sum(input=out, dim=0).view(b, c, h, w)
+            if return_o1:
+                return out, compress_output.view(b, c, h, w)
+            return out
+
+        if return_o1:
+            return self.reduce(out), compress_output
+
         return self.reduce(out)

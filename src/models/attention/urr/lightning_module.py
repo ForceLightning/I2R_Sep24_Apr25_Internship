@@ -23,6 +23,7 @@ from torchvision.transforms.v2 import Compose
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import setup_metrics, shared_metric_calculation
 from metrics.loss import WeightedDiceLoss
+from models.attention.urr.utils import URRSource
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
@@ -76,6 +77,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         attention_only: bool = False,
         dummy_predict: bool = False,
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.ORIGINAL,
+        urr_source: URRSource = URRSource.O3,
     ):
         super(ResidualAttentionLightningModule, self).__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -99,6 +101,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         self.learning_rate = learning_rate
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
+        self.urr_source = urr_source
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -123,6 +126,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                     temporal_conv_type=temporal_conv_type,
                     reduce=attention_reduction,
                     _attention_only=attention_only,
+                    urr_source=urr_source,
                 )
             case ModelType.UNET_PLUS_PLUS:
                 self.model = URRResidualAttentionUnetPlusPlus(  # pyright: ignore[reportAttributeAccessIssue]
@@ -138,6 +142,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                     temporal_conv_type=temporal_conv_type,
                     reduce=attention_reduction,
                     _attention_only=attention_only,
+                    urr_source=urr_source,
                 )
             case _:
                 raise NotImplementedError(f"{self.model_type} is not yet implemented!")
