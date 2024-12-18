@@ -23,7 +23,6 @@ from torchvision.transforms.v2 import Compose
 from metrics.dice import GeneralizedDiceScoreVariant
 from metrics.logging import setup_metrics, shared_metric_calculation
 from metrics.loss import WeightedDiceLoss
-from models.attention.urr.utils import URRSource
 from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
@@ -38,6 +37,7 @@ from ...attention.lightning_module import ResidualAttentionLightningModule
 from ...attention.model import REDUCE_TYPES
 from ...two_plus_one import TemporalConvolutionalType
 from .attention_urr import URRResidualAttentionUnet, URRResidualAttentionUnetPlusPlus
+from .utils import UncertaintyMode, URRSource
 
 
 class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
@@ -78,6 +78,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         dummy_predict: bool = False,
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.ORIGINAL,
         urr_source: URRSource = URRSource.O3,
+        uncertainty_mode: UncertaintyMode = UncertaintyMode.URR,
     ):
         super(ResidualAttentionLightningModule, self).__init__()
         self.save_hyperparameters(ignore=["metric", "loss"])
@@ -102,6 +103,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
         self.urr_source = urr_source
+        self.uncertainty_mode = uncertainty_mode
 
         # Trace memory usage
         if self.dump_memory_snapshot:

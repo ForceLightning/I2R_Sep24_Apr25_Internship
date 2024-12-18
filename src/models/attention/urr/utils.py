@@ -30,3 +30,10 @@ class URRSource(Enum):
 
     O1 = auto()
     O3 = auto()
+
+
+class UncertaintyMode(Enum):
+    """What form of UR/URR to use."""
+
+    UR = auto()
+    URR = auto()

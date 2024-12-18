@@ -31,7 +31,7 @@ from ...tscse.tscse import TSCSENetEncoder
 from ...tscse.tscse import get_encoder as tscse_get_encoder
 from ..model import SpatialAttentionBlock
 from ..segmentation_model import ResidualAttentionUnet
-from .utils import URRSource, calc_uncertainty
+from .utils import UncertaintyMode, URRSource, calc_uncertainty
 
 
 class UnetDecoderURR(UnetDecoder):
@@ -187,6 +187,7 @@ class URRDecoder(nn.Module):
         segmentation_head: SegmentationHead,
         refiner: RegionRefiner,
         num_classes: int,
+        uncertainty_mode: UncertaintyMode,
     ):
         """Initialise the wrapper with dependency injection.
 
@@ -195,6 +196,7 @@ class URRDecoder(nn.Module):
             segmentation_head: SMP segmentation head.
             refiner: uncertain-regions refiner.
             num_classes: Number of classes.
+            uncertainty_mode: Whether to use UR/URR.
 
         """
         super().__init__()
@@ -202,17 +204,24 @@ class URRDecoder(nn.Module):
         self.segmentation_head = segmentation_head
         self.refiner = refiner
         self.num_classes = num_classes
+        self.uncertainty_mode = uncertainty_mode
 
     @override
     def forward(
         self, features: Sequence[Tensor], low_level_feature: Optional[Tensor] = None
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
         if low_level_feature is not None:
             b, _, h, w = low_level_feature.shape
         else:
             b, _, h, w = features[1].shape
         decoder_output, _ = self.decoder(*features)
         rough_seg = self.segmentation_head(decoder_output)
+
+        uncertainty: Tensor
+
+        if self.uncertainty_mode == UncertaintyMode.UR:
+            uncertainty = calc_uncertainty(F.softmax(rough_seg, dim=1))
+            return rough_seg, None, uncertainty
 
         score: Tensor
         initial_uncertainty: Tensor
@@ -221,7 +230,7 @@ class URRDecoder(nn.Module):
         else:
             score, initial_uncertainty = self.refiner(rough_seg, features[1])
 
-        uncertainty: Tensor = calc_uncertainty(F.softmax(score, dim=1))
+        uncertainty = calc_uncertainty(F.softmax(score, dim=1))
         uncertainty = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(h * w * 4)
 
         score = torch.clamp(score, 1e-7, 1 - 1e-7)
@@ -257,6 +266,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.TEMPORAL_3D,
         reduce: REDUCE_TYPES = "prod",
         urr_source: URRSource = URRSource.O3,
+        uncertainty_mode: UncertaintyMode = UncertaintyMode.URR,
         _attention_only: bool = False,
     ):
         super().__init__()
@@ -272,6 +282,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
         self._attention_only = _attention_only
         self.classes = classes
         self.urr_source = urr_source
+        self.uncertainty_mode = uncertainty_mode
 
         # Define encoder, decoder, segmentation head, and classification head.
         #
@@ -333,14 +344,18 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
         )
         segmentation_head = SegmentationHead(
             in_channels=decoder_channels[-1],
-            out_channels=classes * 2,
+            out_channels=(
+                classes * 2 if self.uncertainty_mode == UncertaintyMode.URR else classes
+            ),
             activation=activation,
             kernel_size=3,
         )
 
         region_refiner = RegionRefiner(7, 16, 32, self.classes)
 
-        self.decoder = URRDecoder(decoder, segmentation_head, region_refiner, classes)
+        self.decoder = URRDecoder(
+            decoder, segmentation_head, region_refiner, classes, uncertainty_mode
+        )
 
         if aux_params is not None:
             self.classification_head = ClassificationHead(
@@ -357,7 +372,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
     @override
     def forward(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, regular_frames: Tensor, residual_frames: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
         img_features_list: list[Tensor] = []
         res_features_list: list[Tensor] = []
         b, *_ = regular_frames.shape
