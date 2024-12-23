@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import ResidualTwoPlusOneDataset, get_trainval_data_subsets
 from models.attention import ResidualAttentionLightningModule
-from models.two_plus_one import TemporalConvolutionalType, get_temporal_conv_type
+from models.two_plus_one import TemporalConvolutionalType
 from utils import utils
 from utils.types import ClassificationMode, LoadingMode, ResidualMode
 

@@ -36,7 +36,10 @@ from utils.types import (
 from ...attention.lightning_module import ResidualAttentionLightningModule
 from ...attention.model import REDUCE_TYPES
 from ...two_plus_one import TemporalConvolutionalType
-from .attention_urr import URRResidualAttentionUnet, URRResidualAttentionUnetPlusPlus
+from .segmentation_model import (
+    URRResidualAttentionUnet,
+    URRResidualAttentionUnetPlusPlus,
+)
 from .utils import UncertaintyMode, URRSource
 
 
