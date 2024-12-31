@@ -160,10 +160,10 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 case "cross_entropy":
                     class_weights = torch.Tensor(
                         [
-                            0.000019931143,
-                            0.001904109430,
-                            0.010289336432,
-                            0.987786622995,
+                            0.02,
+                            0.2,
+                            0.3,
+                            0.48,
                         ],
                     ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
@@ -172,10 +172,10 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 case "weighted_dice":
                     class_weights = torch.Tensor(
                         [
-                            0.000019931143,
-                            0.001904109430,
-                            0.010289336432,
-                            0.987786622995,
+                            0.02,
+                            0.2,
+                            0.3,
+                            0.48,
                         ],
                     ).to(self.device.type)
                     self.loss = (
