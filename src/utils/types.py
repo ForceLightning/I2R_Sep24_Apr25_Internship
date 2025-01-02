@@ -44,8 +44,10 @@ INV_NORM_GREYSCALE_DEFAULT = InverseNormalize(mean=[0.449], std=[0.226])
 class ClassificationMode(Enum):
     """The classification mode for the model.
 
-    MULTICLASS_MODE: The model is trained to predict a single class for each pixel.
-    MULTILABEL_MODE: The model is trained to predict multiple classes for each pixel.
+    Attributes:
+        MULTICLASS_MODE: The model is trained to predict a single class for each pixel.
+        MULTILABEL_MODE: The model is trained to predict multiple classes for each pixel.
+
     """
 
     MULTICLASS_MODE = auto()
@@ -55,9 +57,11 @@ class ClassificationMode(Enum):
 class ResidualMode(Enum):
     """The residual frame calculation mode for the model.
 
-    SUBTRACT_NEXT_FRAME: Subtracts the next frame from the current frame.
-    OPTICAL_FLOW_CPU: Calculates the optical flow using the CPU.
-    OPTICAL_FLOW_GPU: Calculates the optical flow using the GPU.
+    Attributes:
+        SUBTRACT_NEXT_FRAME: Subtracts the next frame from the current frame.
+        OPTICAL_FLOW_CPU: Calculates the optical flow using the CPU.
+        OPTICAL_FLOW_GPU: Calculates the optical flow using the GPU.
+
     """
 
     SUBTRACT_NEXT_FRAME = auto()
@@ -68,8 +72,10 @@ class ResidualMode(Enum):
 class LoadingMode(Enum):
     """Determines the image loading mode for the dataset.
 
-    RGB: The images are loaded in RGB mode.
-    GREYSCALE: The images are loaded in greyscale mode.
+    Attributes:
+        RGB: The images are loaded in RGB mode.
+        GREYSCALE: The images are loaded in greyscale mode.
+
     """
 
     RGB = auto()
@@ -77,7 +83,14 @@ class LoadingMode(Enum):
 
 
 class ModelType(Enum):
-    """Model architecture types."""
+    """Model architecture types.
+
+    Attributes:
+        UNET: U-Net architecture.
+        UNET_PLUS_PLUS: UNet++ architecture.
+        TRANS_UNET: TransUNet architecture.
+
+    """
 
     UNET = auto()
     UNET_PLUS_PLUS = auto()

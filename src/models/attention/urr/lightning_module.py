@@ -87,26 +87,45 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         self.save_hyperparameters(ignore=["metric", "loss"])
         self.model_type = model_type
         self.batch_size = batch_size
+        """Batch size of dataloader."""
         self.in_channels = in_channels
+        """Number of image channels."""
         self.classes = classes
+        """Number of segmentation classes."""
         self.num_frames = num_frames
+        """Number of frames used."""
         self.dump_memory_snapshot = dump_memory_snapshot
+        """Whether to dump a memory snapshot."""
         self.dummy_predict = dummy_predict
+        """Whether to simply return the ground truth for visualisation."""
         self.residual_mode = residual_mode
+        """Residual frames generation mode."""
         self.optimizer = optimizer
+        """Optimizer for training."""
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
+        """Optimizer kwargs."""
         self.scheduler = scheduler
+        """Scheduler for training."""
         self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
+        """Scheduler kwargs."""
         self.loading_mode = loading_mode
+        """Image loading mode."""
         self.multiplier = multiplier
+        """Learning rate multiplier."""
         self.total_epochs = total_epochs
+        """Number of total epochs for training."""
         self.alpha = alpha
+        """Loss scaling factor for segmentation loss."""
         self.beta = beta
+        """Loss scaling factor for confidence loss."""
         self.learning_rate = learning_rate
+        """Learning rate for training."""
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
         self.urr_source = urr_source
+        """URR low level features source."""
         self.uncertainty_mode = uncertainty_mode
+        """Whether to include uncertain-regions refinement or to just use confidence loss."""
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -115,7 +134,6 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             )
         # PERF: The model can be `torch.compile()`'d but layout issues occur with
         # convolutional networks. See: https://github.com/pytorch/pytorch/issues/126585
-        self.model: URRResidualAttentionUnet | URRResidualAttentionUnetPlusPlus
         match self.model_type:
             case ModelType.UNET:
                 self.model = URRResidualAttentionUnet(  # pyright: ignore[reportAttributeAccessIssue]
@@ -242,6 +260,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
         # Attempts to load checkpoint if provided.
         self.weights_from_ckpt_path = weights_from_ckpt_path
+        """Model checkpoint path to load weights from."""
         if self.weights_from_ckpt_path:
             ckpt = torch.load(self.weights_from_ckpt_path)
             try:

@@ -49,7 +49,14 @@ from utils.types import (
 
 
 class TemporalConvolutionalType(Enum):
-    """1D Temporal Convolutional Layer type."""
+    """1D Temporal Convolutional Layer type.
+
+    Attributes:
+        ORIGINAL: Original 1D convolutional operation with significant use of reshape.
+        DILATED: Modified 1D convolutional operation to replace stride with dilation.
+        TEMPORAL_3D: Uses a 3D convolutional operation to reduce calls to reshape.
+
+    """
 
     ORIGINAL = auto()
     DILATED = auto()

@@ -62,7 +62,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         encoder_weights: str | None = "imagenet",
         in_channels: int = 3,
         classes: int = 1,
-        num_frames: int = 5,
+        num_frames: Literal[5, 10, 15, 20, 30] = 5,
         weights_from_ckpt_path: str | None = None,
         optimizer: Optimizer | str = "adamw",
         optimizer_kwargs: dict[str, Any] | None = None,
@@ -125,21 +125,37 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         self.save_hyperparameters(ignore=["metric", "loss"])
         self.model_type = model_type
         self.batch_size = batch_size
+        """Batch size of dataloader."""
         self.in_channels = in_channels
+        """Number of image channels."""
         self.classes = classes
+        """Number of segmentation classes."""
         self.num_frames = num_frames
+        """Number of frames used."""
         self.dump_memory_snapshot = dump_memory_snapshot
+        """Whether to dump a memory snapshot."""
         self.dummy_predict = dummy_predict
+        """Whether to simply return the ground truth for visualisation."""
         self.residual_mode = residual_mode
+        """Residual frames generation mode."""
         self.optimizer = optimizer
+        """Optimizer for training."""
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs else {}
+        """Optimizer kwargs."""
         self.scheduler = scheduler
+        """Scheduler for training."""
         self.scheduler_kwargs = scheduler_kwargs if scheduler_kwargs else {}
+        """Scheduler kwargs."""
         self.loading_mode = loading_mode
+        """Image loading mode."""
         self.multiplier = multiplier
+        """Learning rate multiplier."""
         self.total_epochs = total_epochs
+        """Number of total epochs for training."""
         self.alpha = alpha
+        """Loss scaling factor."""
         self.learning_rate = learning_rate
+        """Learning rate for training."""
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
 
@@ -274,6 +290,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
 
         # Attempts to load checkpoint if provided.
         self.weights_from_ckpt_path = weights_from_ckpt_path
+        """Model checkpoint path to load weights from."""
         if self.weights_from_ckpt_path:
             ckpt = torch.load(self.weights_from_ckpt_path)
             try:

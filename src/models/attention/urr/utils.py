@@ -26,14 +26,26 @@ def calc_uncertainty(score: Tensor) -> Tensor:
 
 
 class URRSource(Enum):
-    """Source for generating the low level feature maps for URR."""
+    """Source for generating the low level feature maps for URR.
+
+    Attributes:
+        O1: Output of temporal convolution.
+        O3: Aggregated output of temporal convolution and attention mechanism.
+
+    """
 
     O1 = auto()
     O3 = auto()
 
 
 class UncertaintyMode(Enum):
-    """What form of UR/URR to use."""
+    """What form of UR/URR to use.
+
+    Attributes:
+        UR: Uncertain regions only.
+        URR: Uncertain regions and refinement.
+
+    """
 
     UR = auto()
     URR = auto()
