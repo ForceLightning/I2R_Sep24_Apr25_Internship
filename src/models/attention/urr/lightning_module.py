@@ -58,7 +58,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         encoder_weights: str | None = "imagenet",
         in_channels: int = 3,
         classes: int = 1,
-        num_frames: int = 5,
+        num_frames: Literal[5, 10, 15, 20, 30] = 5,
         weights_from_ckpt_path: str | None = None,
         optimizer: Optimizer | str = "adamw",
         optimizer_kwargs: dict[str, Any] | None = None,
@@ -160,10 +160,10 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 case "cross_entropy":
                     class_weights = torch.Tensor(
                         [
-                            0.02,
+                            0.1,
+                            0.1,
                             0.2,
-                            0.3,
-                            0.48,
+                            0.6,
                         ],
                     ).to(self.device.type)
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
@@ -172,10 +172,10 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 case "weighted_dice":
                     class_weights = torch.Tensor(
                         [
-                            0.02,
+                            0.17,
                             0.2,
                             0.3,
-                            0.48,
+                            0.33,
                         ],
                     ).to(self.device.type)
                     self.loss = (
