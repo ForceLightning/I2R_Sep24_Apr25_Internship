@@ -190,10 +190,10 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 case "weighted_dice":
                     class_weights = torch.Tensor(
                         [
-                            0.17,
-                            0.2,
-                            0.3,
-                            0.33,
+                            0.05,
+                            0.1,
+                            0.15,
+                            0.7,
                         ],
                     ).to(self.device.type)
                     self.loss = (
