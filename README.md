@@ -22,26 +22,27 @@ See the [changelog](./CHANGELOG.md) for the differences in our approaches.
 ├── Pipfile
 ├── Pipfile.lock
 ├── README.md
-├── checkpoints
+├── checkpoints                                     # A symlink may be used for this.
 │   ├── cine
 │   ├── lge
 │   ├── residual-attention
 │   ├── tscsenet
 │   ├── sota
 │   ├── two-plus-one
-│   └── two-stream
+│   ├── two-stream
+│   └── urr-residual-attention
 ├── configs
 │   └── *.yaml
-├── data
-│   ├── Indices                                     # Used for splitting the train/val dataset.
-│   ├── test                                        # Test dataset.
-│   │   ├── Cine                                    #   CINE image data
-│   │   ├── LGE                                     #   LGE image data
-│   │   └── masks                                   #   Annotated masks
-│   └── train_val                                   # Train/Val dataset.
-│       ├── Cine                                    #   CINE image data
-│       ├── LGE                                     #   LGE image data
-│       └── masks                                   #   Annotated masks
+├── data                                            # A symlink may be used for this.
+│   ├── Indices                                     #   Used for splitting the train/val dataset.
+│   ├── test                                        #   Test dataset.
+│   │   ├── Cine                                    #       CINE image data
+│   │   ├── LGE                                     #       LGE image data
+│   │   └── masks                                   #       Annotated masks
+│   └── train_val                                   #   Train/Val dataset.
+│       ├── Cine                                    #       CINE image data
+│       ├── LGE                                     #       LGE image data
+│       └── masks                                   #       Annotated masks
 ├── dataset
 ├── docs
 │   ├── Makefile
@@ -81,7 +82,7 @@ pip install -r requirements.txt
 Optionally, install the dependencies for developement and the third-party libraries.
 ```sh
 pipenv install -d
-pipenv install --categories transunet && pipenv install --categories vivim && pipenv install --categories transunet && pipenv install --categories vivim && pipenv install --categories vps && pipenv install --categories afb_urr
+pipenv install --categories transunet && pipenv install --categories vivim && pipenv install --categories transunet && pipenv install --categories vps
 # or
 pip install -r requirements-dev.txt
 pip install -r requirements-thirdparty.txt
@@ -103,6 +104,15 @@ Set the path to the virutal env to find numpy header files and the number of dis
 > export LD_LIBRARY_PATH="/usr/lib/wsl/lib:$LD_LIBRARY_PATH"
 > ```
 
+## `torch-scatter`
+Install PyTorch Scatter with:
+```sh
+PIP_FIND_LINKS="https://data.pyg.org/whl/torch-${torch_version}+${CUDA}.html" pipenv install torch-scatter
+# or
+pip install torch-scatter -f https://data.pyg.org/whl/torch-${torch_version}+${CUDA}.html
+```
+where `${torch_version}` is the pytorch version installed (check the requirements.txt or Pipfile) and `${CUDA}` is either `cpu`, `cu118`, `cu121`, or `cu124` depending on the PyTorch installation. See [PyTorch Scatter readme](https://github.com/rusty1s/pytorch_scatter/?tab=readme-ov-file#installation) for more info.
+
 # Usage
 Some default configurations are included in the `./configs/` directory, which will be used as modular pieces to construct the complete training/validation configuration.
 
@@ -112,10 +122,10 @@ Some default configurations are included in the `./configs/` directory, which wi
 > ```sh
 > export PYTHONPATH="src/:thirdparty/VPS"
 > ```
-> Alternatively, set it in a `.env` file if using pipenv.
+> Alternatively, set it in a `.env` file if using pipenv, or inside the `activate` script in the virtualenv `bin` directory.
 
 ## Description of config modules
-- `cine.yaml`, `lge.yaml`, `two_stream.yaml`, `two_plus_one.yaml`, `residual_attention.yaml`: Incomplete defaults for initialisation.
+- `cine.yaml`, `lge.yaml`, `two_stream.yaml`, `two_plus_one.yaml`, `residual_attention.yaml`, `urr_residual_attention.yaml`: Incomplete defaults for initialisation.
 - `training.yaml`, `testing.yaml`, `training_no_checkpointing.yaml`: Overrides for training or validation/testing/quick run modes. This must be the last config file loaded in.
 - `*_greyscale.yaml`, `*_rgb.yaml`: Defaults for handling either RGB images or greyscale images as inputs.
 - `cine_tpo_resnet50.yaml`, `cine_tpo_senet154.yaml`: Defaults for the ResNet50 and SENet154 backbones for the CINE, TwoStream, TwoPlusOne R(2D+1D), and Attention tasks.
