@@ -25,9 +25,12 @@ rich = "*"
 deepspeed = "*"
 jsonargparse = {extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"] }
 opencv-contrib-python-headless = {file = "../opencv-python/opencv_contrib_python_headless-4.10.0.84-cp312-cp312-linux_x86_64.whl"}
+torch-scatter = "*"
+scipy = "*"
 
 [dev-packages]
 autopep8 = "*"
+ipython = "*"
 ipykernel = "*"
 pynvim = "*"
 black = "*"
@@ -50,7 +53,6 @@ python_version = "3.12"
 
 [prototyping]
 jupyter = "*"
-ipython = "*"
 widgetsnbextension = "*"
 ipywidgets = "*"
 ipykernel = "*"
@@ -77,6 +79,3 @@ transformers = "*"
 [vps]
 torchtnt = "*"
 self-cuda = {file = "thirdparty/VPS/lib/module/PNS", editable = true}
-
-[afb_urr]
-torch-scatter = "*"
