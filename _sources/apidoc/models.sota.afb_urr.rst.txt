@@ -1,0 +1,29 @@
+models.sota.afb\_urr package
+============================
+
+Submodules
+----------
+
+models.sota.afb\_urr.lightning\_module module
+---------------------------------------------
+
+.. automodule:: models.sota.afb_urr.lightning_module
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.sota.afb\_urr.model module
+---------------------------------
+
+.. automodule:: models.sota.afb_urr.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: models.sota.afb_urr
+   :members:
+   :undoc-members:
+   :show-inheritance:

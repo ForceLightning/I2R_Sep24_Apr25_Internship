@@ -1,0 +1,7 @@
+lge module
+==========
+
+.. automodule:: lge
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,45 @@
+models.attention.urr package
+============================
+
+Submodules
+----------
+
+models.attention.urr.lightning\_module module
+---------------------------------------------
+
+.. automodule:: models.attention.urr.lightning_module
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.attention.urr.model module
+---------------------------------
+
+.. automodule:: models.attention.urr.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.attention.urr.segmentation\_model module
+-----------------------------------------------
+
+.. automodule:: models.attention.urr.segmentation_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models.attention.urr.utils module
+---------------------------------
+
+.. automodule:: models.attention.urr.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: models.attention.urr
+   :members:
+   :undoc-members:
+   :show-inheritance:
