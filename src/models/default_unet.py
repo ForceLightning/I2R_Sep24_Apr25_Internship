@@ -183,10 +183,12 @@ class LightningUnetWrapper(CommonModelMixin):
                         ],
                     ).to(self.device.type)
                     self.loss = (
-                        WeightedDiceLoss("multiclass", class_weights, from_logits=True)
+                        WeightedDiceLoss(
+                            classes, "multiclass", class_weights, from_logits=True
+                        )
                         if dl_classification_mode == ClassificationMode.MULTICLASS_MODE
                         else WeightedDiceLoss(
-                            "multilabel", class_weights, from_logits=True
+                            classes, "multilabel", class_weights, from_logits=True
                         )
                     )
                 case _:

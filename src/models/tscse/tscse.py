@@ -1114,7 +1114,7 @@ class TSCSEUnetLightning(CommonModelMixin):
         encoder_depth: int = 5,
         in_channels: int = 3,
         classes: int = 1,
-        num_frames: int = 5,
+        num_frames: Literal[5, 10, 15, 20, 30] = 5,
         weights_from_ckpt_path: str | None = None,
         optimizer: Optimizer | str = "adamw",
         optimizer_kwargs: dict[str, Any] | None = None,
@@ -1221,10 +1221,12 @@ class TSCSEUnetLightning(CommonModelMixin):
                         ],
                     ).to(self.device.type)
                     self.loss = (
-                        WeightedDiceLoss("multiclass", class_weights, from_logits=True)
+                        WeightedDiceLoss(
+                            classes, "multiclass", class_weights, from_logits=True
+                        )
                         if dl_classification_mode == ClassificationMode.MULTICLASS_MODE
                         else WeightedDiceLoss(
-                            "multilabel", class_weights, from_logits=True
+                            classes, "multilabel", class_weights, from_logits=True
                         )
                     )
                 case _:

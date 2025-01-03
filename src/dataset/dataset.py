@@ -8,7 +8,7 @@ import pickle
 import random
 from typing import Any, Literal, Protocol, override
 
-# Third-Party
+# Scientific Libraries
 import numpy as np
 from numpy import typing as npt
 
@@ -80,7 +80,7 @@ class DefaultTransformsMixin:
         transforms_mask = Compose(
             [
                 v2.ToImage(),
-                v2.Resize(image_size, antialias=True),
+                v2.Resize(image_size, antialias=False),
                 v2.ToDtype(torch.long, scale=False),
             ]
         )
@@ -260,6 +260,13 @@ class LGEDataset(
 
         out_img, out_mask = self.transform_together(out_img, out_mask)
 
+        # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
+        # used.
+        assert out_mask.max() < 4, (
+            "Out mask values should be 0 <= x < 4, "
+            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+        )
+
         return out_img, out_mask.squeeze().long(), img_name
 
     def __len__(self) -> int:
@@ -403,6 +410,14 @@ class CineDataset(
                 )
 
         out_video, out_mask = self.transform_together(combined_video, out_mask)
+
+        # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
+        # used.
+        assert out_mask.max() < 4, (
+            "Out mask values should be 0 <= x < 4, "
+            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+        )
+
         out_video = concatenate_imgs(self.frames, self.select_frame_method, out_video)
 
         f, c, h, w = out_video.shape
@@ -531,6 +546,13 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
                 )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
+
+        # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
+        # used.
+        assert out_mask.max() < 4, (
+            "Out mask values should be 0 <= x < 4, "
+            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+        )
 
         assert (
             len(combined_video.shape) == 4
@@ -707,6 +729,13 @@ class TwoStreamDataset(
             out_lge, combined_cines, mask_t
         )
 
+        # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
+        # used.
+        assert out_mask.max() < 4, (
+            "Out mask values should be 0 <= x < 4, "
+            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+        )
+
         f, c, h, w = combined_cines.shape
         out_cine = combined_cines.reshape(f * c, h, w)
 
@@ -872,6 +901,14 @@ class ResidualTwoPlusOneDataset(
                 )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
+
+        # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
+        # used.
+        assert out_mask.max() < 4, (
+            "Out mask values should be 0 <= x < 4, "
+            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+        )
+
         assert len(combined_video.shape) == 4, (
             "Combined images must be of shape: (F, C, H, W) but is "
             + f"{combined_video.shape}"

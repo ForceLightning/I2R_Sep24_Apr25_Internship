@@ -1,6 +1,7 @@
 """Implementation of loss functions."""
 
 # Standard Library
+import logging
 from typing import List, Literal, Optional, override
 from warnings import warn
 
@@ -177,6 +178,7 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
     @override
     def __init__(
         self,
+        num_classes: int,
         mode: Literal["binary", "multiclass", "multilabel"],
         weight: Optional[Tensor] = None,
         classes: Optional[List[int]] = None,
@@ -185,10 +187,12 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
         smooth: float = 0,
         ignore_index: Optional[int] = None,
         eps: float = 1e-7,
+        reduction: Literal["mean", "sum", "none"] = "mean",
     ):
         """Initialise the weighted dice loss.
 
         Args:
+            num_classes: Number of segmentation classes.
             mode: Loss mode 'binary', 'multiclass' or 'multilabel'
             weight: Weights for each of the classes.
             classes:  List of classes that contribute in loss computation. By default, all channels are included.
@@ -198,12 +202,14 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
             ignore_index: Label that indicates ignored pixels (does not contribute to loss)
             eps: A small epsilon for numerical stability to avoid zero division error
                 (denominator will be always greater or equal to eps)
+            reduction: How the loss should be reduced.
 
         """
         super().__init__(
             mode, classes, log_loss, from_logits, smooth, ignore_index, eps
         )
-        super(_WeightedLoss, self).__init__(None, None, "mean")
+        super(_WeightedLoss, self).__init__(None, None, reduction)
+        self.num_classes = num_classes
         if isinstance(weight, Tensor):
             if not torch.allclose(weight.sum(), torch.tensor(1).type_as(weight)):
                 weight = weight / weight.sum()
@@ -225,6 +231,13 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
 
         bs = y_true.size(0)
         num_classes = y_pred.size(1)
+
+        # GUARD: Check that the variables num_classes and self.num_classes are equal.
+        assert num_classes == self.num_classes, (
+            "detected num_classes and init param num_classes are not equal! "
+            + f"num_classes: {num_classes}, self.num_classes: {self.num_classes}"
+        )
+
         dims = (0, 2)
 
         match self.mode:
@@ -247,8 +260,18 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
                     y_true = F.one_hot((y_true * mask).to(torch.long), num_classes)
                     y_true = y_true.permute(0, 2, 1) * mask.unsqueeze(1)
                 else:
-                    y_true = F.one_hot(y_true, num_classes)
-                    y_true = y_true.permute(0, 2, 1)
+                    # FIX: This happens to produce a CUDA error as of 0a2ff6b.
+                    try:
+                        y_true = F.one_hot(y_true, num_classes)
+                        y_true = y_true.permute(0, 2, 1)
+                    except RuntimeError as e:
+                        logging.error(
+                            "%s: y_true with shape %s and num_classes = %d",
+                            e,
+                            y_true.shape,
+                            num_classes,
+                        )
+                        raise e
 
             case "multilabel":
                 y_true = y_true.view(bs, num_classes, -1)
@@ -286,4 +309,42 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
         if self.classes is not None:
             loss = loss[self.classes]
 
-        return self.aggregate_loss(loss)
+        match self.reduction:
+            case "mean":
+                return loss.mean()
+            case "sum":
+                return loss.sum()
+            case _:
+                return loss
+
+
+if __name__ == "__main__":
+    # Third-Party
+    import segmentation_models_pytorch as smp
+
+    class_weights = torch.Tensor(
+        [
+            0.05,
+            0.1,
+            0.15,
+            0.7,
+        ],
+    )
+    equal_class_weights = torch.Tensor([0.25, 0.25, 0.25, 0.25])
+    wdl = WeightedDiceLoss(
+        4, "multiclass", class_weights, from_logits=True, reduction="none"
+    )
+    ewdl = WeightedDiceLoss(
+        4, "multiclass", equal_class_weights, from_logits=True, reduction="none"
+    )
+    dl = DiceLoss(smp.losses.MULTICLASS_MODE, from_logits=True)
+
+    y_true = torch.randint(0, 4, (1, 1, 224, 224), dtype=torch.long)
+    y_pred = torch.randn((1, 4, 224, 224), dtype=torch.float32)
+
+    print(
+        f"wdl: {wdl(y_pred, y_true)}",
+        f"ewdl: {ewdl(y_pred, y_true)}",
+        f"dl: {dl(y_pred, y_true)}",
+        sep="\n",
+    )

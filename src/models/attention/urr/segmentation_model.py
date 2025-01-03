@@ -514,6 +514,8 @@ if __name__ == "__main__":
 
     score, init_uncertainty, uncertainty = model.forward(batch_img, batch_res)
 
+    assert init_uncertainty is not None
+
     print("score", score.shape, score.min(), score.max())
     print(
         "initial uncertainty",

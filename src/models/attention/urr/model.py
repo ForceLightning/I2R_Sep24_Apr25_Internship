@@ -16,8 +16,6 @@ from torch.nn import functional as F
 # State-of-the-Art (SOTA) code
 from thirdparty.AFB_URR.model.AFB_URR import ResBlock
 
-# First party imports
-
 # Local folders
 from .utils import calc_uncertainty
 
