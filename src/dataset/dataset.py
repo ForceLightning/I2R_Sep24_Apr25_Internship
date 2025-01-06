@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 import os
 import pickle
 import random
@@ -262,9 +263,10 @@ class LGEDataset(
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4, (
+        assert out_mask.max() < 4 and out_mask.min() >= 0, (
             "Out mask values should be 0 <= x < 4, "
-            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+            + f"but has {out_mask.min()} min and {out_mask.max()} max. "
+            + f"for input image and mask paths: {img_name}, {mask_name}"
         )
 
         return out_img, out_mask.squeeze().long(), img_name
@@ -413,9 +415,10 @@ class CineDataset(
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4, (
+        assert out_mask.max() < 4 and out_mask.min() >= 0, (
             "Out mask values should be 0 <= x < 4, "
-            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+            + f"but has {out_mask.min()} min and {out_mask.max()} max. "
+            + f"for input image and mask paths: {img_name}, {mask_name}"
         )
 
         out_video = concatenate_imgs(self.frames, self.select_frame_method, out_video)
@@ -549,9 +552,10 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4, (
+        assert out_mask.max() < 4 and out_mask.min() >= 0, (
             "Out mask values should be 0 <= x < 4, "
-            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+            + f"but has {out_mask.min()} min and {out_mask.max()} max. "
+            + f"for input image and mask paths: {img_name}, {mask_name}"
         )
 
         assert (
@@ -731,9 +735,10 @@ class TwoStreamDataset(
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4, (
+        assert out_mask.max() < 4 and out_mask.min() >= 0, (
             "Out mask values should be 0 <= x < 4, "
-            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+            + f"but has {out_mask.min()} min and {out_mask.max()} max. "
+            + f"for input images and mask paths: {lge_name}, {cine_name}, {mask_name}"
         )
 
         f, c, h, w = combined_cines.shape
@@ -876,6 +881,13 @@ class ResidualTwoPlusOneDataset(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
         ) as mask:
             out_mask = tv_tensors.Mask(self.transform_mask(mask))
+            if out_mask.min() < 0 or out_mask.max() >= 4:
+                logging.warning(
+                    "mask does not have values 0 <= x < 4, but is instead %f min and %f max.",
+                    out_mask.min().item(),
+                    out_mask.max().item(),
+                )
+                out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
@@ -904,9 +916,10 @@ class ResidualTwoPlusOneDataset(
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4, (
+        assert out_mask.max() < 4 and out_mask.min() >= 0, (
             "Out mask values should be 0 <= x < 4, "
-            + f"but has {out_mask.min()} min and {out_mask.max()} max."
+            + f"but has {out_mask.min()} min and {out_mask.max()} max. "
+            + f"for input image and mask paths: {img_name}, {mask_name}"
         )
 
         assert len(combined_video.shape) == 4, (

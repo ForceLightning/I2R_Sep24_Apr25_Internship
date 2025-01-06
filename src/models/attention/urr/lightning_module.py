@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 from typing import Any, Literal, OrderedDict, override
 
 # Third-Party
@@ -309,13 +310,26 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                     masks_proba.size() == masks.size()
                 ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-            # HACK: This ensures that the dimensions to the loss function are correct.
-            if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-                self.loss, FocalLoss
-            ):
-                loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
-            else:
-                loss_seg = self.loss(masks_proba, masks)
+            try:
+                # HACK: This ensures that the dimensions to the loss function are correct.
+                if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+                    self.loss, FocalLoss
+                ):
+                    loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
+                else:
+                    loss_seg = self.loss(masks_proba, masks)
+            except RuntimeError as e:
+                logging.error(
+                    "%s: masks_proba min, max: %d, %d with shape %s. masks min, max: %d, %d with shape %s.",
+                    str(e),
+                    masks_proba.min().item(),
+                    masks_proba.max().item(),
+                    str(masks_proba.shape),
+                    masks.min().item(),
+                    masks.max().item(),
+                    str(masks.shape),
+                )
+                raise e
 
             loss_uncertainty = final_uncertainty.mean()
             loss_all = self.alpha * loss_seg + self.beta * loss_uncertainty
@@ -397,13 +411,26 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 masks_proba.size() == masks.size()
             ), f"Output of shape {masks_proba.shape} != target shape: {masks.shape}"
 
-        # HACK: This ensures that the dimensions to the loss function are correct.
-        if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-            self.loss, FocalLoss
-        ):
-            loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
-        else:
-            loss_seg = self.loss(masks_proba, masks)
+        try:
+            # HACK: This ensures that the dimensions to the loss function are correct.
+            if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
+                self.loss, FocalLoss
+            ):
+                loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
+            else:
+                loss_seg = self.loss(masks_proba, masks)
+        except RuntimeError as e:
+            logging.error(
+                "%s: masks_proba min, max: %d, %d with shape %s. masks min, max: %d, %d with shape %s.",
+                str(e),
+                masks_proba.min().item(),
+                masks_proba.max().item(),
+                str(masks_proba.shape),
+                masks.min().item(),
+                masks.max().item(),
+                str(masks.shape),
+            )
+            raise e
 
         loss_uncertainty = final_uncertainty.mean()
         loss_all = self.alpha * loss_seg + self.beta * loss_uncertainty
