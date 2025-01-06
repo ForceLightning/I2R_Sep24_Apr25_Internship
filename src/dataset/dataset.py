@@ -81,7 +81,11 @@ class DefaultTransformsMixin:
         transforms_mask = Compose(
             [
                 v2.ToImage(),
-                v2.Resize(image_size, antialias=False),
+                v2.Resize(
+                    image_size,
+                    interpolation=v2.InterpolationMode.NEAREST_EXACT,
+                    antialias=False,
+                ),
                 v2.ToDtype(torch.long, scale=False),
             ]
         )
@@ -93,9 +97,11 @@ class DefaultTransformsMixin:
                 v2.RandomVerticalFlip(),
                 v2.RandomRotation(
                     180.0,  # pyright: ignore[reportArgumentType]
-                    v2.InterpolationMode.BILINEAR,
+                    v2.InterpolationMode.NEAREST_EXACT,
                 ),
-                v2.ElasticTransform(alpha=33.0),
+                v2.ElasticTransform(
+                    alpha=33.0, interpolation=v2.InterpolationMode.NEAREST_EXACT
+                ),
             ]
             if augment
             else [v2.Identity()]
