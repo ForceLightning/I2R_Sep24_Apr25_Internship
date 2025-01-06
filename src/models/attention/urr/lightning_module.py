@@ -43,6 +43,8 @@ from .segmentation_model import (
 )
 from .utils import UncertaintyMode, URRSource
 
+logger = logging.getLogger(__name__)
+
 
 class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
     """Lightning Module wrapper for attention U-Nets with URR."""
@@ -319,7 +321,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 else:
                     loss_seg = self.loss(masks_proba, masks)
             except RuntimeError as e:
-                logging.error(
+                logger.error(
                     "%s: masks_proba min, max: %d, %d with shape %s. masks min, max: %d, %d with shape %s.",
                     str(e),
                     masks_proba.min().item(),
@@ -420,7 +422,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             else:
                 loss_seg = self.loss(masks_proba, masks)
         except RuntimeError as e:
-            logging.error(
+            logger.error(
                 "%s: masks_proba min, max: %d, %d with shape %s. masks min, max: %d, %d with shape %s.",
                 str(e),
                 masks_proba.min().item(),

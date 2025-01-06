@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 import os
 from typing import Literal, override
 
@@ -20,11 +21,14 @@ from dataset.dataset import ResidualTwoPlusOneDataset, get_trainval_data_subsets
 from models.attention import ResidualAttentionLightningModule
 from models.two_plus_one import TemporalConvolutionalType
 from utils import utils
+from utils.logging import LOGGING_FORMAT
 from utils.types import ClassificationMode, LoadingMode, ResidualMode
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
+
+logger = logging.getLogger(__name__)
 
 
 class ResidualTwoPlusOneDataModule(L.LightningDataModule):
@@ -270,13 +274,13 @@ class ResidualAttentionCLI(I2RInternshipCommonCLI):
                 if ResidualMode[residual_mode] == ResidualMode.OPTICAL_FLOW_GPU:
                     try:
                         torch.multiprocessing.set_start_method("spawn")
-                        print("Multiprocessing mode set to `spawn`")
+                        logger.info("Multiprocessing mode set to `spawn`")
                         return
                     except RuntimeError as e:
                         raise RuntimeError(
                             "Cannot set multiprocessing mode to spawn"
                         ) from e
-        print("Multiprocessing mode set as default.")
+        logger.info("Multiprocessing mode set as default.")
 
     def add_arguments_to_parser(self, parser: LightningArgumentParser):
         """Add extra arguments to CLI parser."""
@@ -307,6 +311,9 @@ class ResidualAttentionCLI(I2RInternshipCommonCLI):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO, filename="logs/attention_unet.log", format=LOGGING_FORMAT
+    )
     cli = ResidualAttentionCLI(
         ResidualAttentionLightningModule,
         ResidualTwoPlusOneDataModule,

@@ -40,6 +40,7 @@ from utils.types import INV_NORM_GREYSCALE_DEFAULT
 from utils.utils import ClassificationMode, LoadingMode, ResidualMode
 
 SEED_CUS = 1
+logger = logging.getLogger(__name__)
 
 
 class DefaultTransformsMixin:
@@ -888,7 +889,7 @@ class ResidualTwoPlusOneDataset(
         ) as mask:
             out_mask = tv_tensors.Mask(self.transform_mask(mask))
             if out_mask.min() < 0 or out_mask.max() >= 4:
-                logging.warning(
+                logger.warning(
                     "mask does not have values 0 <= x < 4, but is instead %f min and %f max.",
                     out_mask.min().item(),
                     out_mask.max().item(),

@@ -17,6 +17,8 @@ from torch.nn.modules.loss import _Loss, _WeightedLoss
 # State-of-the-Art (SOTA) code
 from thirdparty.vivim.modeling.utils import InverseTransform2D
 
+logger = logging.getLogger(__name__)
+
 
 class StructureLoss(_Loss):
     """Structure loss using Binary Cross-Entropy."""
@@ -265,7 +267,7 @@ class WeightedDiceLoss(DiceLoss, _WeightedLoss):
                         y_true = F.one_hot(y_true, num_classes)
                         y_true = y_true.permute(0, 2, 1)
                     except RuntimeError as e:
-                        logging.error(
+                        logger.error(
                             "%s: y_true with shape %s and num_classes = %d",
                             e,
                             y_true.shape,
