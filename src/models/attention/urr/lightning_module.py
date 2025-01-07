@@ -177,7 +177,11 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         torch.cuda.empty_cache()
 
         # Sets loss if it's a string
-        if isinstance(loss, str):
+        if (
+            isinstance(loss, str)
+            and dl_classification_mode != ClassificationMode.BINARY_CLASS_3_MODE
+            and eval_classification_mode != ClassificationMode.BINARY_CLASS_3_MODE
+        ):
             match loss:
                 case "cross_entropy":
                     class_weights = torch.Tensor(
