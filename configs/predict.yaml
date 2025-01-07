@@ -3,7 +3,7 @@ trainer:
   logger: false
   accelerator: auto
   strategy: auto
-  devices: auto
+  devices: 1
   num_nodes: 1
   precision: null
   max_epochs: 1

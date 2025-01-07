@@ -3,15 +3,12 @@ trainer:
   logger: false
   accelerator: auto
   strategy: auto
-  devices: auto
+  devices: 1
   num_nodes: 1
   precision: bf16-mixed
   max_epochs: 1
   callbacks:
   - class_path: utils.global_progress_bar.BetterProgressBar
-model:
-  classes: 4
-  scheduler: one_cycle
 data:
   augment: true
 model_checkpoint_val_loss:

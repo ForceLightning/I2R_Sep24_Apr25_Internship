@@ -39,6 +39,7 @@ class CommonCLI(LightningCLI):
         "model_checkpoint_dice_macro_class_2_3.save_last": False,
         "model_checkpoint_dice_macro_class_2_3.mode": "max",
         "model_checkpoint_dice_macro_class_2_3.auto_insert_metric_name": False,
+        "trainer.devices": 1,
     }
     multi_frame: bool = True
 
@@ -140,7 +141,7 @@ class CommonCLI(LightningCLI):
 
         # Set accumulate grad batches depending on batch size
         parser.link_arguments(
-            "data.batch_size",
+            ("trainer.devices", "data.batch_size"),
             "trainer.accumulate_grad_batches",
             compute_fn=utils.get_accumulate_grad_batches,
         )

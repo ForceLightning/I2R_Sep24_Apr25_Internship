@@ -300,10 +300,11 @@ def get_transforms(
     return transforms_img, transforms_mask, transforms_together
 
 
-def get_accumulate_grad_batches(batch_size: int):
+def get_accumulate_grad_batches(devices: int, batch_size: int):
     """Get the number of batches to accumulate the gradients.
 
     Args:
+        devices: Number of devices for training.
         batch_size: The batch size for training.
 
     Returns:
@@ -313,6 +314,10 @@ def get_accumulate_grad_batches(batch_size: int):
     if batch_size >= 8:
         return 1
     else:
+        effective_bz = 8 // (batch_size * devices)
+        assert (
+            effective_bz * batch_size * devices == 8
+        ), f"Effective batch size of 8 not divisible by batch_size * devices: {batch_size}, {devices}"
         return 8 // batch_size
 
 
