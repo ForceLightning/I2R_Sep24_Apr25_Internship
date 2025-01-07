@@ -98,10 +98,10 @@ class DefaultTransformsMixin:
                 v2.RandomVerticalFlip(),
                 v2.RandomRotation(
                     180.0,  # pyright: ignore[reportArgumentType]
-                    v2.InterpolationMode.NEAREST_EXACT,
+                    v2.InterpolationMode.NEAREST,
                 ),
                 v2.ElasticTransform(
-                    alpha=33.0, interpolation=v2.InterpolationMode.NEAREST_EXACT
+                    alpha=33.0, interpolation=v2.InterpolationMode.NEAREST
                 ),
             ]
             if augment
