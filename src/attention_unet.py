@@ -32,7 +32,7 @@ torch.set_float32_matmul_precision("medium")
 file_handler = logging.FileHandler(filename="logs/attention_unet.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
 handlers = [file_handler, stdout_handler]
-logging.basicConfig(level=logging.DEBUG, format=LOGGING_FORMAT, handlers=handlers)
+logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, handlers=handlers)
 logger = logging.getLogger(__name__)
 
 
