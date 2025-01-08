@@ -616,11 +616,18 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 case ClassificationMode.BINARY_CLASS_3_MODE:
                     # (B, H, W) -> (B, 2, H, W)
                     masks_one_hot = torch.cat(
-                        (torch.ones_like(masks_one_hot) - masks_one_hot, masks_one_hot),
+                        [
+                            torch.ones_like(masks_one_hot.long())
+                            - masks_one_hot.long(),
+                            masks_one_hot.long(),
+                        ],
                         dim=1,
                     )
                     masks_preds = torch.cat(
-                        (torch.ones_like(masks_preds) - masks_preds, masks_preds),
+                        [
+                            torch.ones_like(masks_preds.long()) - masks_preds.long(),
+                            masks_preds.long(),
+                        ],
                         dim=1,
                     )
 
