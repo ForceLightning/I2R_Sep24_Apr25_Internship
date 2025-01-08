@@ -128,7 +128,6 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         """Learning rate for training."""
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
-        self.classes = classes
         self.urr_source = urr_source
         """URR low level features source."""
         self.uncertainty_mode = uncertainty_mode
@@ -308,8 +307,9 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         masks = masks.to(self.device.type).long()
 
         # GUARD: Check that the masks class indices are not OOB.
-        assert masks.max() < self.classes and masks.min() >= 0, (
-            f"Out mask values should be 0 <= x < {self.classes}, "
+        classes = self.classes if self.classes != 1 else 2
+        assert masks.max() < classes and masks.min() >= 0, (
+            f"Out mask values should be 0 <= x < {classes}, "
             + f"but has {masks.min()} min and {masks.max()} max. "
             + f"for input image: {fp}"
         )
@@ -386,6 +386,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             masks_preds, masks_one_hot = shared_metric_calculation(
                 self, masks, masks_proba, "train"
             )
+            print(masks_preds.shape, masks_one_hot.shape)
 
             if isinstance(self.logger, TensorBoardLogger):
                 self._shared_image_logging(
@@ -416,8 +417,9 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         masks = masks.to(self.device.type).long()
 
         # GUARD: Check that the masks class indices are not OOB.
-        assert masks.max() < self.classes and masks.min() >= 0, (
-            f"Out mask values should be 0 <= x < {self.classes}, "
+        classes = self.classes if self.classes != 1 else 2
+        assert masks.max() < classes and masks.min() >= 0, (
+            f"Out mask values should be 0 <= x < {classes}, "
             + f"but has {masks.min()} min and {masks.max()} max. "
             + f"for input image: {fp}"
         )

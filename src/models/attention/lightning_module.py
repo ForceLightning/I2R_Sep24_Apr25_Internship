@@ -578,34 +578,79 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 )
                 inv_norm_img = self.de_transform(image).detach().cpu()
 
-            pred_images_with_masks = [
-                draw_segmentation_masks(
-                    img,
-                    masks=mask.bool(),
-                    alpha=0.7,
-                    colors=["black", "red", "blue", "green"],
-                )
-                # Get only the first frame of images.
-                for img, mask in zip(
-                    inv_norm_img[:, 0, :, :, :].detach().cpu(),
-                    masks_preds.detach().cpu(),
-                    strict=True,
-                )
-            ]
-            gt_images_with_masks = [
-                draw_segmentation_masks(
-                    img,
-                    masks=mask.bool(),
-                    alpha=0.7,
-                    colors=["black", "red", "blue", "green"],
-                )
-                # Get only the first frame of images.
-                for img, mask in zip(
-                    inv_norm_img[:, 0, :, :, :].detach().cpu(),
-                    masks_one_hot.detach().cpu(),
-                    strict=True,
-                )
-            ]
+            match self.dl_classification_mode:
+                case (
+                    ClassificationMode.MULTICLASS_MODE
+                    | ClassificationMode.MULTILABEL_MODE
+                ):
+                    pred_images_with_masks = [
+                        draw_segmentation_masks(
+                            img,
+                            masks=mask.bool(),
+                            alpha=0.7,
+                            colors=["black", "red", "blue", "green"],
+                        )
+                        # Get only the first frame of images.
+                        for img, mask in zip(
+                            inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                            masks_preds.detach().cpu(),
+                            strict=True,
+                        )
+                    ]
+                    gt_images_with_masks = [
+                        draw_segmentation_masks(
+                            img,
+                            masks=mask.bool(),
+                            alpha=0.7,
+                            colors=["black", "red", "blue", "green"],
+                        )
+                        # Get only the first frame of images.
+                        for img, mask in zip(
+                            inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                            masks_one_hot.detach().cpu(),
+                            strict=True,
+                        )
+                    ]
+                case ClassificationMode.BINARY_CLASS_3_MODE:
+                    # (B, H, W) -> (B, 2, H, W)
+                    masks_one_hot = torch.cat(
+                        (torch.ones_like(masks_one_hot) - masks_one_hot, masks_one_hot),
+                        dim=1,
+                    )
+                    masks_preds = torch.cat(
+                        (torch.ones_like(masks_preds) - masks_preds, masks_preds),
+                        dim=1,
+                    )
+
+                    pred_images_with_masks = [
+                        draw_segmentation_masks(
+                            img,
+                            masks=mask.bool(),
+                            alpha=0.7,
+                            colors=["black", "green"],
+                        )
+                        # Get only the first frame of images.
+                        for img, mask in zip(
+                            inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                            masks_preds.detach().cpu(),
+                            strict=True,
+                        )
+                    ]
+                    gt_images_with_masks = [
+                        draw_segmentation_masks(
+                            img,
+                            masks=mask.bool(),
+                            alpha=0.7,
+                            colors=["black", "green"],
+                        )
+                        # Get only the first frame of images.
+                        for img, mask in zip(
+                            inv_norm_img[:, 0, :, :, :].detach().cpu(),
+                            masks_one_hot.detach().cpu(),
+                            strict=True,
+                        )
+                    ]
+
             combined_images_with_masks = gt_images_with_masks + pred_images_with_masks
 
             tensorboard_logger.add_images(
