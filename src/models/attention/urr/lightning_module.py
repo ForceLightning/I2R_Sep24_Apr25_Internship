@@ -386,7 +386,6 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             masks_preds, masks_one_hot = shared_metric_calculation(
                 self, masks, masks_proba, "train"
             )
-            print(masks_preds.shape, masks_one_hot.shape)
 
             if isinstance(self.logger, TensorBoardLogger):
                 self._shared_image_logging(
