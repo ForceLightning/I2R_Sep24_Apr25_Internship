@@ -301,11 +301,18 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
     @override
     def training_step(self, batch: tuple[Tensor, Tensor, Tensor, str], batch_idx: int):
-        images, res_images, masks, _ = batch
+        images, res_images, masks, fp = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
         images_input = images.to(self.device.type)
         res_input = res_images.to(self.device.type)
         masks = masks.to(self.device.type).long()
+
+        # GUARD: Check that the masks class indices are not OOB.
+        assert masks.max() < self.classes and masks.min() >= 0, (
+            f"Out mask values should be 0 <= x < {self.classes}, "
+            + f"but has {masks.min()} min and {masks.max()} max. "
+            + f"for input image: {fp}"
+        )
 
         with torch.autocast(device_type=self.device.type):
             masks_proba: Tensor
@@ -402,11 +409,18 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         prefix: Literal["val", "test"],
     ):
         self.eval()
-        images, res_images, masks, _ = batch
+        images, res_images, masks, fp = batch
         bs = images.shape[0] if len(images.shape) > 3 else 1
         images_input = images.to(self.device.type)
         res_input = res_images.to(self.device.type)
         masks = masks.to(self.device.type).long()
+
+        # GUARD: Check that the masks class indices are not OOB.
+        assert masks.max() < self.classes and masks.min() >= 0, (
+            f"Out mask values should be 0 <= x < {self.classes}, "
+            + f"but has {masks.min()} min and {masks.max()} max. "
+            + f"for input image: {fp}"
+        )
 
         masks_proba: Tensor
         final_uncertainty: Tensor

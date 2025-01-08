@@ -243,6 +243,7 @@ class LGEDataset(
         ) as mask:
             out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
+        num_classes: int
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
@@ -258,25 +259,28 @@ class LGEDataset(
                     lab_mask_one_hot[:, :, 2]
                 )
                 out_mask = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
+                num_classes = 4
 
             case ClassificationMode.MULTICLASS_MODE:
-                pass
+                num_classes = 4
             case ClassificationMode.BINARY_CLASS_3_MODE:
                 lab_mask_one_hot = F.one_hot(
                     out_mask.squeeze(), num_classes=4
                 )  # H x W x C
-                out_mask = lab_mask_one_hot[:, :, 3].bool()
+                out_mask = tv_tensors.Mask(lab_mask_one_hot[:, :, 3].bool().long())
+                num_classes = 2
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
         out_img, out_mask = self.transform_together(out_img, out_mask)
+        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4 and out_mask.min() >= 0, (
-            "Out mask values should be 0 <= x < 4, "
+        assert out_mask.max() < num_classes and out_mask.min() >= 0, (
+            f"Out mask values should be 0 <= x < {num_classes}, "
             + f"but has {out_mask.min()} min and {out_mask.max()} max. "
             + f"for input image and mask paths: {img_name}, {mask_name}"
         )
@@ -404,6 +408,7 @@ class CineDataset(
         ) as mask:
             out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
+        num_classes: int
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
@@ -418,26 +423,31 @@ class CineDataset(
                 lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
                     lab_mask_one_hot[:, :, 2]
                 )
-                out_mask = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
+                out_mask = tv_tensors.Mask(
+                    lab_mask_one_hot.bool().long().permute(-1, 0, 1)
+                )
+                num_classes = 4
 
             case ClassificationMode.MULTICLASS_MODE:
-                pass
+                num_classes = 4
             case ClassificationMode.BINARY_CLASS_3_MODE:
                 lab_mask_one_hot = F.one_hot(
                     out_mask.squeeze(), num_classes=4
                 )  # H x W x C
                 out_mask = lab_mask_one_hot[:, :, 3].bool()
+                num_classes = 2
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
         out_video, out_mask = self.transform_together(combined_video, out_mask)
+        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4 and out_mask.min() >= 0, (
-            "Out mask values should be 0 <= x < 4, "
+        assert out_mask.max() < num_classes and out_mask.min() >= 0, (
+            f"Out mask values should be 0 <= x < {num_classes}, "
             + f"but has {out_mask.min()} min and {out_mask.max()} max. "
             + f"for input image and mask paths: {img_name}, {mask_name}"
         )
@@ -550,6 +560,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
         ) as mask:
             out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
+        num_classes: int
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
@@ -564,26 +575,31 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
                 lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
                     lab_mask_one_hot[:, :, 2]
                 )
-                out_mask = lab_mask_one_hot.bool().permute(-1, 0, 1)
+                out_mask = tv_tensors.Mask(
+                    lab_mask_one_hot.bool().long().permute(-1, 0, 1)
+                )
+                num_classes = 4
 
             case ClassificationMode.MULTICLASS_MODE:
-                pass
+                num_classes = 4
             case ClassificationMode.BINARY_CLASS_3_MODE:
                 lab_mask_one_hot = F.one_hot(
                     out_mask.squeeze(), num_classes=4
                 )  # H x W x C
-                out_mask = lab_mask_one_hot[:, :, 3].bool()
+                out_mask = tv_tensors.Mask(lab_mask_one_hot[:, :, 3].bool().long())
+                num_classes = 2
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
                 )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
+        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4 and out_mask.min() >= 0, (
-            "Out mask values should be 0 <= x < 4, "
+        assert out_mask.max() < num_classes and out_mask.min() >= 0, (
+            f"Out mask values should be 0 <= x < {num_classes}, "
             + f"but has {out_mask.min()} min and {out_mask.max()} max. "
             + f"for input image and mask paths: {img_name}, {mask_name}"
         )
@@ -738,6 +754,7 @@ class TwoStreamDataset(
         ) as mask:
             mask_t = tv_tensors.Mask(self.transform_mask(mask))
 
+        num_classes: int
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
@@ -752,15 +769,19 @@ class TwoStreamDataset(
                 lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
                     lab_mask_one_hot[:, :, 2]
                 )
-                mask_t = tv_tensors.Mask(lab_mask_one_hot.bool().permute(-1, 0, 1))
+                mask_t = tv_tensors.Mask(
+                    lab_mask_one_hot.bool().long().permute(-1, 0, 1)
+                )
+                num_classes = 4
 
             case ClassificationMode.MULTICLASS_MODE:
-                pass
+                num_classes = 4
             case ClassificationMode.BINARY_CLASS_3_MODE:
                 lab_mask_one_hot = F.one_hot(
                     mask_t.squeeze(), num_classes=4
                 )  # H x W x C
-                out_mask = lab_mask_one_hot[:, :, 3].bool()
+                out_mask = tv_tensors.Mask(lab_mask_one_hot[:, :, 3].bool().long())
+                num_classes = 2
             case _:
                 raise NotImplementedError(
                     f"The mode {self.classification_mode.name} is not implemented"
@@ -770,11 +791,12 @@ class TwoStreamDataset(
         out_lge, combined_cines, out_mask = self.transform_together(
             out_lge, combined_cines, mask_t
         )
+        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4 and out_mask.min() >= 0, (
-            "Out mask values should be 0 <= x < 4, "
+        assert out_mask.max() < num_classes and out_mask.min() >= 0, (
+            f"Out mask values should be 0 <= x < {num_classes}, "
             + f"but has {out_mask.min()} min and {out_mask.max()} max. "
             + f"for input images and mask paths: {lge_name}, {cine_name}, {mask_name}"
         )
@@ -930,6 +952,7 @@ class ResidualTwoPlusOneDataset(
                 )
                 out_mask = tv_tensors.Mask(self.transform_mask(mask))
 
+        num_classes: int
         match self.classification_mode:
             case ClassificationMode.MULTILABEL_MODE:
                 # NOTE: This turns the problem into a multilabel segmentation problem.
@@ -944,15 +967,19 @@ class ResidualTwoPlusOneDataset(
                 lab_mask_one_hot[:, :, 1] = lab_mask_one_hot[:, :, 1].bitwise_or(
                     lab_mask_one_hot[:, :, 2]
                 )
-                out_mask = lab_mask_one_hot.bool().permute(-1, 0, 1)
+                out_mask = tv_tensors.Mask(
+                    lab_mask_one_hot.bool().long().permute(-1, 0, 1)
+                )
+                num_classes = 4
 
             case ClassificationMode.MULTICLASS_MODE:
-                pass
+                num_classes = 4
             case ClassificationMode.BINARY_CLASS_3_MODE:
                 lab_mask_one_hot = F.one_hot(
                     out_mask.squeeze(), num_classes=4
                 )  # H x W x C
-                out_mask = lab_mask_one_hot[:, :, 3].bool()
+                out_mask = tv_tensors.Mask(lab_mask_one_hot[:, :, 3].bool().long())
+                num_classes = 2
 
             case _:
                 raise NotImplementedError(
@@ -960,11 +987,12 @@ class ResidualTwoPlusOneDataset(
                 )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
+        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
-        assert out_mask.max() < 4 and out_mask.min() >= 0, (
-            "Out mask values should be 0 <= x < 4, "
+        assert out_mask.max() < num_classes and out_mask.min() >= 0, (
+            f"Out mask values should be 0 <= x < {num_classes}, "
             + f"but has {out_mask.min()} min and {out_mask.max()} max. "
             + f"for input image and mask paths: {img_name}, {mask_name}"
         )
