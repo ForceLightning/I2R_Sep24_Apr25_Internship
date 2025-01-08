@@ -310,7 +310,8 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         classes = self.classes if self.classes != 1 else 2
         assert masks.max() < classes and masks.min() >= 0, (
             f"Out mask values should be 0 <= x < {classes}, "
-            + f"but has {masks.min()} min and {masks.max()} max. "
+            + f"but has {masks.min()} min and {masks.max()} max "
+            + f"with unique items: {masks.unique()} "
             + f"for input image: {fp}"
         )
 
@@ -421,7 +422,8 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         classes = self.classes if self.classes != 1 else 2
         assert masks.max() < classes and masks.min() >= 0, (
             f"Out mask values should be 0 <= x < {classes}, "
-            + f"but has {masks.min()} min and {masks.max()} max. "
+            + f"but has {masks.min()} min and {masks.max()} max "
+            + f"with unique items: {masks.unique()} "
             + f"for input image: {fp}"
         )
 

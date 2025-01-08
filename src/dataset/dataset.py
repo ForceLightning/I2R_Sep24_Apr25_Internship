@@ -73,7 +73,7 @@ class DefaultTransformsMixin:
                 v2.ToImage(),
                 v2.Resize(image_size, antialias=True),
                 v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.22, 0.224, 0.225)),
                 v2.Identity() if loading_mode == LoadingMode.RGB else v2.Grayscale(1),
             ]
         )
@@ -275,7 +275,7 @@ class LGEDataset(
                 )
 
         out_img, out_mask = self.transform_together(out_img, out_mask)
-        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
+        out_mask = torch.clamp(out_mask, 0, num_classes)
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
@@ -289,7 +289,7 @@ class LGEDataset(
         if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
             out_mask = out_mask.unsqueeze(0)
 
-        return out_img, out_mask, img_name
+        return out_img, tv_tensors.Mask(out_mask), img_name
 
     def __len__(self) -> int:
         """Get the length of the dataset."""
@@ -442,7 +442,7 @@ class CineDataset(
                 )
 
         out_video, out_mask = self.transform_together(combined_video, out_mask)
-        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
+        out_mask = torch.clamp(out_mask, 0, num_classes)
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
@@ -461,7 +461,7 @@ class CineDataset(
         if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
             out_mask = out_mask.unsqueeze(0)
 
-        return out_video, out_mask, img_name
+        return out_video, tv_tensors.Mask(out_mask), img_name
 
     def __len__(self) -> int:
         """Get the length of the dataset."""
@@ -594,7 +594,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
                 )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
-        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
+        out_mask = torch.clamp(out_mask, 0, num_classes)
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
@@ -615,7 +615,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
         if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
             out_mask = out_mask.unsqueeze(0)
 
-        return out_video, out_mask, img_name
+        return out_video, tv_tensors.Mask(out_mask), img_name
 
 
 class TwoStreamDataset(
@@ -791,7 +791,7 @@ class TwoStreamDataset(
         out_lge, combined_cines, out_mask = self.transform_together(
             out_lge, combined_cines, mask_t
         )
-        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
+        out_mask = torch.clamp(out_mask, 0, num_classes)
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
@@ -808,7 +808,7 @@ class TwoStreamDataset(
         if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
             out_mask = out_mask.unsqueeze(0)
 
-        return out_lge, out_cine, out_mask, lge_name
+        return out_lge, out_cine, tv_tensors.Mask(out_mask), lge_name
 
     def __len__(self):
         """Get the length of the dataset."""
@@ -921,7 +921,7 @@ class ResidualTwoPlusOneDataset(
 
     def _get_regular(
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+    ) -> tuple[torch.Tensor, torch.Tensor, tv_tensors.Mask, str]:
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
@@ -933,7 +933,9 @@ class ResidualTwoPlusOneDataset(
         combined_video = torch.empty((30, *self.image_size), dtype=torch.uint8)
         for i in range(30):
             img = img_list[i]
-            img = cv2.resize(img, self.image_size)
+            img = cv2.resize(
+                img, self.image_size, interpolation=cv2.INTER_NEAREST_EXACT
+            )
             combined_video[i, :, :] = torch.as_tensor(img)
 
         combined_video = combined_video.view(30, 1, *self.image_size)
@@ -987,7 +989,7 @@ class ResidualTwoPlusOneDataset(
                 )
 
         combined_video, out_mask = self.transform_together(combined_video, out_mask)
-        out_mask = tv_tensors.Mask(torch.clamp(out_mask, 0, num_classes))
+        out_mask = torch.clamp(out_mask, 0, num_classes)
 
         # GUARD: OOB values can cause a CUDA error to occur later when F.one_hot is
         # used.
@@ -1011,11 +1013,11 @@ class ResidualTwoPlusOneDataset(
         if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
             out_mask = out_mask.unsqueeze(0)
 
-        return out_video, out_residuals, out_mask, img_name
+        return out_video, out_residuals, tv_tensors.Mask(out_mask), img_name
 
     def _get_opticalflow(
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+    ) -> tuple[torch.Tensor, torch.Tensor, tv_tensors.Mask, str]:
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
@@ -1111,15 +1113,21 @@ class ResidualTwoPlusOneDataset(
         ), "transforms_resize must be set for optical flow methods."
 
         out_video, out_residuals, out_mask = self.transform_resize(
-            tv_tensors.Image(out_video), tv_tensors.Image(out_residuals), out_mask
+            tv_tensors.Image(out_video),
+            tv_tensors.Image(out_residuals),
+            tv_tensors.Mask(out_mask),
         )
 
-        return out_video, out_residuals, out_mask.squeeze().long(), img_name
+        out_mask = out_mask.squeeze().long()
+        if self.classification_mode == ClassificationMode.BINARY_CLASS_3_MODE:
+            out_mask = out_mask.unsqueeze(0)
+
+        return out_video, out_residuals, tv_tensors.Mask(out_mask), img_name
 
     @override
     def __getitem__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+    ) -> tuple[torch.Tensor, torch.Tensor, tv_tensors.Mask, str]:
         match self.residual_mode:
             case ResidualMode.SUBTRACT_NEXT_FRAME:
                 return self._get_regular(index)
@@ -1151,7 +1159,7 @@ class ResidualTwoPlusOneDataset(
                         v2.ToImage(),
                         v2.ToDtype(torch.float32, scale=True),
                         v2.Normalize(
-                            mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+                            mean=(0.485, 0.456, 0.406), std=(0.22, 0.224, 0.225)
                         ),
                         (
                             v2.Identity()
@@ -1176,9 +1184,11 @@ class ResidualTwoPlusOneDataset(
                         v2.RandomVerticalFlip(),
                         v2.RandomRotation(
                             180.0,  # pyright: ignore[reportArgumentType]
-                            v2.InterpolationMode.BILINEAR,
+                            v2.InterpolationMode.NEAREST,
                         ),
-                        v2.ElasticTransform(alpha=33.0),
+                        v2.ElasticTransform(
+                            alpha=33.0, interpolation=v2.InterpolationMode.NEAREST
+                        ),
                     ]
                     if augment
                     else [v2.Identity()]
