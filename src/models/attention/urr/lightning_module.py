@@ -328,8 +328,10 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
             try:
                 # HACK: This ensures that the dimensions to the loss function are correct.
-                if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-                    self.loss, FocalLoss
+                if (
+                    isinstance(self.loss, (nn.CrossEntropyLoss, FocalLoss))
+                    or self.dl_classification_mode
+                    == ClassificationMode.BINARY_CLASS_3_MODE
                 ):
                     loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
                 else:
@@ -437,8 +439,9 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
         try:
             # HACK: This ensures that the dimensions to the loss function are correct.
-            if isinstance(self.loss, nn.CrossEntropyLoss) or isinstance(
-                self.loss, FocalLoss
+            if (
+                isinstance(self.loss, (nn.CrossEntropyLoss, FocalLoss))
+                or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
             ):
                 loss_seg = self.loss(masks_proba, masks.squeeze(dim=1))
             else:
