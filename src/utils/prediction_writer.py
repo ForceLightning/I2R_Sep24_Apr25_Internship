@@ -20,6 +20,7 @@ from torchvision.transforms.v2 import functional as v2f
 from torchvision.utils import draw_segmentation_masks
 
 # First party imports
+from models.common import CommonModelMixin
 from utils.types import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
 
 
@@ -59,7 +60,7 @@ class MaskImageWriter(BasePredictionWriter):
     def _write_on_epoch_end_no_uncertainty(
         self,
         _trainer: L.Trainer,
-        _pl_module: L.LightningModule,
+        pl_module: L.LightningModule,
         predictions: (
             Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]]
             | Sequence[Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]]]
@@ -67,6 +68,7 @@ class MaskImageWriter(BasePredictionWriter):
         _batch_indices: Sequence[Any],
     ) -> None:
         assert self.output_dir
+        assert isinstance(pl_module, CommonModelMixin)
 
         predictions_for_loop: list[
             Sequence[tuple[torch.Tensor, torch.Tensor, list[str]]]
@@ -91,7 +93,11 @@ class MaskImageWriter(BasePredictionWriter):
                     masked_frames: list[Image] = []
                     for frame in image:
                         masked_frame = _draw_masks(
-                            frame, mask_pred, self.loading_mode, self.inv_transform
+                            frame,
+                            mask_pred,
+                            self.loading_mode,
+                            self.inv_transform,
+                            pl_module.classes,
                         )
                         masked_frames.append(masked_frame)
 
@@ -153,7 +159,7 @@ class MaskImageWriter(BasePredictionWriter):
     def _write_on_epoch_end_uncertainty(
         self,
         _trainer: L.Trainer,
-        _pl_module: L.LightningModule,
+        pl_module: L.LightningModule,
         predictions: (
             Sequence[tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[str]]]
             | Sequence[
@@ -194,7 +200,11 @@ class MaskImageWriter(BasePredictionWriter):
                     masked_frames: list[Image] = []
                     for frame in image:
                         masked_frame = _draw_masks(
-                            frame, mask_pred, self.loading_mode, self.inv_transform
+                            frame,
+                            mask_pred,
+                            self.loading_mode,
+                            self.inv_transform,
+                            pl_module.classes,
                         )
                         masked_frames.append(masked_frame)
 
@@ -330,6 +340,7 @@ def _draw_masks(
     mask_one_hot: torch.Tensor,
     loading_mode: LoadingMode,
     inv_transform: InverseNormalize,
+    num_classes: int = 4,
 ) -> Image:
     """Draws the masks on the image.
 
@@ -348,11 +359,15 @@ def _draw_masks(
     else:
         norm_img = inv_transform(img).clamp(0, 1)
 
+    colors: list[str | tuple[int, int, int]] = (
+        ["black", "green"] if num_classes == 1 else ["black", "red", "blue", "green"]
+    )
+
     return v2f.to_pil_image(
         draw_segmentation_masks(
             norm_img,
             mask_one_hot.bool(),
-            colors=["black", "red", "blue", "green"],
+            colors=colors,
             alpha=0.25,
         ),
         mode="RGB",

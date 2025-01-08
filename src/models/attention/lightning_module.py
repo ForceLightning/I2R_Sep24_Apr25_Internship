@@ -122,6 +122,8 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             attention_only: Whether to use attention only.
             dummy_predict: Whether to predict the ground truth for visualisation.
             temporal_conv_type: What kind of temporal convolutional layers to use.
+            metric_mode: Handling for empty classes in samples.
+            metric_div_zero: Handling for divide by zero operations.
 
         """
         super().__init__()
@@ -690,8 +692,14 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         if self.dummy_predict:
             if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
                 masks_preds = (
-                    F.one_hot(masks, num_classes=4).permute(0, -1, 1, 2).bool()
+                    F.one_hot(masks, num_classes=self.classes)
+                    .permute(0, -1, 1, 2)
+                    .bool()
                 )
+            elif (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                masks_preds = torch.cat([torch.ones_like(masks) - masks, masks], dim=1)
             else:
                 masks_preds = masks.bool()
         else:
@@ -702,10 +710,19 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
                 masks_preds = masks_proba.argmax(dim=1)
                 masks_preds = (
-                    F.one_hot(masks_preds, num_classes=4).permute(0, -1, 1, 2).bool()
+                    F.one_hot(masks_preds, num_classes=self.classes)
+                    .permute(0, -1, 1, 2)
+                    .bool()
+                )
+            elif (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                masks_preds = (masks_proba.sigmoid() > 0.5).long()
+                masks_preds = torch.cat(
+                    [torch.ones_like(masks_preds) - masks_preds], dim=1
                 )
             else:
-                masks_preds = masks_proba > 0.5
+                masks_preds = masks_proba.sigmoid() > 0.5
 
         return masks_preds.detach().cpu(), images.detach().cpu(), fn
 
