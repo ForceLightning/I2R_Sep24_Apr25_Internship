@@ -615,28 +615,13 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     ]
                 case ClassificationMode.BINARY_CLASS_3_MODE:
                     # (B, H, W) -> (B, 2, H, W)
-                    masks_one_hot = torch.cat(
-                        [
-                            torch.ones_like(masks_one_hot.long())
-                            - masks_one_hot.long(),
-                            masks_one_hot.long(),
-                        ],
-                        dim=1,
-                    )
-                    masks_preds = torch.cat(
-                        [
-                            torch.ones_like(masks_preds.long()) - masks_preds.long(),
-                            masks_preds.long(),
-                        ],
-                        dim=1,
-                    )
 
                     pred_images_with_masks = [
                         draw_segmentation_masks(
                             img,
                             masks=mask.bool(),
                             alpha=0.7,
-                            colors=["black", "green"],
+                            colors=["green"],
                         )
                         # Get only the first frame of images.
                         for img, mask in zip(
@@ -650,7 +635,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                             img,
                             masks=mask.bool(),
                             alpha=0.7,
-                            colors=["black", "green"],
+                            colors=["green"],
                         )
                         # Get only the first frame of images.
                         for img, mask in zip(
