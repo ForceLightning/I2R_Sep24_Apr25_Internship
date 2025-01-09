@@ -113,6 +113,15 @@ pip install torch-scatter -f https://data.pyg.org/whl/torch-${torch_version}+${C
 ```
 where `${torch_version}` is the pytorch version installed (check the requirements.txt or Pipfile) and `${CUDA}` is either `cpu`, `cu118`, `cu121`, or `cu124` depending on the PyTorch installation. See [PyTorch Scatter readme](https://github.com/rusty1s/pytorch_scatter/?tab=readme-ov-file#installation) for more info.
 
+## Docker
+1. Ensure that the prerequisite NVIDIA drivers are installed.
+2. Ensure that the NVIDIA Container Toolkit is installed, with docker configured as necessary according to the [documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+3. Build the docker image with the following:
+```sh
+sudo docker build -t i2r-internship .
+```
+4. Usage is similar to the section below, but commands can be prepended by `sudo docker run -it --gpus "<GPUS_TO_USE>" -v $(pwd):/code/ -v <DATA_DIR>:/code/data -v <CHECKPOINT_DIR>:/code/checkpoints i2r-internship:latest` where `<GPUS_TO_USE>` can be `all`, `device=0`, etc., while the `DATA_DIR` and `CHECKPOINT_DIR` paths should also be set to the appropriate system file paths.
+
 # Usage
 Some default configurations are included in the `./configs/` directory, which will be used as modular pieces to construct the complete training/validation configuration.
 
