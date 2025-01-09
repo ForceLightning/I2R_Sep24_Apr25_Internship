@@ -99,9 +99,12 @@ class DefaultTransformsMixin:
                 v2.RandomRotation(
                     180.0,  # pyright: ignore[reportArgumentType]
                     v2.InterpolationMode.NEAREST,
+                    fill={tv_tensors.Image: 0, tv_tensors.Video: 0, tv_tensors.Mask: 0},
                 ),
                 v2.ElasticTransform(
-                    alpha=33.0, interpolation=v2.InterpolationMode.NEAREST
+                    alpha=33.0,
+                    interpolation=v2.InterpolationMode.NEAREST,
+                    fill={tv_tensors.Image: 0, tv_tensors.Video: 0, tv_tensors.Mask: 0},
                 ),
             ]
             if augment
@@ -1185,9 +1188,20 @@ class ResidualTwoPlusOneDataset(
                         v2.RandomRotation(
                             180.0,  # pyright: ignore[reportArgumentType]
                             v2.InterpolationMode.NEAREST,
+                            fill={
+                                tv_tensors.Image: 0,
+                                tv_tensors.Video: 0,
+                                tv_tensors.Mask: 0,
+                            },
                         ),
                         v2.ElasticTransform(
-                            alpha=33.0, interpolation=v2.InterpolationMode.NEAREST
+                            alpha=33.0,
+                            interpolation=v2.InterpolationMode.NEAREST,
+                            fill={
+                                tv_tensors.Image: 0,
+                                tv_tensors.Video: 0,
+                                tv_tensors.Mask: 0,
+                            },
                         ),
                     ]
                     if augment

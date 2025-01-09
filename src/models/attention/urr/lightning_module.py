@@ -215,6 +215,8 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                             classes, "multilabel", class_weights, from_logits=True
                         )
                     )
+                case "binary_cross_entropy":
+                    self.loss = nn.BCEWithLogitsLoss()
                 case _:
                     raise NotImplementedError(
                         f"Loss type of {loss} is not implemented!"
@@ -308,12 +310,18 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
         # GUARD: Check that the masks class indices are not OOB.
         classes = self.classes if self.classes != 1 else 2
-        assert masks.max() < classes and masks.min() >= 0, (
-            f"Out mask values should be 0 <= x < {classes}, "
-            + f"but has {masks.min()} min and {masks.max()} max "
-            + f"with unique items: {masks.unique()} "
-            + f"for input image: {fp}"
-        )
+        if masks.max() >= classes or masks.min() < 0:
+            indices = torch.bitwise_or((masks >= classes), (masks < 0)).nonzero()
+            fps = [fp[i] for i, *_ in indices]
+            logger.error(
+                "Out mask values should be 0 <= x < %d, but has %d min and %d max with unique items: %s for input image(s): %s",
+                classes,
+                masks.min().item(),
+                masks.max().item(),
+                masks.unique(),
+                fps,
+            )
+            raise RuntimeError("Class index OOB.")
 
         with torch.autocast(device_type=self.device.type):
             masks_proba: Tensor
@@ -420,12 +428,18 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
         # GUARD: Check that the masks class indices are not OOB.
         classes = self.classes if self.classes != 1 else 2
-        assert masks.max() < classes and masks.min() >= 0, (
-            f"Out mask values should be 0 <= x < {classes}, "
-            + f"but has {masks.min()} min and {masks.max()} max "
-            + f"with unique items: {masks.unique()} "
-            + f"for input image: {fp}"
-        )
+        if masks.max() >= classes or masks.min() < 0:
+            indices = torch.bitwise_or((masks >= classes), (masks < 0)).nonzero()
+            fps = [fp[i] for i, *_ in indices]
+            logger.error(
+                "Out mask values should be 0 <= x < %d, but has %d min and %d max with unique items: %s for input image(s): %s",
+                classes,
+                masks.min().item(),
+                masks.max().item(),
+                masks.unique(),
+                fps,
+            )
+            raise RuntimeError("Class index OOB.")
 
         masks_proba: Tensor
         final_uncertainty: Tensor
