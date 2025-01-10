@@ -215,13 +215,23 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                             classes, "multilabel", class_weights, from_logits=True
                         )
                     )
+                case _:
+                    raise NotImplementedError(
+                        f"Loss type of {loss} is not implemented!"
+                    )
+        # Otherwise, set if nn.Module
+        elif (
+            isinstance(loss, str)
+            and dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            and eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+        ):
+            match loss:
                 case "binary_cross_entropy":
                     self.loss = nn.BCEWithLogitsLoss()
                 case _:
                     raise NotImplementedError(
                         f"Loss type of {loss} is not implemented!"
                     )
-        # Otherwise, set if nn.Module
         elif isinstance(loss, nn.Module):
             self.loss = loss
         else:
@@ -337,7 +347,14 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
             try:
                 # HACK: This ensures that the dimensions to the loss function are correct.
-                if (
+                if isinstance(self.loss, nn.BCEWithLogitsLoss):
+                    loss_seg = self.loss(
+                        masks_proba.squeeze(dim=1),
+                        masks.squeeze(dim=1).to(
+                            masks_proba.dtype
+                        ),  # BCE expects float target
+                    )
+                elif (
                     isinstance(self.loss, (nn.CrossEntropyLoss, FocalLoss))
                     or self.dl_classification_mode
                     == ClassificationMode.BINARY_CLASS_3_MODE
@@ -455,7 +472,14 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
         try:
             # HACK: This ensures that the dimensions to the loss function are correct.
-            if (
+            if isinstance(self.loss, nn.BCEWithLogitsLoss):
+                loss_seg = self.loss(
+                    masks_proba.squeeze(dim=1),
+                    masks.squeeze(dim=1).to(
+                        masks_proba.dtype
+                    ),  # BCE expects float target
+                )
+            elif (
                 isinstance(self.loss, (nn.CrossEntropyLoss, FocalLoss))
                 or self.dl_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
             ):
