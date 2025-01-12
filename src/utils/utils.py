@@ -311,6 +311,8 @@ def get_accumulate_grad_batches(devices: int, batch_size: int):
         int: The number of batches to accumulate the gradients
 
     """
+    devices = int(devices)
+    batch_size = int(batch_size)
     if batch_size >= 8:
         return 1
     else:
