@@ -1,0 +1,61 @@
+metrics package
+===============
+
+Submodules
+----------
+
+metrics.dice module
+-------------------
+
+.. automodule:: metrics.dice
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+metrics.jaccard module
+----------------------
+
+.. automodule:: metrics.jaccard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+metrics.logging module
+----------------------
+
+.. automodule:: metrics.logging
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+metrics.loss module
+-------------------
+
+.. automodule:: metrics.loss
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+metrics.precision\_recall module
+--------------------------------
+
+.. automodule:: metrics.precision_recall
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+metrics.utils module
+--------------------
+
+.. automodule:: metrics.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: metrics
+   :members:
+   :undoc-members:
+   :show-inheritance:
