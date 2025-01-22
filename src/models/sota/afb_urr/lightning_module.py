@@ -620,13 +620,23 @@ class AFB_URRLightningModule(CommonModelMixin):
 
         model_ret: tuple[Tensor, Tensor | None]
 
+        if self.dl_classification_mode == ClassificationMode.MULTICLASS_MODE:
+            masks_input = F.one_hot(masks, self.classes)
+            masks_input = (
+                masks_input.permute(0, -1, 1, 2)
+                if masks_input.ndim == 4
+                else masks_input.permute(-1, 0, 1)
+            )
+        else:
+            masks_input = masks
+
         if self._use_original:
             assert isinstance(
                 self.model, AFB_URR_Base
             ), "Wrong model class if use_original is True"
 
             first_frame = tv_tensors.Image(images_input[:, 0].clone())
-            first_mask = tv_tensors.Mask(masks.clone())
+            first_mask = tv_tensors.Mask(masks_input.clone())
 
             first_frame, first_mask = self.first_frame_transform(
                 first_frame, first_mask
@@ -645,7 +655,7 @@ class AFB_URRLightningModule(CommonModelMixin):
                 self.model, AFB_URR
             ), "Wrong model class if use_original is False"
             first_frame = tv_tensors.Image(images_input[:, 0:1].clone())
-            first_mask = tv_tensors.Mask(masks.clone())
+            first_mask = tv_tensors.Mask(masks_input.clone())
 
             first_frame, first_mask = self.first_frame_transform(
                 first_frame, first_mask
