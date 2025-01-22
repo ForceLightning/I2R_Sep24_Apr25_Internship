@@ -18,4 +18,5 @@ data:
 dl_classification_mode: MULTICLASS_MODE
 eval_classification_mode: MULTICLASS_MODE
 image_loading_mode: RGB
-
+prediction_writer:
+  uncertainty: True
