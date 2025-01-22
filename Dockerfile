@@ -14,5 +14,6 @@ RUN pip install -r /install/requirements-dev.txt
 RUN pip install torch-scatter -f https://data.pyg.org/whl/torch-2.5.1+cu121.html
 RUN pip install typing_extensions>=4.4.0
 ENV PYTHONPATH="src/:thirdparty/VPS"
+ENV TZ="Asia/Singapore"
 
 WORKDIR /code
