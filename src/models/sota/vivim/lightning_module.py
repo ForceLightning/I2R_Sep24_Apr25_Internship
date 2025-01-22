@@ -586,6 +586,9 @@ class VivimLightningModule(CommonModelMixin):
         else:
             images, masks, _, fn = batch
 
+        bs = images.shape[0] if images.ndim > 3 else 1
+        h, w = images.shape[-2:]
+
         images_input = images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
@@ -596,6 +599,9 @@ class VivimLightningModule(CommonModelMixin):
             )  # pyright: ignore[reportCallIssue]
         else:
             masks_proba = self.model(images_input)  # pyright: ignore[reportCallIssue]
+
+        masks_proba = masks_proba.reshape(bs, self.num_frames, self.classes, h, w)
+        masks_proba = masks_proba[:, 0, :, :, :]
 
         if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
             masks_preds = masks_proba.argmax(dim=1)
