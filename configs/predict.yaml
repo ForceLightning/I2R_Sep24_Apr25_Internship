@@ -26,3 +26,5 @@ model_checkpoint_dice_weighted:
 model_checkpoint_dice_macro_class_2_3:
   save_last: false
   save_top_k: 0
+prediction_writer:
+  drawn_classes: [ 3 ]

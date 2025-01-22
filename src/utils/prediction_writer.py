@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 import os
 from typing import Any, Literal, Sequence
 
@@ -23,6 +24,8 @@ from torchvision.utils import draw_segmentation_masks
 from models.common import CommonModelMixin
 from utils.types import INV_NORM_RGB_DEFAULT, InverseNormalize, LoadingMode
 
+logger = logging.getLogger(__name__)
+
 
 class MaskImageWriter(BasePredictionWriter):
     """Writes the predicted images with masks to the output directory."""
@@ -35,6 +38,7 @@ class MaskImageWriter(BasePredictionWriter):
         inv_transform: InverseNormalize = INV_NORM_RGB_DEFAULT,
         format: Literal["apng", "tiff", "gif", "webp", "png"] = "gif",
         uncertainty: bool = False,
+        drawn_classes: tuple[int, ...] = (0, 1, 2, 3),
     ):
         """Initialise the MaskImageWriter.
 
@@ -45,6 +49,7 @@ class MaskImageWriter(BasePredictionWriter):
             loading_mode: The loading mode of the images.
             format: Output format of the images.
             uncertainty: Whether to expect uncertainty input.
+            drawn_classes: Number of classes to draw.
 
         """
         super().__init__(write_interval)
@@ -53,6 +58,7 @@ class MaskImageWriter(BasePredictionWriter):
         self.loading_mode = loading_mode
         self.format: Literal["apng", "tiff", "gif", "webp", "png"] = format
         self.uncertainty = uncertainty
+        self.drawn_classes = drawn_classes
         if self.output_dir:
             if not os.path.exists(out_dir := os.path.normpath(self.output_dir)):
                 os.makedirs(out_dir)
@@ -97,11 +103,21 @@ class MaskImageWriter(BasePredictionWriter):
                             mask_pred,
                             self.loading_mode,
                             self.inv_transform,
-                            pl_module.classes,
+                            self.drawn_classes,
                         )
                         masked_frames.append(masked_frame)
 
                     save_sample_fp = ".".join(fn.split(".")[:-1])
+
+                    if (mask_pred[3, :, :] == 1).any():
+                        save_sample_fp = f"{save_sample_fp}_pos3"
+                        num_pixels = (mask_pred[3, :, :] == 1).long().sum()
+                        logging.log(
+                            15,
+                            "mask at idx 3 detected with %d pixel(s) @fp: %s",
+                            num_pixels,
+                            save_sample_fp,
+                        )
 
                     save_path = os.path.join(
                         os.path.normpath(self.output_dir),
@@ -204,13 +220,20 @@ class MaskImageWriter(BasePredictionWriter):
                             mask_pred,
                             self.loading_mode,
                             self.inv_transform,
-                            pl_module.classes,
+                            self.drawn_classes,
                         )
                         masked_frames.append(masked_frame)
 
                     save_sample_fp = ".".join(fn.split(".")[:-1])
                     if (mask_pred[3, :, :] == 1).any():
                         save_sample_fp = f"{save_sample_fp}_pos3"
+                        num_pixels = (mask_pred[3, :, :] == 1).long().sum()
+                        logging.log(
+                            15,
+                            "mask at idx 3 detected with %d pixel(s) @fp: %s",
+                            num_pixels,
+                            save_sample_fp,
+                        )
 
                     save_path = os.path.join(
                         os.path.normpath(self.output_dir),
@@ -221,7 +244,7 @@ class MaskImageWriter(BasePredictionWriter):
                         os.makedirs(save_path)
 
                     # H, W -> (1, H, W)
-                    uncertainty_pil = v2f.to_pil_image(uncertainty.unsqueeze(0))
+                    uncertainty_pil = v2f.to_pil_image(uncertainty)
                     uncertainty_save_path = os.path.join(save_path, "uncertainty.png")
                     uncertainty_pil.save(uncertainty_save_path)
 
@@ -340,7 +363,7 @@ def _draw_masks(
     mask_one_hot: torch.Tensor,
     loading_mode: LoadingMode,
     inv_transform: InverseNormalize,
-    num_classes: int = 4,
+    drawn_classes: tuple[int, ...] = (0, 1, 2, 3),
 ) -> Image:
     """Draws the masks on the image.
 
@@ -349,6 +372,7 @@ def _draw_masks(
         mask_one_hot: The one-hot encoded mask tensor.
         loading_mode: Whether the image is loaded as RGB or Greyscale.
         inv_transform: Inverse normalisation transformation of the image.
+        drawn_classes: Indices for which masks to use for drawing.
 
     Return:
         Image: The image with the masks drawn on it.
@@ -360,15 +384,17 @@ def _draw_masks(
         norm_img = inv_transform(img).clamp(0, 1)
 
     colors: list[str | tuple[int, int, int]] = (
-        ["black", "green"] if num_classes == 1 else ["black", "red", "blue", "green"]
+        ["green"] if len(drawn_classes) == 1 else ["black", "red", "blue", "green"]
     )
+
+    selected_masks = mask_one_hot.bool()[drawn_classes, :, :]
 
     return v2f.to_pil_image(
         draw_segmentation_masks(
             norm_img,
-            mask_one_hot.bool(),
+            selected_masks,
             colors=colors,
-            alpha=0.25,
+            alpha=0.7,
         ),
         mode="RGB",
     )
