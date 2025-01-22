@@ -1,6 +1,7 @@
 """Compute mPrecision and mRecall."""
 
 # Standard Library
+import logging
 from typing import Any, Literal, Optional, override
 
 # PyTorch
@@ -37,6 +38,8 @@ from utils.types import MetricMode
 
 # Local folders
 from .utils import _get_nonzeros_classwise
+
+logger = logging.getLogger(__name__)
 
 
 class MulticlassMPrecision(MulticlassPrecision):
@@ -104,7 +107,8 @@ class MulticlassMPrecision(MulticlassPrecision):
         target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
             0, -1, *(range(1, len(target.shape)))
         )
-        target_nonzeros = _get_nonzeros_classwise(target_nonzeros).sum(dim=0)
+        target_nonzeros = _get_nonzeros_classwise(target_nonzeros)
+        logger.log(11, "target_nonzeros: %s", str(target_nonzeros))
         if self.validate_args:
             _multiclass_stat_scores_tensor_validation(
                 preds,
@@ -137,22 +141,27 @@ class MulticlassMPrecision(MulticlassPrecision):
         )
 
         if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.samples += target_nonzeros.sum(dim=0)
             match self.multidim_average:
                 case "global":
-                    self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum()
+                    self.mPrecision_running += (mPrecision * target_nonzeros).sum() * bs
                 case "samplewise":
-                    self.mPrecision_running += (mPrecision * bs * target_nonzeros).sum(
-                        dim=0
-                    )
+                    self.mPrecision_running += (mPrecision * target_nonzeros).sum(dim=0)
 
         else:
-            self.samples += preds.shape[0]
+            self.samples += bs
             match self.multidim_average:
                 case "global":
                     self.mPrecision_running += mPrecision * preds.shape[0]
                 case "samplewise":
-                    self.samples += preds.shape[0]
                     self.mPrecision_running += mPrecision.sum(dim=0)
+
+        logger.log(
+            11,
+            "self.samples: %s, self.mPrecision_running: %s",
+            str(self.samples),
+            str(self.mPrecision_running),
+        )
 
 
 class MultilabelMPrecision(MultilabelPrecision):
@@ -321,7 +330,8 @@ class MulticlassMRecall(MulticlassRecall):
         target_nonzeros = F.one_hot(target, num_classes=self.num_classes).permute(
             0, -1, *(range(1, len(target.shape)))
         )
-        target_nonzeros = _get_nonzeros_classwise(target_nonzeros).sum(dim=0)
+        target_nonzeros = _get_nonzeros_classwise(target_nonzeros)
+        logger.log(11, "target_nonzeros: %s", str(target_nonzeros))
         if self.validate_args:
             _multiclass_stat_scores_tensor_validation(
                 preds,
@@ -354,19 +364,26 @@ class MulticlassMRecall(MulticlassRecall):
         )
 
         if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
+            self.samples += (target_nonzeros).sum(dim=0)
             match self.multidim_average:
                 case "global":
-                    self.mRecall_running += (mRecall * bs * target_nonzeros).sum()
+                    self.mRecall_running += (mRecall * target_nonzeros).sum()
                 case "samplewise":
-                    self.mRecall_running += (mRecall * bs * target_nonzeros).sum(dim=0)
+                    self.mRecall_running += (mRecall * target_nonzeros).sum(dim=0)
 
         else:
-            self.samples += preds.shape[0]
+            self.samples += bs
             match self.multidim_average:
                 case "global":
                     self.mRecall_running += mRecall * preds.shape[0]
                 case "samplewise":
                     self.mRecall_running += mRecall.sum(dim=0)
+        logger.log(
+            11,
+            "self.samples: %s, self.mRecall_running: %s",
+            str(self.samples),
+            str(self.mRecall_running),
+        )
 
 
 class MultilabelMRecall(MultilabelRecall):

@@ -1,6 +1,7 @@
 """Compute mJaccard-Index."""
 
 # Standard Library
+import logging
 from typing import Any, Literal, Optional, override
 
 # PyTorch
@@ -39,6 +40,8 @@ from utils.types import MetricMode
 
 # Local folders
 from .utils import _get_nonzeros_classwise
+
+logger = logging.getLogger(__name__)
 
 
 class MulticlassMJaccardIndex(MulticlassJaccardIndex):
@@ -129,6 +132,13 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
             self.samples += (bs * target_nonzeros).sum(dim=0)
         else:
             self.samples += preds.shape[0]
+
+        logger.log(
+            11,
+            "self.samples: %s, self.mJaccard_running: %s",
+            str(self.samples),
+            str(self.mJaccard_running),
+        )
 
 
 class MultilabelMJaccardIndex(MultilabelJaccardIndex):
