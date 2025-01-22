@@ -18,15 +18,15 @@ from utils.logging import LOGGING_FORMAT
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
-
-file_handler = logging.FileHandler(filename="logs/urr_attention_unet.log")
-stdout_handler = logging.StreamHandler(stream=sys.stdout)
-handlers = [file_handler, stdout_handler]
-logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, handlers=handlers)
 logger = logging.getLogger(__name__)
 
 
 if __name__ == "__main__":
+    file_handler = logging.FileHandler(filename="logs/urr_attention_unet.log")
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    handlers = [file_handler, stdout_handler]
+    logging.basicConfig(level=15, format=LOGGING_FORMAT, handlers=handlers)
+    logger = logging.getLogger(__name__)
 
     cli = ResidualAttentionCLI(
         URRResidualAttentionLightningModule,

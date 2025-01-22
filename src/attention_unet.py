@@ -23,16 +23,12 @@ from models.attention import ResidualAttentionLightningModule
 from models.two_plus_one import TemporalConvolutionalType
 from utils import utils
 from utils.logging import LOGGING_FORMAT
-from utils.types import ClassificationMode, LoadingMode, ResidualMode
+from utils.types import ClassificationMode, DummyPredictMode, LoadingMode, ResidualMode
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
 
-file_handler = logging.FileHandler(filename="logs/attention_unet.log")
-stdout_handler = logging.StreamHandler(stream=sys.stdout)
-handlers = [file_handler, stdout_handler]
-logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, handlers=handlers)
 logger = logging.getLogger(__name__)
 
 
@@ -316,6 +312,12 @@ class ResidualAttentionCLI(I2RInternshipCommonCLI):
 
 
 if __name__ == "__main__":
+    file_handler = logging.FileHandler(filename="logs/attention_unet.log")
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    handlers = [file_handler, stdout_handler]
+    logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, handlers=handlers)
+    logger = logging.getLogger(__name__)
+
     cli = ResidualAttentionCLI(
         ResidualAttentionLightningModule,
         ResidualTwoPlusOneDataModule,
