@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 import os
+import sys
 from typing import override
 
 # PyTorch
@@ -17,10 +19,13 @@ from torch.utils.data import DataLoader
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import CineDataset, get_trainval_data_subsets
 from models.default_unet import LightningUnetWrapper
-from utils.types import ClassificationMode, LoadingMode
+from utils.logging import LOGGING_FORMAT
+from utils.types import ClassificationMode, DummyPredictMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size
 torch.set_float32_matmul_precision("medium")
+
+logger = logging.getLogger(__name__)
 
 
 class CineBaselineDataModule(L.LightningDataModule):
@@ -39,7 +44,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
     ):
         """Init the Cine baseline datamodule.
 
@@ -193,7 +198,10 @@ class CineBaselineDataModule(L.LightningDataModule):
             persistent_workers=False,
         )
 
-        if self.dummy_predict:
+        if self.dummy_predict in (
+            DummyPredictMode.GROUND_TRUTH,
+            DummyPredictMode.BLANK,
+        ):
             train_loader = DataLoader(
                 self.train,
                 batch_size=self.batch_size,
@@ -242,6 +250,12 @@ class CineCLI(I2RInternshipCommonCLI):
 
 
 if __name__ == "__main__":
+    file_handler = logging.FileHandler(filename="logs/urr_attention_unet.log")
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    handlers = [file_handler, stdout_handler]
+    logging.basicConfig(level=15, format=LOGGING_FORMAT, handlers=handlers)
+    logger = logging.getLogger(__name__)
+
     cli = CineCLI(
         LightningUnetWrapper,
         CineBaselineDataModule,

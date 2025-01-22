@@ -131,7 +131,7 @@ class URRDecoder(nn.Module):
     @override
     def forward(
         self, features: Sequence[Tensor], low_level_feature: Optional[Tensor] = None
-    ) -> tuple[Tensor, Tensor | None, Tensor]:
+    ) -> tuple[Tensor, Tensor | None, Tensor, Tensor]:
         if low_level_feature is not None:
             b, _, h, w = low_level_feature.shape
         else:
@@ -143,7 +143,8 @@ class URRDecoder(nn.Module):
 
         if self.uncertainty_mode == UncertaintyMode.UR:
             uncertainty = calc_uncertainty(F.softmax(rough_seg, dim=1))
-            return rough_seg, None, uncertainty
+            conf_loss = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(h * w * 4)
+            return rough_seg, None, uncertainty, conf_loss
 
         score: Tensor
         initial_uncertainty: Tensor
@@ -153,12 +154,12 @@ class URRDecoder(nn.Module):
             score, initial_uncertainty = self.refiner(rough_seg, features[1])
 
         uncertainty = calc_uncertainty(F.softmax(score, dim=1))
-        uncertainty = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(h * w * 4)
+        conf_loss = uncertainty.view(b, -1).norm(p=2, dim=1) / sqrt(h * w * 4)
 
         score = torch.clamp(score, 1e-7, 1 - 1e-7)
         score = torch.log((score / (1 - score)))
 
-        return score, initial_uncertainty, uncertainty
+        return score, initial_uncertainty, uncertainty, conf_loss
 
 
 class URRResidualAttentionUnet(ResidualAttentionUnet):
@@ -296,7 +297,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
     @override
     def forward(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, regular_frames: Tensor, residual_frames: Tensor
-    ) -> tuple[Tensor, Tensor | None, Tensor]:
+    ) -> tuple[Tensor, Tensor | None, Tensor, Tensor]:
         img_features_list: list[Tensor] = []
         res_features_list: list[Tensor] = []
         b, *_ = regular_frames.shape
@@ -355,15 +356,22 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
 
             residual_outputs.append(skip_output)
 
+        score: Tensor
+        initial_uncertainty: Tensor | None
+        uncertainty: Tensor
+        conf_loss: Tensor
+
         match self.urr_source:
             case URRSource.O1:
-                score, initial_uncertainty, uncertainty = self.decoder(
+                score, initial_uncertainty, uncertainty, conf_loss = self.decoder(
                     residual_outputs, o1_outputs[0]
                 )
             case URRSource.O3:
-                score, initial_uncertainty, uncertainty = self.decoder(residual_outputs)
+                score, initial_uncertainty, uncertainty, conf_loss = self.decoder(
+                    residual_outputs
+                )
 
-        return score, initial_uncertainty, uncertainty
+        return score, initial_uncertainty, uncertainty, conf_loss
 
 
 class URRResidualAttentionUnetPlusPlus(URRResidualAttentionUnet):
@@ -512,7 +520,9 @@ if __name__ == "__main__":
         reduce="sum",
     ).cuda()  # pyright: ignore[reportAttributeAccessIssue]
 
-    score, init_uncertainty, uncertainty = model.forward(batch_img, batch_res)
+    score, init_uncertainty, uncertainty, conf_loss = model.forward(
+        batch_img, batch_res
+    )
 
     assert init_uncertainty is not None
 

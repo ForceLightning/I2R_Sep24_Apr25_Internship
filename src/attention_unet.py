@@ -50,7 +50,7 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
     ):
         """Initialise the Residual TwoPlusOne dataset.
 
@@ -229,7 +229,10 @@ class ResidualTwoPlusOneDataModule(L.LightningDataModule):
             persistent_workers=False,
         )
 
-        if self.dummy_predict:
+        if self.dummy_predict in (
+            DummyPredictMode.GROUND_TRUTH,
+            DummyPredictMode.BLANK,
+        ):
             train_loader = DataLoader(
                 self.train,
                 batch_size=self.batch_size,

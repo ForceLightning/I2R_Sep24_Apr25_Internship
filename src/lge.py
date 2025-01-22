@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import LGEDataset, get_trainval_data_subsets
 from models.default_unet import LightningUnetWrapper
-from utils.types import ClassificationMode, LoadingMode
+from utils.types import ClassificationMode, DummyPredictMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 torch.set_float32_matmul_precision("medium")
@@ -40,7 +40,7 @@ class LGEBaselineDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
     ):
         """Initialise the LGE MRI data module.
 
@@ -191,7 +191,10 @@ class LGEBaselineDataModule(L.LightningDataModule):
             persistent_workers=False,
         )
 
-        if self.dummy_predict:
+        if self.dummy_predict in (
+            DummyPredictMode.GROUND_TRUTH,
+            DummyPredictMode.BLANK,
+        ):
             train_loader = DataLoader(
                 self.train,
                 batch_size=self.batch_size,

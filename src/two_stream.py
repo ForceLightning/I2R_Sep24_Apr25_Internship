@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from cli.common import I2RInternshipCommonCLI
 from dataset.dataset import TwoStreamDataset, get_trainval_data_subsets
 from models.two_stream import TwoStreamUnetLightning
-from utils.types import ClassificationMode, LoadingMode
+from utils.types import ClassificationMode, DummyPredictMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 8  # Default batch size for training.
 NUM_FRAMES = 30  # Default number of frames.
@@ -41,7 +41,7 @@ class TwoStreamDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
     ) -> None:
         """Initialise the TwoStreamDataModule.
 
@@ -202,7 +202,10 @@ class TwoStreamDataModule(L.LightningDataModule):
             persistent_workers=False,
         )
 
-        if self.dummy_predict:
+        if self.dummy_predict in (
+            DummyPredictMode.GROUND_TRUTH,
+            DummyPredictMode.BLANK,
+        ):
             train_loader = DataLoader(
                 self.train,
                 batch_size=self.batch_size,

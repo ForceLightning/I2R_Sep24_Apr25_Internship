@@ -42,6 +42,7 @@ from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
+    DummyPredictMode,
     LoadingMode,
     MetricMode,
     ModelType,
@@ -77,7 +78,7 @@ class LightningUnetWrapper(CommonModelMixin):
         eval_classification_mode: ClassificationMode = ClassificationMode.MULTILABEL_MODE,
         loading_mode: LoadingMode = LoadingMode.RGB,
         dump_memory_snapshot: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
         metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
         metric_div_zero: float = 1.0,
     ):
@@ -570,13 +571,22 @@ class LightningUnetWrapper(CommonModelMixin):
         masks = masks.to(self.device.type).long()
 
         masks_preds: torch.Tensor
-        if self.dummy_predict:
+        if self.dummy_predict == DummyPredictMode.GROUND_TRUTH:
             if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
                 masks_preds = (
                     F.one_hot(masks, num_classes=4).permute(0, -1, 1, 2).bool()
                 )
             else:
                 masks_preds = masks.bool()
+        elif self.dummy_predict == DummyPredictMode.BLANK:
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = (
+                    F.one_hot(torch.zeros_like(masks), num_classes=4)
+                    .permute(0, -1, 1, 2)
+                    .bool()
+                )
+            else:
+                masks_preds = torch.zeros_like(masks).bool()
         else:
             assert isinstance(self.model, nn.Module)
             masks_proba: torch.Tensor = self.model(images_input)

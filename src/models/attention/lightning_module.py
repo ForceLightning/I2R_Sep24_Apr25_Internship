@@ -42,6 +42,7 @@ from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
+    DummyPredictMode,
     LoadingMode,
     MetricMode,
     ModelType,
@@ -83,7 +84,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         unet_activation: str | None = None,
         attention_reduction: REDUCE_TYPES = "sum",
         attention_only: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.ORIGINAL,
         metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
         metric_div_zero: float = 1.0,
@@ -681,7 +682,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         masks = masks.to(self.device.type).long()
 
         masks_preds: torch.Tensor
-        if self.dummy_predict:
+        if self.dummy_predict == DummyPredictMode.GROUND_TRUTH:
             if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
                 masks_preds = (
                     F.one_hot(masks, num_classes=self.classes)
@@ -694,6 +695,19 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                 masks_preds = torch.cat([torch.ones_like(masks) - masks, masks], dim=1)
             else:
                 masks_preds = masks.bool()
+        elif self.dummy_predict == DummyPredictMode.BLANK:
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = (
+                    F.one_hot(torch.zeros_like(masks), num_classes=self.classes)
+                    .permute(0, -1, 1, 2)
+                    .bool()
+                )
+            elif (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                masks_preds = torch.zeros_like(masks)
+            else:
+                masks_preds = torch.zeros_like(masks).bool()
         else:
             assert isinstance(self.model, nn.Module)
 

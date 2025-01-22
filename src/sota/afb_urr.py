@@ -18,7 +18,7 @@ from cli.common import CommonCLI
 from dataset.afb_urr import AFB_URRDataset
 from dataset.dataset import get_trainval_data_subsets
 from models.sota.afb_urr.lightning_module import AFB_URRLightningModule
-from utils.types import ClassificationMode, LoadingMode
+from utils.types import ClassificationMode, DummyPredictMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
@@ -44,7 +44,7 @@ class AFB_URRDataModule(L.LightningDataModule):
         loading_mode: LoadingMode = LoadingMode.RGB,
         combine_train_val: bool = False,
         augment: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
     ) -> None:
         """Initialise the AFB-URR DataModule.
 
@@ -208,7 +208,10 @@ class AFB_URRDataModule(L.LightningDataModule):
             persistent_workers=False,
         )
 
-        if self.dummy_predict:
+        if self.dummy_predict in (
+            DummyPredictMode.GROUND_TRUTH,
+            DummyPredictMode.BLANK,
+        ):
             train_loader = DataLoader(
                 self.train,
                 batch_size=self.batch_size,

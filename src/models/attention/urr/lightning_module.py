@@ -15,6 +15,7 @@ from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 import torch
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from torch import Tensor, nn
+from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torchmetrics import Metric, MetricCollection
@@ -28,6 +29,7 @@ from utils.types import (
     INV_NORM_GREYSCALE_DEFAULT,
     INV_NORM_RGB_DEFAULT,
     ClassificationMode,
+    DummyPredictMode,
     LoadingMode,
     MetricMode,
     ModelType,
@@ -82,7 +84,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         unet_activation: str | None = None,
         attention_reduction: REDUCE_TYPES = "sum",
         attention_only: bool = False,
-        dummy_predict: bool = False,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
         temporal_conv_type: TemporalConvolutionalType = TemporalConvolutionalType.ORIGINAL,
         urr_source: URRSource = URRSource.O3,
         uncertainty_mode: UncertaintyMode = UncertaintyMode.URR,
@@ -186,7 +188,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
         ):
             match loss:
                 case "cross_entropy":
-                    class_weights = torch.Tensor(
+                    class_weights = Tensor(
                         [
                             0.05,
                             0.05,
@@ -198,7 +200,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
                 case "weighted_dice":
-                    class_weights = torch.Tensor(
+                    class_weights = Tensor(
                         [
                             0.05,
                             0.1,
@@ -335,8 +337,8 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
 
         with torch.autocast(device_type=self.device.type):
             masks_proba: Tensor
-            final_uncertainty: Tensor
-            masks_proba, _init_uncertainty, final_uncertainty = self.model(
+            conf_loss: Tensor
+            masks_proba, _init_uncertainty, _final_uncertainty, conf_loss = self.model(
                 images_input, res_input
             )
             if self.dl_classification_mode == ClassificationMode.MULTILABEL_MODE:
@@ -375,7 +377,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 )
                 raise e
 
-            loss_uncertainty = final_uncertainty.mean()
+            loss_uncertainty = conf_loss.mean()
             loss_all = self.alpha * loss_seg + self.beta * loss_uncertainty
 
         self.log(
@@ -432,7 +434,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, Tensor, str],
         batch_idx: int,
         prefix: Literal["val", "test"],
     ):
@@ -459,8 +461,8 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             raise RuntimeError("Class index OOB.")
 
         masks_proba: Tensor
-        final_uncertainty: Tensor
-        masks_proba, _init_uncertainty, final_uncertainty = self.model(
+        conf_loss: Tensor
+        masks_proba, _init_uncertainty, _final_uncertainty, conf_loss = self.model(
             images_input, res_input
         )
 
@@ -499,7 +501,7 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
             )
             raise e
 
-        loss_uncertainty = final_uncertainty.mean()
+        loss_uncertainty = conf_loss.mean()
         loss_all = self.alpha * loss_seg + self.beta * loss_uncertainty
 
         self.log(
@@ -555,3 +557,78 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                     prefix,
                     10,
                 )
+
+    @override
+    @torch.no_grad()
+    def predict_step(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        batch: tuple[Tensor, Tensor, Tensor, str | list[str]],
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ):
+        self.eval()
+        images, res_images, masks, fp = batch
+        images_input = images.to(self.device.type)
+        res_input = res_images.to(self.device.type)
+        masks = masks.to(self.device.type).long()
+
+        masks_preds: Tensor
+        if self.dummy_predict == DummyPredictMode.GROUND_TRUTH:
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = (
+                    F.one_hot(masks, num_classes=self.classes)
+                    .permute(0, -1, 1, 2)
+                    .bool()
+                )
+            elif (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                masks_preds = masks
+            else:
+                masks_preds = masks.bool()
+
+            final_uncertainty = torch.zeros_like(masks_preds)[:, 1, :, :]
+        elif self.dummy_predict == DummyPredictMode.BLANK:
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = (
+                    F.one_hot(torch.zeros_like(masks), num_classes=self.classes)
+                    .permute(0, -1, 1, 2)
+                    .bool()
+                )
+            elif (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                masks_preds = torch.zeros_like(masks)
+            else:
+                masks_preds = torch.zeros_like(masks).bool()
+
+            final_uncertainty = torch.zeros_like(masks_preds)[:, 1, :, :]
+        else:
+            assert isinstance(self.model, nn.Module)
+
+            masks_proba: Tensor
+            final_uncertainty: Tensor
+            masks_proba, _init_uncertainty, final_uncertainty, _conf_loss = self.model(
+                images_input, res_input
+            )
+
+            if self.eval_classification_mode == ClassificationMode.MULTICLASS_MODE:
+                masks_preds = masks_proba.argmax(dim=1)
+                masks_preds = (
+                    F.one_hot(masks_preds, num_classes=self.classes)
+                    .permute(0, -1, 1, 2)
+                    .bool()
+                )
+            elif (
+                self.eval_classification_mode == ClassificationMode.BINARY_CLASS_3_MODE
+            ):
+                masks_preds = (masks_proba.sigmoid() > 0.5).long()
+            else:
+                masks_preds = masks_proba.sigmoid() > 0.5
+
+        return (
+            masks_preds.detach().cpu(),
+            final_uncertainty.detach().cpu(),
+            images.detach().cpu(),
+            fp,
+        )

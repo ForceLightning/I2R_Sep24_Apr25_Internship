@@ -111,3 +111,18 @@ class MetricMode(Enum):
 
     INCLUDE_EMPTY_CLASS = auto()
     IGNORE_EMPTY_CLASS = auto()
+
+
+class DummyPredictMode(Enum):
+    """Dummy prediction mode.
+
+    Attributes:
+        NONE: No-op.
+        GROUND_TRUTH: Outputs the ground truth masks.
+        BLANK: Outputs only the images.
+
+    """
+
+    NONE = auto()
+    GROUND_TRUTH = auto()
+    BLANK = auto()
