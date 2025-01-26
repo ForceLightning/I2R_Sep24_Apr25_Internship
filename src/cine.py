@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import override
+from typing import Literal, override
 
 # PyTorch
 import lightning as L
@@ -45,6 +45,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         combine_train_val: bool = False,
         augment: bool = False,
         dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
+        select_frame_method: Literal["consecutive", "specific"] = "consecutive",
     ):
         """Init the Cine baseline datamodule.
 
@@ -61,6 +62,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             combine_train_val: Whether to combine train/val sets.
             augment: Whether to perform data augmentation during training.
             dummy_predict: Whether to include train/val sets in the prediction.
+            select_frame_method: How to select <30 frames.
 
         """
         super().__init__()
@@ -77,6 +79,7 @@ class CineBaselineDataModule(L.LightningDataModule):
         self.combine_train_val = combine_train_val
         self.augment = augment
         self.dummy_predict = dummy_predict
+        self.select_frame_method: Literal["consecutive", "specific"] = "consecutive"
 
     @override
     def setup(self, stage):
@@ -101,6 +104,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
             image_size=self.image_size,
+            select_frame_method=self.select_frame_method,
         )
         assert len(trainval_dataset) > 0, "combined train/val set is empty"
 
@@ -119,6 +123,7 @@ class CineBaselineDataModule(L.LightningDataModule):
             loading_mode=self.loading_mode,
             combine_train_val=self.combine_train_val,
             image_size=self.image_size,
+            select_frame_method=self.select_frame_method,
         )
 
         if self.combine_train_val:
@@ -145,6 +150,7 @@ class CineBaselineDataModule(L.LightningDataModule):
                 combine_train_val=self.combine_train_val,
                 frames=self.frames,
                 image_size=self.image_size,
+                select_frame_method=self.select_frame_method,
             )
 
             train_set, valid_set = get_trainval_data_subsets(
