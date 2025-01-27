@@ -379,7 +379,7 @@ def _draw_masks(
 
     """
     if loading_mode == LoadingMode.GREYSCALE:
-        norm_img = inv_transform(img.repeat(3, 1, 1)).clamp(0, 1)
+        norm_img = inv_transform(img).repeat(3, 1, 1).clamp(0, 1)
     else:
         norm_img = inv_transform(img).clamp(0, 1)
 
