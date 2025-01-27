@@ -4,7 +4,8 @@
 from typing import Any, Literal, Optional, OrderedDict, Union, override
 
 # Third-Party
-from segmentation_models_pytorch.losses import FocalLoss
+import segmentation_models_pytorch as smp
+from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 
 # PyTorch
 import torch
@@ -138,6 +139,21 @@ class PNSLightningModule(CommonModelMixin):
                     self.loss = nn.CrossEntropyLoss(weight=class_weights)
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
+                case "dice":
+                    match dl_classification_mode:
+                        case ClassificationMode.MULTICLASS_MODE:
+                            self.loss = DiceLoss(
+                                smp.losses.MULTICLASS_MODE, from_logits=True
+                            )
+                        case ClassificationMode.MULTILABEL_MODE:
+                            self.loss = DiceLoss(
+                                smp.losses.MULTILABEL_MODE, from_logits=True
+                            )
+                        case ClassificationMode.BINARY_CLASS_3_MODE:
+                            self.loss = DiceLoss(
+                                smp.losses.BINARY_MODE, from_logits=True
+                            )
+
                 case _:
                     raise NotImplementedError(
                         f"Loss type of {loss} is not implemented!"
