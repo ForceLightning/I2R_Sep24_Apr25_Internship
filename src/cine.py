@@ -79,7 +79,9 @@ class CineBaselineDataModule(L.LightningDataModule):
         self.combine_train_val = combine_train_val
         self.augment = augment
         self.dummy_predict = dummy_predict
-        self.select_frame_method: Literal["consecutive", "specific"] = "consecutive"
+        self.select_frame_method: Literal["consecutive", "specific"] = (
+            select_frame_method
+        )
 
     @override
     def setup(self, stage):

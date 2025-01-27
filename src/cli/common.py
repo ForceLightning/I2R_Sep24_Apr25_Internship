@@ -12,6 +12,7 @@ from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 # First party imports
 from utils import prediction_writer, utils
 from utils.prediction_writer import MaskImageWriter
+from utils.types import ClassificationMode, LoadingMode
 
 
 class CommonCLI(LightningCLI):
@@ -110,33 +111,27 @@ class CommonCLI(LightningCLI):
         )
 
         # Adds the classification mode argument
-        parser.add_argument("--dl_classification_mode", type=str)
-        parser.add_argument("--eval_classification_mode", type=str)
+        parser.add_argument("--dl_classification_mode", type=ClassificationMode)
+        parser.add_argument("--eval_classification_mode", type=ClassificationMode)
         parser.link_arguments(
             "dl_classification_mode",
             "model.dl_classification_mode",
-            compute_fn=utils.get_classification_mode,
         )
         parser.link_arguments(
             "eval_classification_mode",
             "model.eval_classification_mode",
-            compute_fn=utils.get_classification_mode,
         )
         parser.link_arguments(
             "dl_classification_mode",
             "data.classification_mode",
-            compute_fn=utils.get_classification_mode,
         )
 
         # Sets the image color loading mode
-        parser.add_argument("--image_loading_mode", type=Union[str, None], default=None)
-        parser.link_arguments(
-            "image_loading_mode", "data.loading_mode", compute_fn=utils.get_loading_mode
-        )
+        parser.add_argument("--image_loading_mode", type=LoadingMode, default=None)
+        parser.link_arguments("image_loading_mode", "data.loading_mode")
         parser.link_arguments(
             "image_loading_mode",
             "model.loading_mode",
-            compute_fn=utils.get_loading_mode,
         )
 
         # Set accumulate grad batches depending on batch size
