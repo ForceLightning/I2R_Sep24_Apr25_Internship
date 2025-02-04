@@ -95,7 +95,9 @@ def pool2d_to_pool3d(
         new = nn.MaxPool3d(
             kernel_size, stride, padding, dilation, old.return_indices, old.ceil_mode
         )
-    elif isinstance(old, nn.AdaptiveMaxPool2d):
+    elif isinstance(
+        old, nn.AdaptiveMaxPool2d
+    ):  # pyright: ignore[reportUnnecessaryIsInstance]
         new = nn.AdaptiveAvgPool3d(old.output_size)
 
     return new
