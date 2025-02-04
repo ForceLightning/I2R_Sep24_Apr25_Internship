@@ -37,6 +37,7 @@ class MaskImageWriter(BasePredictionWriter):
         write_interval: Literal["batch", "epoch", "batch_and_epoch"] = "epoch",
         inv_transform: InverseNormalize = INV_NORM_RGB_DEFAULT,
         format: Literal["apng", "tiff", "gif", "webp", "png"] = "gif",
+        raw_masks: bool = False,
         uncertainty: bool = False,
         drawn_classes: tuple[int, ...] = (0, 1, 2, 3),
     ):
@@ -48,6 +49,7 @@ class MaskImageWriter(BasePredictionWriter):
             inv_transform: The inverse transform to apply to the images.
             loading_mode: The loading mode of the images.
             format: Output format of the images.
+            raw_masks: Whether to output raw predicted masks as well (B/W image).
             uncertainty: Whether to expect uncertainty input.
             drawn_classes: Number of classes to draw.
 
@@ -57,6 +59,7 @@ class MaskImageWriter(BasePredictionWriter):
         self.inv_transform = inv_transform
         self.loading_mode = loading_mode
         self.format: Literal["apng", "tiff", "gif", "webp", "png"] = format
+        self.raw_masks = raw_masks
         self.uncertainty = uncertainty
         self.drawn_classes = drawn_classes
         if self.output_dir:
@@ -112,17 +115,46 @@ class MaskImageWriter(BasePredictionWriter):
                     if (mask_pred[3, :, :] == 1).any():
                         save_sample_fp = f"{save_sample_fp}_pos3"
                         num_pixels = (mask_pred[3, :, :] == 1).long().sum()
-                        logging.log(
+                        logger.log(
                             15,
                             "mask at idx 3 detected with %d pixel(s) @fp: %s",
                             num_pixels,
                             save_sample_fp,
                         )
 
-                    save_path = os.path.join(
-                        os.path.normpath(self.output_dir),
-                        f"{save_sample_fp}_pred.{self.format}",
-                    )
+                    if self.raw_masks:
+                        # Change the directory format to use a folder for each sample.
+                        save_path = os.path.join(
+                            os.path.normpath(self.output_dir),
+                            save_sample_fp,
+                        )
+
+                        if not os.path.exists(save_path):
+                            os.makedirs(save_path)
+
+                        for class_idx in self.drawn_classes:
+                            pred_for_class = (
+                                mask_pred[class_idx, :, :].float().unsqueeze(0)
+                            )
+
+                            pred_img: Image = v2f.to_pil_image(pred_for_class)
+                            pred_class_fp = os.path.join(
+                                save_path, f"class_{class_idx:02d}.png"
+                            )
+                            pred_img.save(pred_class_fp)
+
+                        save_path = os.path.join(
+                            os.path.normpath(self.output_dir),
+                            save_sample_fp,
+                            f"pred.{self.format}",
+                        )
+                    else:
+                        # Otherwise, save it to the root prediction directory.
+                        save_path = os.path.join(
+                            os.path.normpath(self.output_dir),
+                            f"{save_sample_fp}_pred.{self.format}",
+                        )
+
                     match self.format:
                         case "tiff":
                             masked_frames[0].save(
@@ -228,7 +260,7 @@ class MaskImageWriter(BasePredictionWriter):
                     if (mask_pred[3, :, :] == 1).any():
                         save_sample_fp = f"{save_sample_fp}_pos3"
                         num_pixels = (mask_pred[3, :, :] == 1).long().sum()
-                        logging.log(
+                        logger.log(
                             15,
                             "mask at idx 3 detected with %d pixel(s) @fp: %s",
                             num_pixels,
@@ -243,10 +275,22 @@ class MaskImageWriter(BasePredictionWriter):
                     if not os.path.exists(save_path):
                         os.makedirs(save_path)
 
-                    # H, W -> (1, H, W)
-                    uncertainty_pil = v2f.to_pil_image(uncertainty)
+                    # Save uncertainty map
+                    uncertainty_pil: Image = v2f.to_pil_image(uncertainty)
                     uncertainty_save_path = os.path.join(save_path, "uncertainty.png")
                     uncertainty_pil.save(uncertainty_save_path)
+
+                    # Save raw masks
+                    if self.raw_masks:
+                        for class_idx in self.drawn_classes:
+                            pred_for_class = (
+                                mask_pred[class_idx, :, :].float().unsqueeze(0)
+                            )
+                            pred_img = v2f.to_pil_image(pred_for_class)
+                            pred_class_fp = os.path.join(
+                                save_path, f"class_{class_idx:02d}.png"
+                            )
+                            pred_img.save(pred_class_fp)
 
                     save_path = os.path.join(
                         os.path.normpath(self.output_dir),
