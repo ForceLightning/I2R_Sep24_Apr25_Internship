@@ -76,6 +76,15 @@ class MaskImageWriter(BasePredictionWriter):
         ),
         _batch_indices: Sequence[Any],
     ) -> None:
+        """Write predictions out to file when a model without uncertainty is used.
+
+        Args:
+            _trainer: (Unused) Lightning trainer object.
+            pl_module: Lightning module for model.
+            predictions: Sequence of all batches of predictions, in format:
+                (batched preds, batched inputs, batched filenames)
+
+        """
         assert self.output_dir
         assert isinstance(pl_module, CommonModelMixin)
 
@@ -207,7 +216,7 @@ class MaskImageWriter(BasePredictionWriter):
     def _write_on_epoch_end_uncertainty(
         self,
         _trainer: L.Trainer,
-        pl_module: L.LightningModule,
+        _pl_module: L.LightningModule,
         predictions: (
             Sequence[tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[str]]]
             | Sequence[
@@ -216,6 +225,15 @@ class MaskImageWriter(BasePredictionWriter):
         ),
         _batch_indices: Sequence[Any],
     ) -> None:
+        """Write predictions out to file when a model with uncertainty is used.
+
+        Args:
+            _trainer: (Unused) Lightning trainer object.
+            _pl_module: (Unused) Lightning module for model.
+            predictions: Sequence of all batches of predictions, in format:
+                (batched preds, batched inputs, batched filenames)
+
+        """
         assert self.output_dir
         predictions_for_loop: list[
             Sequence[tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[str]]]
@@ -392,7 +410,7 @@ class MaskImageWriter(BasePredictionWriter):
 def get_output_dir_from_ckpt_path(ckpt_path: str | None):
     """Get the output directory from the checkpoint path."""
     # Checkpoint paths are in the format:
-    # ./checkpoints/<model type>/lightning_logs/<experiment name>/<version>/checkpoints/
+    # ./checkpoints/<model type>/lightning_logs/<experiment name>/<version_%d>/checkpoints/
     # <ckpt name>.ckpt
     if not ckpt_path:
         return None
