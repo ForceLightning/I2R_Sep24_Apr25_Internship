@@ -7,9 +7,11 @@ from collections import deque
 from typing import Sequence
 
 # Third-Party
-import numpy as np
 from matplotlib import animation, colors
 from matplotlib import pyplot as plt
+
+# Scientific Libraries
+import numpy as np
 
 # Image Libraries
 import cv2
@@ -120,8 +122,6 @@ def cuda_optical_flow(
     cv2.cuda.resetDevice()
     h, w, *_ = video[0].shape
 
-    # TODO: Add more options for optical flow calculation
-
     # Initialise NVIDIA Optical Flow (SDK 2)
     nvof = cv2.cuda.NvidiaOpticalFlow_2_0.create(
         (h, w),
@@ -218,7 +218,7 @@ def _cleanup(nvof: cv2.cuda.NvidiaHWOpticalFlow, *cu_frames: cv2.cuda.GpuMat):
     nvof.collectGarbage()
 
 
-# TODO: Remove this when done, for debugging purposes.
+# DEBUG: Plots the optical flow map with the original video.
 def _plot_animated_with_flow(
     imgs,
     flows,
@@ -293,7 +293,7 @@ def _plot_animated_with_flow(
     return ani
 
 
-# TODO: Remove this when done debugging.
+# DEBUG: Runs the function above.
 if __name__ == "__main__":
     CINE_PATH = "data/train_val/Cine/4_1_0000.nii.tiff"
 

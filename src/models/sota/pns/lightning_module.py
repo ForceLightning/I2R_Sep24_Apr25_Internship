@@ -191,7 +191,6 @@ class PNSLightningModule(CommonModelMixin):
         self.dl_classification_mode = dl_classification_mode
         self.eval_classification_mode = eval_classification_mode
 
-        # TODO: Move this to setup() method.
         # Sets metric if None.
         self.dice_metrics = {}
         self.other_metrics = {}

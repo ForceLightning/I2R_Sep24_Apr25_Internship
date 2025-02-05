@@ -236,7 +236,6 @@ class TransUnet(VisionTransformer):
             in_channels: Number of input channels.
 
         """
-        # TODO: Follow SMP method of initialisation.
         super(VisionTransformer, self).__init__()
         self.num_classes = num_classes
         self.zero_head = zero_head

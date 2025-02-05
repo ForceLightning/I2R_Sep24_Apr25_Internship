@@ -277,7 +277,6 @@ class URRResidualAttentionLightningModule(ResidualAttentionLightningModule):
                 ).to(self.device.type),
             )
 
-        # TODO: Move this to setup() method.
         # Sets metric if None.
         self.dice_metrics = {}
         self.other_metrics = {}

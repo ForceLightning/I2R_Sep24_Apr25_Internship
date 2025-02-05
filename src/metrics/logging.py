@@ -364,7 +364,6 @@ def _single_generalized_dice_logging(
         prefix: The runtime mode (train, val, test).
 
     """
-    # TODO: Refactor this for jaccard, precision, and recall.
     weighted_avg = metric_obj.compute()
     macro_avg = metric_obj.macro_avg_metric
     per_class = metric_obj.per_class_metric
