@@ -120,7 +120,11 @@ where `${torch_version}` is the pytorch version installed (check the requirement
 ```sh
 sudo docker build -t i2r-internship .
 ```
-4. Usage is similar to the section below, but commands can be prepended by `sudo docker run -it --gpus "<GPUS_TO_USE>" -v $(pwd):/code/ -v <DATA_DIR>:/code/data -v <CHECKPOINT_DIR>:/code/checkpoints i2r-internship:latest` where `<GPUS_TO_USE>` can be `all`, `device=0`, etc., while the `DATA_DIR` and `CHECKPOINT_DIR` paths should also be set to the appropriate system file paths.
+4. Usage is similar to the section below, but commands can be prepended by
+```sh
+sudo docker run -it --gpus "<GPUS_TO_USE>" -v $(pwd):/code/ -v <DATA_DIR>:/code/data -v <CHECKPOINT_DIR>:/code/checkpoints i2r-internship:latest
+```
+where `<GPUS_TO_USE>` can be `all`, `device=0`, etc., while the `DATA_DIR` and `CHECKPOINT_DIR` paths should also be set to the appropriate system file paths.
 
 # Usage
 Some default configurations are included in the `./configs/` directory, which will be used as modular pieces to construct the complete training/validation configuration.
@@ -135,7 +139,7 @@ Some default configurations are included in the `./configs/` directory, which wi
 
 ## Description of config modules
 - `cine.yaml`, `lge.yaml`, `two_stream.yaml`, `two_plus_one.yaml`, `residual_attention.yaml`, `urr_residual_attention.yaml`: Incomplete defaults for initialisation.
-- `training.yaml`, `testing.yaml`, `training_no_checkpointing.yaml`: Overrides for training or validation/testing/quick run modes. This must be the last config file loaded in.
+- `training.yaml`, `training_no_checkpointing.yaml`, `testing.yaml`, `testing_binary.yaml`, `predict.yaml`, `predict_greyscale.yaml`: Overrides for training or validation/testing/quick run modes. This must be the last config file loaded in. Note that you should apply these configs before setting any of the CLI arguments as described in the section below.
 - `*_greyscale.yaml`, `*_rgb.yaml`: Defaults for handling either RGB images or greyscale images as inputs.
 - `cine_tpo_resnet50.yaml`, `cine_tpo_senet154.yaml`: Defaults for the ResNet50 and SENet154 backbones for the CINE, TwoStream, TwoPlusOne R(2D+1D), and Attention tasks.
 
@@ -177,9 +181,21 @@ The example below runs a U-Net with 2 + 1 temporal convolution residual connecti
 python -m two_plus_one fit --config ./configs/two_plus_one.yaml --config ./configs/two_plus_one_rgb.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/training.yaml --model.num_frames 5 --version default
 ```
 ## Attention U-Net
-The example below runs a U-Net with 2 + 1 temporal convolution residual connections and attention mechanism on residual frames using a ResNet50 backbone and Greyscale image loading.
+The example below runs a U-Net with 2 + 1 temporal convolution residual connections and attention mechanism on residual frames using a ResNet50 backbone and greyscale image loading.
 ```sh
-python -m attention_unet fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 15 --data.batch_size 2 --version default
+python -m attention_unet fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 10 --data.batch_size 2 --version default
+```
+## Attention U-Net with URR
+The example below runs a U-Net with 2 + 1 temporal convolution residual connections and attention mechanism on residual frames using a ResNet50 backbone, greyscale image loading, and the URR mechanism.
+```sh
+python -m urr_attention_unet fit --config ./configs/residual_attention.yaml --config ./configs/cine_tpo_resnet50.yaml --config ./configs/residual_attention_greyscale.yaml --config ./configs/training.yaml --model.num_frames 10 --model.alpha 0.95 --model.beta 0.05 --data.batch_size 2 --version default
+```
+## Other modes (validate/test/predict)
+With similar arguments as above, use the appropriate config mode `training.yaml`/`testing.yaml`/`predict.yaml` with the associated CLI subcommand:
+```sh
+python -m $MODULE validate ... --config testing.yaml
+python -m $MODULE test ... --config testing.yaml
+python -m $MODULE predict ... --config predict.yaml
 ```
 ## Third-party modules
 SOTA methods can be run using the following python modules:
