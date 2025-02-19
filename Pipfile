@@ -23,7 +23,7 @@ lightning = { extras = ["pytorch-extra"] }
 tensorboard = "*"
 rich = "*"
 deepspeed = "*"
-jsonargparse = {extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"] }
+jsonargparse = {version = "<4.36.0", extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"] }
 opencv-contrib-python-headless = {file = "../opencv-python/opencv_contrib_python_headless-4.10.0.84-cp312-cp312-linux_x86_64.whl"}
 torch-scatter = "*"
 scipy = "*"
@@ -74,7 +74,7 @@ h5py = "*"
 [vivim]
 causal-conv1d = {file = "thirdparty/vivim/causal_conv1d", editable = true}
 mamba-ssm = {file = "thirdparty/vivim/mamba", editable = true}
-transformers = "*"
+transformers = ">=4.48.0"
 
 [vps]
 torchtnt = "*"
