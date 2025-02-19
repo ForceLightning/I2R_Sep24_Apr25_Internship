@@ -1,0 +1,53 @@
+dataset package
+===============
+
+Submodules
+----------
+
+dataset.afb\_urr module
+-----------------------
+
+.. automodule:: dataset.afb_urr
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dataset.dataset module
+----------------------
+
+.. automodule:: dataset.dataset
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dataset.flanet module
+---------------------
+
+.. automodule:: dataset.flanet
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dataset.optical\_flow module
+----------------------------
+
+.. automodule:: dataset.optical_flow
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dataset.vivim module
+--------------------
+
+.. automodule:: dataset.vivim
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: dataset
+   :members:
+   :show-inheritance:
+   :undoc-members:

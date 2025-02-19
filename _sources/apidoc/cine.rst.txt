@@ -1,0 +1,7 @@
+cine module
+===========
+
+.. automodule:: cine
+   :members:
+   :show-inheritance:
+   :undoc-members:

@@ -1,0 +1,7 @@
+two\_plus\_one module
+=====================
+
+.. automodule:: two_plus_one
+   :members:
+   :show-inheritance:
+   :undoc-members:

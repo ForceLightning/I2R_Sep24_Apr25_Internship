@@ -1,0 +1,37 @@
+tests package
+=============
+
+Submodules
+----------
+
+tests.conv1d\_test module
+-------------------------
+
+.. automodule:: tests.conv1d_test
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+tests.integration\_test module
+------------------------------
+
+.. automodule:: tests.integration_test
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+tests.tscse\_test module
+------------------------
+
+.. automodule:: tests.tscse_test
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: tests
+   :members:
+   :show-inheritance:
+   :undoc-members:
