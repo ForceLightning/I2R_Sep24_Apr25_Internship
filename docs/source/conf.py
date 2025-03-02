@@ -51,7 +51,7 @@ html_static_path = ["_static"]
 autodoc_default_options = {
     "members": True,
     "member-order": "bysource",
-    "special_members": "__init__",
+    "special-members": "__init__",
     "undoc-members": False,
     "private_members": False,
     "show-inheritance": True,
@@ -66,12 +66,12 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3.12/", None),
     "torch": ("https://pytorch.org/docs/2.5/", None),
     "torchvision": ("https://pytorch.org/vision/0.20/", None),
-    "numpy": ("https://numpy.org/doc/1.26/", None),
-    "lightning": ("https://lightning.ai/docs/pytorch/2.4.0/", None),
-    "torchmetrics": ("https://lightning.ai/docs/torchmetrics/v1.5.1/", None),
-    "matplotlib": ("https://matplotlib.org/3.9.2/", None),
-    "segmentation_models_pytorch": ("https://smp.readthedocs.io/en/v0.3.4/", None),
-    "transformers": ("https://huggingface.co/docs/transformers/v4.46.0/en/", None),
+    "numpy": ("https://numpy.org/doc/2.2/", None),
+    "lightning": ("https://lightning.ai/docs/pytorch/2.5.0/", None),
+    "torchmetrics": ("https://lightning.ai/docs/torchmetrics/v1.6.1/", None),
+    "matplotlib": ("https://matplotlib.org/3.10.0/", None),
+    "segmentation_models_pytorch": ("https://smp.readthedocs.io/en/v0.4.0/", None),
+    "transformers": ("https://huggingface.co/docs/transformers/v4.49.0/en/", None),
     "ml_collections": ("https://ml-collections.readthedocs.io/en/stable/", None),
 }
 

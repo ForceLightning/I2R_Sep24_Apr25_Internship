@@ -16,18 +16,7 @@ from utils.types import ClassificationMode, InverseNormalize, ModelType
 
 
 class CommonModelMixin(L.LightningModule):
-    """Common model attributes.
-
-    Attributes:
-        dl_classification_mode: Classification mode for the dataloader instances.
-        eval_classification_mode: Classification mode for the evaluation process.
-        dice_metrics: A collection of dice score variants.
-        other_metrics: A collection of other metrics (recall, precision, jaccard).
-        model: The internal model used.
-        model_type: The architecture of the model, if appropriate.
-        de_transform: The inverse transformation from augmentation of the samples by the dataloaders.
-
-    """
+    """Common model attributes."""
 
     dl_classification_mode: ClassificationMode
     """Classification mode for the dataloader instances."""

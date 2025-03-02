@@ -300,6 +300,16 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
     def forward(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, regular_frames: Tensor, residual_frames: Tensor
     ) -> tuple[Tensor, Tensor | None, Tensor, Tensor]:
+        """Forward pass of the U-Net model.
+
+        Args:
+            regular_frames: Normal cine CMR sequence.
+            residual_frames: Residual cine CMR sequence.
+
+        Returns:
+            tuple[Tensor, Tensor | None, Tensor, Tensor]: Predicted mask probabilities, initial uncertainty, final uncertainty, confidence loss.
+
+        """
         img_features_list: list[Tensor] = []
         res_features_list: list[Tensor] = []
         b, *_ = regular_frames.shape

@@ -50,18 +50,14 @@ from utils.types import (
 
 
 class TemporalConvolutionalType(Enum):
-    """1D Temporal Convolutional Layer type.
-
-    Attributes:
-        ORIGINAL: Original 1D convolutional operation with significant use of reshape.
-        DILATED: Modified 1D convolutional operation to replace stride with dilation.
-        TEMPORAL_3D: Uses a 3D convolutional operation to reduce calls to reshape.
-
-    """
+    """1D Temporal Convolutional Layer type."""
 
     ORIGINAL = auto()
+    """Original 1D convolutional operation with significant use of reshape."""
     DILATED = auto()
+    """Modified 1D convolutional operation to replace stride with dilation."""
     TEMPORAL_3D = auto()
+    """Uses a 3D convolutional operation to reduce calls to reshape."""
 
     def get_class(self):
         """Get the class of the convolutional layer for instantiation."""
