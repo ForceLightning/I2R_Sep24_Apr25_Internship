@@ -1,0 +1,21 @@
+models.sota.vivim package
+=========================
+
+Submodules
+----------
+
+models.sota.vivim.lightning\_module module
+------------------------------------------
+
+.. automodule:: models.sota.vivim.lightning_module
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: models.sota.vivim
+   :members:
+   :show-inheritance:
+   :undoc-members:

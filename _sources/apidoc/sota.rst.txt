@@ -1,0 +1,45 @@
+sota package
+============
+
+Submodules
+----------
+
+sota.afb\_urr module
+--------------------
+
+.. automodule:: sota.afb_urr
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+sota.flanet module
+------------------
+
+.. automodule:: sota.flanet
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+sota.pns module
+---------------
+
+.. automodule:: sota.pns
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+sota.vivim module
+-----------------
+
+.. automodule:: sota.vivim
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: sota
+   :members:
+   :show-inheritance:
+   :undoc-members:

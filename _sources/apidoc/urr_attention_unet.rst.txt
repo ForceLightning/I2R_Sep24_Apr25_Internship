@@ -1,0 +1,7 @@
+urr\_attention\_unet module
+===========================
+
+.. automodule:: urr_attention_unet
+   :members:
+   :show-inheritance:
+   :undoc-members:

@@ -1,0 +1,21 @@
+models.sota package
+===================
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   models.sota.afb_urr
+   models.sota.fla_net
+   models.sota.pns
+   models.sota.vivim
+
+Module contents
+---------------
+
+.. automodule:: models.sota
+   :members:
+   :show-inheritance:
+   :undoc-members:

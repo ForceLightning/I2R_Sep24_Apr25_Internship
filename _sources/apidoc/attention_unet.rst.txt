@@ -1,0 +1,7 @@
+attention\_unet module
+======================
+
+.. automodule:: attention_unet
+   :members:
+   :show-inheritance:
+   :undoc-members:

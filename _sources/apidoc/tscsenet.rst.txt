@@ -1,0 +1,7 @@
+tscsenet module
+===============
+
+.. automodule:: tscsenet
+   :members:
+   :show-inheritance:
+   :undoc-members:
