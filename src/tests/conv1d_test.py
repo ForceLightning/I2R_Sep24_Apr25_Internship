@@ -10,6 +10,7 @@ import pytest
 
 # PyTorch
 import torch
+from torch import Tensor
 
 # First party imports
 from models.two_plus_one import ENCODER_OUTPUT_SHAPES, DilatedOneD, OneD, Temporal3DConv
@@ -177,7 +178,7 @@ class TestConv3D:
         assert allclose, "Values of the operations are not the same."
 
 
-def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
+def compress_2(stacked_outputs: Tensor, block: OneD) -> Tensor:
     """Compresses the input tensor using the one dimensional block.
 
     Args:
@@ -236,7 +237,7 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     return final_output
 
 
-def _compress_wrapper(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
+def _compress_wrapper(stacked_outputs: Tensor, block: OneD) -> Tensor:
     """Wrap function for compress2.
 
     Args:

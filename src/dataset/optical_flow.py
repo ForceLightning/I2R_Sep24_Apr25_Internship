@@ -34,7 +34,7 @@ def dense_optical_flow(video: Sequence[cvt.MatLike]) -> list[cvt.MatLike]:
         video: Video frames to calculate optical flow with. Must be greyscale.
 
     Return:
-        list[cvt.MatLike]: Optical flow.
+        Optical flow.
 
     Raises:
         AssertionError: Video is not greyscale.
@@ -86,7 +86,7 @@ def cuda_optical_flow(
         threshold: Threshold to apply to the cost buffer. If set, the cost buffer
             will be returned as well.
 
-    Return:
+    Returns:
         Optical flow, and cost buffer (if threshold is set)
 
     Raises:

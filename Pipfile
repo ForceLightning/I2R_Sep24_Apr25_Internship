@@ -64,6 +64,7 @@ sphinx = "*"
 sphinx-autodoc2 = "*"
 sphinx-rtd-theme = "*"
 enum-tools = {extras = ["sphinx"], version = "*"}
+sphinx-autodoc-typehints = "*"
 
 [transunet]
 ml-collections = "*"

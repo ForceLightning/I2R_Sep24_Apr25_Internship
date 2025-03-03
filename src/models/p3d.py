@@ -8,13 +8,15 @@ from functools import partial
 from typing import Any, Callable, Literal, Mapping, override
 
 # Third-Party
-import numpy as np
 from segmentation_models_pytorch.base import SegmentationModel
 from segmentation_models_pytorch.encoders._base import EncoderMixin
 
+# Scientific Libraries
+import numpy as np
+
 # PyTorch
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 
@@ -23,7 +25,7 @@ def conv_S(
     out_channels: int,
     stride: int = 1,
     padding: int | tuple[int, int, int] = 1,
-):
+) -> nn.Conv3d:
     """Initialise spatial convolutional layer.
 
     Args:
@@ -33,7 +35,7 @@ def conv_S(
         padding: Padding shape.
 
     Return:
-        nn.Conv3d: Initalised spatial convolutional layer.
+        Initalised spatial convolutional layer.
 
     """
     return nn.Conv3d(
@@ -51,7 +53,7 @@ def conv_T(
     out_channels: int,
     stride: int = 1,
     padding: int | tuple[int, int, int] = 1,
-):
+) -> nn.Conv3d:
     """Initialise temporal convolutional layer.
 
     Args:
@@ -61,7 +63,7 @@ def conv_T(
         padding: Padding shape.
 
     Return:
-        nn.Conv3d: Initalised temporal convolutional layer.
+        Initalised temporal convolutional layer.
 
     """
     return nn.Conv3d(
@@ -69,7 +71,7 @@ def conv_T(
     )
 
 
-def downsample_basic_block(x: torch.Tensor, channels: int, stride: int) -> torch.Tensor:
+def downsample_basic_block(x: Tensor, channels: int, stride: int) -> Tensor:
     """Downsamples input with average pooling.
 
     Args:
@@ -78,7 +80,7 @@ def downsample_basic_block(x: torch.Tensor, channels: int, stride: int) -> torch
         stride: Stride of average pooling layer.
 
     Return:
-        torch.Tensor: Downsampled input.
+        Downsampled input.
 
     """
     out = F.avg_pool3d(x, kernel_size=1, stride=stride)
@@ -102,7 +104,7 @@ class Bottleneck(nn.Module):
         in_channels: int,
         out_channels: int,
         stride: int = 1,
-        downsample: nn.Module | Callable[[torch.Tensor], torch.Tensor] | None = None,
+        downsample: nn.Module | Callable[[Tensor], Tensor] | None = None,
         n_s: int = 0,
         depth_3d: int = 47,
         ST_struc: tuple[str, str, str] = ("A", "B", "C"),
@@ -183,14 +185,14 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.stride = stride
 
-    def ST_A(self, x: torch.Tensor) -> torch.Tensor:
+    def ST_A(self, x: Tensor) -> Tensor:
         """A-type spatial-temporal structure.
 
         Args:
             x: Input tensor.
 
         Return:
-            torch.Tensor: Output tensor
+            Output tensor
 
         """
         x = self.conv2(x)
@@ -203,14 +205,14 @@ class Bottleneck(nn.Module):
 
         return x
 
-    def ST_B(self, x: torch.Tensor) -> torch.Tensor:
+    def ST_B(self, x: Tensor) -> Tensor:
         """B-type spatial-temporal structure.
 
         Args:
             x: Input tensor.
 
         Return:
-            torch.Tensor: Output tensor
+            Output tensor
 
         """
         spat_x = self.conv2(x)
@@ -223,14 +225,14 @@ class Bottleneck(nn.Module):
 
         return x + spat_x
 
-    def ST_C(self, x: torch.Tensor) -> torch.Tensor:
+    def ST_C(self, x: Tensor) -> Tensor:
         """C-type spatial-temporal structure.
 
         Args:
             x: Input tensor.
 
         Return:
-            torch.Tensor: Output tensor
+            Output tensor
 
         """
         x = self.conv2(x)
@@ -244,7 +246,7 @@ class Bottleneck(nn.Module):
         return x + tmp_x
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         res = x
 
         out = self.conv1(x)
@@ -287,7 +289,7 @@ class TemporalSqueeze(nn.Module):
         super().__init__()
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         sizes = x.size()
         x = x.view(-1, sizes[1], sizes[3], sizes[4])
         return x
@@ -498,7 +500,7 @@ class P3D(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:
+    def _forward_impl(self, x: Tensor) -> Tensor:
         x = self.conv1_custom(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -518,7 +520,7 @@ class P3D(nn.Module):
         return x
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
 
 
@@ -555,8 +557,8 @@ class P3DEncoder(P3D, EncoderMixin):
 
     @override
     def forward(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, x: torch.Tensor
-    ) -> list[torch.Tensor]:
+        self, x: Tensor
+    ) -> list[Tensor]:
         stages = self.get_stages()
 
         features = []
@@ -609,7 +611,7 @@ def patch_first_conv(
 
             if not pretrained:
                 module.weight = nn.parameter.Parameter(
-                    torch.Tensor(
+                    Tensor(
                         module.out_channels,
                         new_in_channels // module.groups,
                         *module.kernel_size,
@@ -621,7 +623,7 @@ def patch_first_conv(
                 module.weight = nn.parameter.Parameter(new_weight)
 
             else:
-                new_weight = torch.Tensor(
+                new_weight = Tensor(
                     module.out_channels,
                     new_in_channels // module.groups,
                     *module.kernel_size,

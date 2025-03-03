@@ -27,16 +27,18 @@ extensions = [
     "sphinx.ext.coverage",
     "sphinx.ext.mathjax",
     "sphinx_rtd_theme",
+    "sphinx_autodoc_typehints",
 ]
 
 templates_path = ["_templates"]
 exclude_patterns = [
-    "_build",
-    "Thumbs.db",
-    ".DS_Store",
-    "models.p3d",
-    "tests",
-    "thirdparty",
+    "**/build",
+    "**/Thumbs.db",
+    "**/.DS_Store",
+    "**/models/p3d*",
+    "**/tests/",
+    "**/thirdparty",
+    "./conf.py",
 ]
 
 language = "en"
@@ -74,6 +76,17 @@ intersphinx_mapping = {
     "transformers": ("https://huggingface.co/docs/transformers/v4.49.0/en/", None),
     "ml_collections": ("https://ml-collections.readthedocs.io/en/stable/", None),
 }
+
+# -- Options for napoleon -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
+napoleon_use_rtype = False
+
+
+# -- Options for Autodoc Typehints --------------------------------------------
+always_use_bars_union = True
+typehints_use_rtype = False
+typehints_use_signature = True
+typehints_use_signature_return = True
 
 sys.path.insert(0, os.path.abspath("../../"))
 sys.path.insert(0, os.path.abspath("../../thirdparty/"))

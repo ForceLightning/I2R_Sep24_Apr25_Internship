@@ -7,7 +7,7 @@ SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SPHINXAPIDOC  ?= sphinx-apidoc
 SOURCEDIR     = source
-BUILDDIR      = build
+BUILDDIR      = build/html
 PACKAGEDIR    = ../src
 
 # Put it first so that "make" without argument is like "make help".
@@ -16,7 +16,7 @@ help:
 
 .PHONY: help Makefile
 
-MK_APIDOC = "$(SPHINXAPIDOC)" -o "docs/source/api" "$(PACKAGEDIR)" $(SPHINXOPTS) $(O)
+MK_APIDOC = "$(SPHINXAPIDOC)" -o "docs/source/apidoc" "$(PACKAGEDIR)" $(SPHINXOPTS) $(O)
 apidoc: Makefile
 	$(MK_APIDOC)
 

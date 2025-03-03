@@ -20,7 +20,7 @@ from segmentation_models_pytorch.losses import DiceLoss, FocalLoss
 # PyTorch
 import torch
 from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
@@ -181,7 +181,7 @@ class OneD(nn.Module):
         self.out_channels = out_channels
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         return self.one(x)
 
 
@@ -287,7 +287,7 @@ class DilatedOneD(nn.Module):
         self.out_channels = out_channels
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         return self.one(x)
 
 
@@ -392,7 +392,7 @@ class Temporal3DConv(nn.Module):
         self.out_channels = out_channels
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         # Input to Conv3D is (B, C_in, D, H, W)
         # Output is (B, C_out, D_out, H_out, W_out)
         # x.shape is (B, D, C, H, W)
@@ -404,15 +404,15 @@ class Temporal3DConv(nn.Module):
         return z
 
 
-def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
+def compress_2(stacked_outputs: Tensor, block: OneD) -> Tensor:
     """Apply the OneD temporal convolution on the stacked outputs.
 
     Args:
         stacked_outputs: 5D tensor of shape (num_frames, batch_size, num_channels, h, w).
         block: 1d temporal convolutional block.
 
-    Return:
-        torch.Tensor: 4D tensor of shape (batch_size, num_channels, h, w).
+    Returns:
+        4D tensor of shape (batch_size, num_channels, h, w).
 
     """
     # Input shape: (B, F, C, H, W).
@@ -431,7 +431,7 @@ def compress_2(stacked_outputs: torch.Tensor, block: OneD) -> torch.Tensor:
     return final_out
 
 
-def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch.Tensor:
+def compress_dilated(stacked_outputs: Tensor, block: DilatedOneD) -> Tensor:
     """Apply the DilatedOneD temporal convolution on the stacked outputs.
 
     Args:
@@ -439,7 +439,7 @@ def compress_dilated(stacked_outputs: torch.Tensor, block: DilatedOneD) -> torch
         block: 1d temporal convolutional block.
 
     Return:
-        torch.Tensor: 4D tensor of shape (batch_size, num_channels, h, w).
+        4D tensor of shape (batch_size, num_channels, h, w).
 
     """
     # Input shape: (B, F, C, H, W).
@@ -564,7 +564,7 @@ class TwoPlusOneUnet(SegmentationModel):
             self.classification_head = None
 
         self.name = f"u-{encoder_name}"
-        self.compress: Callable[..., torch.Tensor] | None
+        self.compress: Callable[..., Tensor] | None
         self.initialize()
 
     @override
@@ -626,22 +626,22 @@ class TwoPlusOneUnet(SegmentationModel):
         self.onedlayers = nn.ModuleList(onedlayers)
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         """Forward pass of the model.
 
         Args:
             x: 5D tensor of shape (batch_size, num_frames, channels, height, width).
 
         Return:
-            torch.Tensor: 4D tensor of shape (batch_size, classes, height, width).
+            4D tensor of shape (batch_size, classes, height, width).
 
         """
         # The first layer of the skip connection gets ignored, but in order for the
         # indexing later on to work, the feature output needs an empty first output.
-        compressed_features: list[torch.Tensor | list[str]] = [["EMPTY"]]
+        compressed_features: list[Tensor | list[str]] = [["EMPTY"]]
 
         # Go through each frame of the image and add the output features to a list.
-        features_list: list[torch.Tensor] = []
+        features_list: list[Tensor] = []
 
         assert x.numel() != 0, f"Input tensor is empty: {x}"
 
@@ -682,15 +682,14 @@ class TwoPlusOneUnet(SegmentationModel):
 
     @override
     @torch.no_grad()
-    def predict(self, x):
+    def predict(self, x: Tensor) -> Tensor:
         """Inference method.
 
         Args:
             x: 4D torch tensor with shape (batch_size, channels, height, width)
 
         Return:
-            torch.Tensor: 4D torch tensor with shape (batch_size, classes, height,
-            width).
+            4D torch tensor with shape (batch_size, classes, height, width).
 
         """
         if self.training:
@@ -814,7 +813,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         if isinstance(loss, str):
             match loss:
                 case "cross_entropy":
-                    class_weights = torch.Tensor(
+                    class_weights = Tensor(
                         [
                             0.000019931143,
                             0.001904109430,
@@ -826,7 +825,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
                 case "focal":
                     self.loss = FocalLoss("multiclass", normalized=True)
                 case "weighted_dice":
-                    class_weights = torch.Tensor(
+                    class_weights = Tensor(
                         [
                             0.000019931143,
                             0.001904109430,
@@ -907,7 +906,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
                     raise e
 
     @override
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         with torch.autocast(device_type=self.device.type):
             return self.model(x)  # pyright: ignore[reportCallIssue]
 
@@ -917,8 +916,8 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
 
     @override
     def training_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
-    ) -> torch.Tensor:
+        self, batch: tuple[Tensor, Tensor, str], batch_idx: int
+    ) -> Tensor:
         """Forward pass for the model with dataloader batches.
 
         Args:
@@ -926,7 +925,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             batch_idx: Index of the batch in the epoch.
 
         Return:
-            torch.tensor: Training loss.
+            Training loss.
 
         Raises:
             AssertionError: Prediction shape and ground truth mask shapes are different.
@@ -939,7 +938,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
 
         with torch.autocast(device_type=self.device.type):
             # B x C x H x W
-            masks_proba: torch.Tensor = self.model(
+            masks_proba: Tensor = self.model(
                 images_input
             )  # pyright: ignore[reportCallIssue] False positive
 
@@ -992,19 +991,17 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         return loss_all
 
     @override
-    def validation_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int
-    ):
+    def validation_step(self, batch: tuple[Tensor, Tensor, str], batch_idx: int):
         self._shared_eval(batch, batch_idx, "val")
 
     @override
-    def test_step(self, batch: tuple[torch.Tensor, torch.Tensor, str], batch_idx: int):
+    def test_step(self, batch: tuple[Tensor, Tensor, str], batch_idx: int):
         self._shared_eval(batch, batch_idx, "test")
 
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, str],
         batch_idx: int,
         prefix: Literal["val", "test"],
     ):
@@ -1021,7 +1018,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         bs = images.shape[0] if len(images.shape) > 3 else 1
         images_input = images.to(self.device.type, dtype=torch.float32)
         masks = masks.to(self.device.type).long()
-        masks_proba: torch.Tensor = self.model(
+        masks_proba: Tensor = self.model(
             images_input
         )  # pyright: ignore[reportCallIssue]
 
@@ -1084,9 +1081,9 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
     def _shared_image_logging(
         self,
         batch_idx: int,
-        images: torch.Tensor,
-        masks_one_hot: torch.Tensor,
-        masks_preds: torch.Tensor,
+        images: Tensor,
+        masks_one_hot: Tensor,
+        masks_preds: Tensor,
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
@@ -1099,9 +1096,6 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
-
-        Returns:
-            None.
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
@@ -1182,10 +1176,10 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
     @torch.no_grad()
     def predict_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str | list[str]],
+        batch: tuple[Tensor, Tensor, str | list[str]],
         batch_idx: int,
         dataloader_idx: int = 0,
-    ):
+    ) -> tuple[Tensor, Tensor, str | list[str]]:
         """Forward pass for the model for one minibatch of a test epoch.
 
         Args:
@@ -1194,8 +1188,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
             dataloader_idx: Index of the dataloader.
 
         Return:
-            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
-                and filename.
+            Mask predictions, original images, and filename.
 
         """
         self.eval()
@@ -1203,7 +1196,7 @@ class TwoPlusOneUnetLightning(CommonModelMixin):
         images_input = images.to(self.device.type)
         masks = masks.to(self.device.type).long()
 
-        masks_proba: torch.Tensor = self.model(
+        masks_proba: Tensor = self.model(
             images_input
         )  # pyright: ignore[reportCallIssue]
 

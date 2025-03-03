@@ -20,6 +20,7 @@ from PIL import Image
 
 # PyTorch
 import torch
+from torch import Tensor
 from torch.nn import functional as F
 from torch.nn.common_types import _size_2_t
 from torch.utils.data import (
@@ -64,7 +65,7 @@ class DefaultTransformsMixin:
             image_size: Output image resolution.
 
         Returns:
-            tuple: The image, mask, combined, and final resize transformations
+            The image, mask, combined, and final resize transformations
 
         """
         # Sets the image transforms
@@ -131,7 +132,7 @@ class DefaultDatasetProtocol(Protocol):
 
 
 class LGEDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, str]],
+    Dataset[tuple[Tensor, Tensor, str]],
     DefaultTransformsMixin,
 ):
     """LGE dataset for the cardiac LGE MRI images."""
@@ -211,15 +212,14 @@ class LGEDataset(
         )
 
     @override
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor, str]:
         """Get a batch of images, masks, and the image names from the dataset.
 
         Args:
             index: The index of the batch.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor | npt.NDArray[np.floating[Any]], str]: The
-            images, masks, and image names.
+            The images, masks, and image names.
 
         Raises:
             ValueError: If the image is not in .PNG format.
@@ -239,7 +239,7 @@ class LGEDataset(
                 if self.loading_mode == LoadingMode.RGB
                 else img.convert("L")
             )
-        out_img: torch.Tensor = self.transform_img(img_list)
+        out_img: Tensor = self.transform_img(img_list)
 
         with Image.open(
             os.path.join(self.mask_dir, mask_name), formats=["png"]
@@ -300,7 +300,7 @@ class LGEDataset(
 
 
 class CineDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, str]],
+    Dataset[tuple[Tensor, Tensor, str]],
     DefaultTransformsMixin,
 ):
     """Cine cardiac magnetic resonance imagery dataset."""
@@ -387,7 +387,7 @@ class CineDataset(
             )
 
     @override
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor, str]:
         # Define Cine file name
         img_name: str = self.img_list[index]
         mask_name: str = self.img_list[index].split(".")[0] + ".nii.png"
@@ -539,7 +539,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
         )
 
     @override
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, str]:
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor, str]:
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
@@ -622,7 +622,7 @@ class TwoPlusOneDataset(CineDataset, DefaultTransformsMixin):
 
 
 class TwoStreamDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]],
+    Dataset[tuple[Tensor, Tensor, Tensor, str]],
     DefaultTransformsMixin,
 ):
     """Two stream dataset with LGE and cine cardiac magnetic resonance imagery."""
@@ -709,17 +709,14 @@ class TwoStreamDataset(
             IMREAD_COLOR if self.loading_mode == LoadingMode.RGB else IMREAD_GRAYSCALE
         )
 
-    def __getitem__(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]:
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor, Tensor, str]:
         """Get a batch of LGE images, CINE images, masks, and the image names.
 
         Args:
             index: The index of the batch.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]: The LGE images, CINE
-            images, masks, and image names.
+            The LGE images, cine sequence, masks, and image names.
 
         Raises:
             ValueError: If the image is not in .PNG format.
@@ -736,7 +733,7 @@ class TwoStreamDataset(
 
         # Convert LGE to RGB or Greyscale
         with Image.open(os.path.join(self.lge_dir, lge_name), formats=["png"]) as lge:
-            out_lge: torch.Tensor = self.transform_img(lge.convert("L"))
+            out_lge: Tensor = self.transform_img(lge.convert("L"))
 
         # PERF: Initialise the output tensor ahead of time to reduce memory allocation
         # time.
@@ -819,7 +816,7 @@ class TwoStreamDataset(
 
 
 class ResidualTwoPlusOneDataset(
-    Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, str]],
+    Dataset[tuple[Tensor, Tensor, Tensor, str]],
     DefaultTransformsMixin,
 ):
     """Two stream dataset with cine images and residual frames."""
@@ -922,9 +919,7 @@ class ResidualTwoPlusOneDataset(
         """Get the length of the dataset."""
         return len(self.img_list)
 
-    def _get_regular(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, tv_tensors.Mask, str]:
+    def _get_regular(self, index: int) -> tuple[Tensor, Tensor, tv_tensors.Mask, str]:
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
@@ -1020,7 +1015,7 @@ class ResidualTwoPlusOneDataset(
 
     def _get_opticalflow(
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, tv_tensors.Mask, str]:
+    ) -> tuple[Tensor, Tensor, tv_tensors.Mask, str]:
         img_name = self.img_list[index]
         mask_name = self.img_list[index].split(".")[0] + ".nii.png"
 
@@ -1130,7 +1125,7 @@ class ResidualTwoPlusOneDataset(
     @override
     def __getitem__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, tv_tensors.Mask, str]:
+    ) -> tuple[Tensor, Tensor, tv_tensors.Mask, str]:
         match self.residual_mode:
             case ResidualMode.SUBTRACT_NEXT_FRAME:
                 return self._get_regular(index)
@@ -1221,8 +1216,8 @@ class ResidualTwoPlusOneDataset(
 def concatenate_imgs(
     frames: int,
     select_frame_method: Literal["consecutive", "specific"],
-    imgs: torch.Tensor,
-) -> torch.Tensor:
+    imgs: Tensor,
+) -> Tensor:
     """Concatenate the images.
 
     This is performed based on the number of frames and the method of selecting frames.
@@ -1233,7 +1228,7 @@ def concatenate_imgs(
         imgs: The tensor of images to select.
 
     Returns:
-        torch.Tensor: The concatenated images.
+        The concatenated images.
 
     Raises:
         ValueError: If the number of frames is not within [5, 10, 15, 20, 30].
@@ -1307,7 +1302,7 @@ def load_train_indices(
         valid_idxs_path: Path to validation indices pickle file.
 
     Returns:
-        tuple[list[int], list[int]]: Training and Validation indices
+        Training and Validation indices
 
     Raises:
         RuntimeError: If there are duplicates in the training and validation
@@ -1431,7 +1426,7 @@ def get_trainval_data_subsets(
         valid_dataset: The original valid dataset.
 
     Returns:
-        tuple[Subset, Subset]: Training and validation subsets.
+        Training and validation subsets.
 
     Raises:
         AssertionError: Train and valid datasets are not the same.
@@ -1467,7 +1462,7 @@ def get_trainval_dataloaders(
         dataset: The original dataset.
 
     Returns:
-        tuple[DataLoader, DataLoader]: Training and validation dataloaders.
+        Training and validation dataloaders.
 
     """
     # Define fixed seeds
@@ -1516,7 +1511,7 @@ def get_class_weights(
         train_set: The training set.
 
     Returns:
-        npt.NDArray[np.float32]: The class weights.
+        The class weights.
 
     Raises:
         AssertionError: If the subset's dataset object has no `classification_mode`

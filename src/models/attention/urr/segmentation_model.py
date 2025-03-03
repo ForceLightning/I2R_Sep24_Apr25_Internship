@@ -307,7 +307,7 @@ class URRResidualAttentionUnet(ResidualAttentionUnet):
             residual_frames: Residual cine CMR sequence.
 
         Returns:
-            tuple[Tensor, Tensor | None, Tensor, Tensor]: Predicted mask probabilities, initial uncertainty, final uncertainty, confidence loss.
+            Predicted mask probabilities, initial uncertainty, final uncertainty, confidence loss.
 
         """
         img_features_list: list[Tensor] = []

@@ -18,7 +18,10 @@ def calc_uncertainty(score: Tensor) -> Tensor:
         score: Rough segmentation mask.
 
     Returns:
-        Tensor: Uncertainty map.
+        Uncertainty map.
+
+    Raises:
+        RuntimeError: If dimensions of `score` are wrong or some other runtime error occurs.
 
     """
     # seg shape: bs, obj_n, h, w

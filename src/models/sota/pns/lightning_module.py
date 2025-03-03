@@ -409,7 +409,7 @@ class PNSLightningModule(CommonModelMixin):
         masks_preds: torch.Tensor,
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
-    ):
+    ) -> None:
         """Log the images to tensorboard.
 
         Args:
@@ -419,9 +419,6 @@ class PNSLightningModule(CommonModelMixin):
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
-
-        Return:
-            None
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
@@ -503,7 +500,7 @@ class PNSLightningModule(CommonModelMixin):
         batch: tuple[Tensor, Tensor, str | list[str]],
         batch_idx: int,
         dataloader_idx: int = 0,
-    ):
+    ) -> tuple[Tensor, Tensor, str | list[str]]:
         """Forward pass for the model for one minibatch of a test epoch.
 
         Args:
@@ -512,8 +509,7 @@ class PNSLightningModule(CommonModelMixin):
             dataloader_idx: Index of the dataloader.
 
         Return:
-            tuple[torch.Tensor, torch.Tensor, str]: Mask predictions, original images,
-                and filename.
+            Mask predictions, original images, and filename.
 
         """
         self.eval()

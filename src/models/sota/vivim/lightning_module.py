@@ -479,9 +479,6 @@ class VivimLightningModule(CommonModelMixin):
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
 
-        Returns:
-            None.
-
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
             TensorboardLogger.
@@ -567,7 +564,7 @@ class VivimLightningModule(CommonModelMixin):
         ),
         batch_idx: int,
         dataloader_idx: int = 0,
-    ):
+    ) -> tuple[Tensor, Tensor, str | list[str]]:
         """Forward pass for the model for one minibatch of a test epoch.
 
         Args:
@@ -575,9 +572,8 @@ class VivimLightningModule(CommonModelMixin):
             batch_idx: Index of the batch in the epoch.
             dataloader_idx: Index of the dataloader.
 
-        Return:
-            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
-                and filename.
+        Returns:
+            Mask predictions, original images, and filename.
 
         """
         self.eval()

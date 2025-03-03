@@ -169,7 +169,7 @@ class PNSNet(PNSBaseNet):
             x: Tensor of shape (B, F, C, H, W)
 
         Returns:
-            Tensor: Tensor of shape (B, F - 1, num_classes, H, W)
+            Tensor of shape (B, F - 1, num_classes, H, W)
 
         """
         origin_shape = x.shape

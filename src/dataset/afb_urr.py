@@ -176,8 +176,8 @@ class AFB_URRDataset(Dataset[tuple[Tensor, Tensor, str]], DefaultTransformsMixin
             num_frames: Number of frames to use.
             imgs: Loaded cine images.
 
-        Returns:
-            Tensor: Tensor with selected frames only.
+        Return:
+            Tensor with selected frames only.
 
         """
         if num_frames == 30:

@@ -285,14 +285,14 @@ class Unet(FLANetSegmentationModel):
         aux_params: Dictionary with parameters of the auxiliary output (classification
             head). Auxiliary output is build on top of encoder if **aux_params** is not
             **None** (default). Supported params:
-                - classes (int): A number of classes
-                - pooling (str): One of "max", "avg". Default is "avg"
-                - dropout (float): Dropout factor in [0, 1)
-                - activation (str): An activation function to apply "sigmoid"/"softmax"
-                (could be **None** to return logits)
+            - classes (int): A number of classes
+            - pooling (str): One of "max", "avg". Default is "avg"
+            - dropout (float): Dropout factor in [0, 1)
+            - activation (str): An activation function to apply "sigmoid"/"softmax"
+            (could be **None** to return logits)
 
     Returns:
-        ``torch.nn.Module``: Unet
+        Unet
 
     .. _Unet:
         https://arxiv.org/abs/1505.04597

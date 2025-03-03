@@ -13,7 +13,7 @@ from segmentation_models_pytorch.losses import FocalLoss
 # PyTorch
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import LRScheduler
@@ -48,7 +48,7 @@ class HeatmapLoss(_Loss):
     """Heatmap loss for FLA-Net."""
 
     @override
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
         assert input.size() == target.size()
         loss = (input - target) ** 2
         match self.reduction:
@@ -169,7 +169,7 @@ class FLANetLightningModule(CommonModelMixin):
         if isinstance(loss, str):
             match loss:
                 case "cross_entropy":
-                    class_weights = torch.Tensor(
+                    class_weights = Tensor(
                         [
                             0.000019931143,
                             0.001904109430,
@@ -243,16 +243,16 @@ class FLANetLightningModule(CommonModelMixin):
                     raise e
 
     @override
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         with torch.autocast(device_type=self.device.type):
             return self.model(x)  # pyright: ignore[reportCallIssue] False Positive
 
     @override
     def training_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, Tensor, str],
         batch_idx: int,
-    ) -> torch.Tensor:
+    ) -> Tensor:
         images, masks, hms, _ = batch
         bs = images.shape[0] if images.ndim > 3 else 1
         images_input = images.to(self.device.type, dtype=torch.float32)
@@ -322,7 +322,7 @@ class FLANetLightningModule(CommonModelMixin):
     @override
     def validation_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, Tensor, str],
         batch_idx: int,
     ):
         self._shared_eval(batch, batch_idx, "val")
@@ -330,7 +330,7 @@ class FLANetLightningModule(CommonModelMixin):
     @override
     def test_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, Tensor, str],
         batch_idx: int,
     ):
         self._shared_eval(batch, batch_idx, "test")
@@ -338,7 +338,7 @@ class FLANetLightningModule(CommonModelMixin):
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, Tensor, str],
         batch_idx: int,
         prefix: Literal["val", "test"],
     ):
@@ -429,9 +429,9 @@ class FLANetLightningModule(CommonModelMixin):
     def _shared_image_logging(
         self,
         batch_idx: int,
-        images: torch.Tensor,
-        masks_one_hot: torch.Tensor,
-        masks_preds: torch.Tensor,
+        images: Tensor,
+        masks_one_hot: Tensor,
+        masks_preds: Tensor,
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
@@ -444,9 +444,6 @@ class FLANetLightningModule(CommonModelMixin):
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
-
-        Returns:
-            None.
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
@@ -527,10 +524,10 @@ class FLANetLightningModule(CommonModelMixin):
     @torch.no_grad()
     def predict_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, str | list[str]],
+        batch: tuple[Tensor, Tensor, Tensor, str | list[str]],
         batch_idx: int,
         dataloader_idx: int = 0,
-    ):
+    ) -> tuple[Tensor, Tensor, str | list[str]]:
         """Forward pass for the model for one minibatch of a test epoch.
 
         Args:
@@ -539,8 +536,7 @@ class FLANetLightningModule(CommonModelMixin):
             dataloader_idx: Index of the dataloader.
 
         Return:
-            tuple[torch.tensor, torch.tensor, str]: Mask predictions, original images,
-                and filename.
+            Mask predictions, original images, and filename.
 
         """
         self.eval()

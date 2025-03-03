@@ -148,7 +148,7 @@ class AFB_URRLightningModule(CommonModelMixin):
         if isinstance(loss, str):
             match loss:
                 case "cross_entropy":
-                    class_weights = torch.Tensor(
+                    class_weights = Tensor(
                         [
                             0.000019931143,
                             0.001904109430,
@@ -376,7 +376,7 @@ class AFB_URRLightningModule(CommonModelMixin):
 
     def training_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, str],
         batch_idx: int,
     ):
         """Forward pass for the model with dataloader batches.
@@ -386,7 +386,7 @@ class AFB_URRLightningModule(CommonModelMixin):
             batch_idx: Index of the batch in the epoch.
 
         Return:
-            torch.Tensor: Training loss.
+            Training loss.
 
         Raises:
             AssertionError: Prediction shape and ground truth mask shapes are different.
@@ -434,7 +434,7 @@ class AFB_URRLightningModule(CommonModelMixin):
 
     def validation_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, str],
         batch_idx: int,
     ):
         """Forward pass for the model for one minibatch of a validation epoch.
@@ -448,7 +448,7 @@ class AFB_URRLightningModule(CommonModelMixin):
 
     def test_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, str],
         batch_idx: int,
     ):
         """Forward pass for the model for one minibatch of a test epoch.
@@ -463,7 +463,7 @@ class AFB_URRLightningModule(CommonModelMixin):
     @torch.no_grad()
     def _shared_eval(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str],
+        batch: tuple[Tensor, Tensor, str],
         batch_idx: int,
         prefix: Literal["val", "test"],
     ):
@@ -515,9 +515,9 @@ class AFB_URRLightningModule(CommonModelMixin):
     def _shared_image_logging(
         self,
         batch_idx: int,
-        images: torch.Tensor,
-        masks_one_hot: torch.Tensor,
-        masks_preds: torch.Tensor,
+        images: Tensor,
+        masks_one_hot: Tensor,
+        masks_preds: Tensor,
         prefix: Literal["train", "val", "test"],
         every_interval: int = 10,
     ):
@@ -530,9 +530,6 @@ class AFB_URRLightningModule(CommonModelMixin):
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
-
-        Return:
-            None
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of
@@ -611,10 +608,10 @@ class AFB_URRLightningModule(CommonModelMixin):
     @torch.no_grad()
     def predict_step(
         self,
-        batch: tuple[torch.Tensor, torch.Tensor, str | list[str]],
+        batch: tuple[Tensor, Tensor, str | list[str]],
         batch_idx: int,
         dataloader_idx: int = 0,
-    ):
+    ) -> tuple[Tensor, Tensor, str | list[str]]:
         """Forward pass for the model for one minibatch of a test epoch.
 
         Args:
@@ -623,8 +620,7 @@ class AFB_URRLightningModule(CommonModelMixin):
             dataloader_idx: Index of the dataloader.
 
         Return:
-            tuple[torch.Tensor, torch.Tensor, str]: Mask predictions, original images,
-                and filename.
+            Mask predictions, original images, and filename.
 
         """
         self.eval()

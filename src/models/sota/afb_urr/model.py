@@ -196,7 +196,7 @@ class FeatureBank(nn.Module):
             frame_idx: Frame index.
 
         Returns:
-            int | float: Balance of features.
+            Balance of features.
 
         """
         old_size = self.keys[class_idx].shape[1]
@@ -277,7 +277,9 @@ class EncoderM(nn.Module):
             "std", torch.FloatTensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
         )
 
-    def forward(self, in_f: Tensor, in_m: Tensor, in_o: Tensor):
+    def forward(
+        self, in_f: Tensor, in_m: Tensor, in_o: Tensor
+    ) -> tuple[Tensor, Tensor]:
         """Forward pass for the encoder.
 
         Args:
@@ -286,7 +288,7 @@ class EncoderM(nn.Module):
             in_o: Inverted mask (B, 1, H, W)
 
         Returns:
-            Tensor: Tensor of shape (B, K, C, H, W)
+            Tensors of shape (B, K, C, H, W)
 
         """
         b, k, _c, _h, _w = in_f.shape
@@ -443,7 +445,7 @@ class Matcher(nn.Module):
             q_out: Output query tensor (B, F, K * H * W)
 
         Returns:
-            Tensor: Output tensor (B, F, K * H * W)
+            Output tensor (B, F, K * H * W)
 
         """
         # q_in: (B, F, K * H * W)
@@ -566,7 +568,7 @@ class Decoder(nn.Module):
             feature_shape: Shape of the features.
 
         Returns:
-            Tensor: Segmentation mask. Shape: (B, F, K, H, W)
+            Segmentation mask. Shape: (B, F, K, H, W)
 
         """
         b, f, k, *_ = patch_match.shape
@@ -651,7 +653,7 @@ class AFB_URR(nn.Module):
             mask: Mask to memorise. (B, K, H, W)
 
         Returns:
-            tuple[list[Tensor], list[Tensor]]: List of keys and values.
+            List of keys and values.
 
         """
         _, k, _, _ = mask.shape
@@ -685,7 +687,7 @@ class AFB_URR(nn.Module):
             fb_global: Global Feature Bank.
 
         Returns:
-            tuple[Tensor, Tensor | None]: Segmentation mask and uncertainty.
+            Segmentation mask and uncertainty.
 
         """
         obj_n = fb_global.obj_n
