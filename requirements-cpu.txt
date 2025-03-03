@@ -21,3 +21,5 @@ torchsummary==1.5.1
 torchvision==0.20.1
 tqdm==4.67.1; python_version >= '3.7'
 warmup-scheduler==0.3
+-f https://data.pyg.org/whl/torch-2.5.1+cpu.html
+torch-scatter==2.1.2
