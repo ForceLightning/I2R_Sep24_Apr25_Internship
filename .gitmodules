@@ -13,3 +13,6 @@
 [submodule "thirdparty/AFB-URR"]
 	path = thirdparty/AFB_URR
 	url = https://github.com/ForceLightning/AFB-URR.git
+[submodule "thirdparty/CVA_net"]
+	path = thirdparty/CVA_net
+	url = https://github.com/jhl-Det/CVA-Net.git

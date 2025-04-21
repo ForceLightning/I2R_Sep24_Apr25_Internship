@@ -47,9 +47,7 @@ class TestLoadWeights:
                 tscse_resnet50.set_submodule(k, new)
 
                 if isinstance(new, nn.Conv3d):
-                    assert (
-                        dict(tscse_resnet50.named_modules())[k].weight == new.weight
-                    ).all()
+                    assert dict(tscse_resnet50.named_modules())[k].weight == new.weight
 
         tscse_resnet50 = tscse_resnet50.cuda()
 

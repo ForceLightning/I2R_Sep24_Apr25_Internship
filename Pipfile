@@ -23,7 +23,7 @@ lightning = { extras = ["pytorch-extra"] }
 tensorboard = "*"
 rich = "*"
 deepspeed = "*"
-jsonargparse = {version = "<4.36.0", extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"] }
+jsonargparse = { extras = ["argcomplete", "typing-extensions", "omegaconf", "signatures"] }
 opencv-contrib-python-headless = {file = "../opencv-python/opencv_contrib_python_headless-4.10.0.84-cp312-cp312-linux_x86_64.whl"}
 torch-scatter = "*"
 scipy = "*"
@@ -63,7 +63,7 @@ sphobjinv = "*"
 sphinx = "*"
 sphinx-autodoc2 = "*"
 sphinx-rtd-theme = "*"
-enum-tools = {extras = ["sphinx"], version = "*"}
+enum-tools = {extras = ["sphinx"] }
 sphinx-autodoc-typehints = "*"
 
 [transunet]
@@ -81,3 +81,12 @@ transformers = ">=4.48.0"
 [vps]
 torchtnt = "*"
 self-cuda = {file = "thirdparty/VPS/lib/module/PNS", editable = true}
+
+[dpstt]
+pycocotools = "*"
+tqdm = "*"
+cython = "*"
+scipy = "*"
+timm = "*"
+pillow = "*"
+tensorboardx = "*"
