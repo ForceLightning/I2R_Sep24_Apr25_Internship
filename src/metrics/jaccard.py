@@ -123,6 +123,8 @@ class MulticlassMJaccardIndex(MulticlassJaccardIndex):
                 confmat, average=None, zero_division=self.zero_division
             )
 
+            logger.log(15, "%s", jaccard)
+
             if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
                 self.mJaccard_running += jaccard * target_nonzeros[i]
             else:

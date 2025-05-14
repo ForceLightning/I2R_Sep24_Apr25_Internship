@@ -26,6 +26,8 @@ class CommonModelMixin(L.LightningModule):
     """A collection of dice score variants."""
     other_metrics: dict[str, MetricCollection]
     """A collection of other metrics (recall, precision, jaccard)."""
+    hausdorff_metrics: dict[str, MetricCollection]
+    """Just hausdorff distance metrics."""
     model: nn.Module
     """The internal model used."""
     model_type: ModelType

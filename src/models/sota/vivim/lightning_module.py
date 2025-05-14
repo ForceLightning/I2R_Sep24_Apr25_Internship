@@ -116,7 +116,7 @@ class VivimLightningModule(CommonModelMixin):
             optimizer_kwargs: The optimizer keyword arguments.
             scheduler: The scheduler to use.
             scheduler_kwargs: The scheduler keyword arguments.
-            multiplier: The multiplier.
+            multiplier: The learning rate multiplier (used for GradualWarmupScheduler).
             total_epochs: The total number of epochs.
             alpha: The alpha loss scaling value.
             _beta: The beta loss scaling value. (Unused).
@@ -231,6 +231,7 @@ class VivimLightningModule(CommonModelMixin):
         # Sets metric if None.
         self.dice_metrics = {}
         self.other_metrics = {}
+        self.hausdorff_metrics = {}
         setup_metrics(self, metric, classes, metric_mode, metric_div_zero)
 
         # Attempts to load checkpoint if provided.

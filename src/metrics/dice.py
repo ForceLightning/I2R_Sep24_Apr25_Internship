@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Dice score metrics."""
 # Standard Library
+import logging
 from typing import Any, Literal, override
 
 # PyTorch
@@ -13,6 +14,8 @@ from torchmetrics.utilities.compute import _safe_divide
 
 # First party imports
 from utils.types import MetricMode
+
+logger = logging.getLogger(__name__)
 
 
 class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
@@ -235,6 +238,8 @@ class GeneralizedDiceScoreVariant(GeneralizedDiceScore):
             dice, weights = _generalized_dice_compute(
                 numerator, denominator, self.per_class, zero_division=self.zero_division
             )
+            logger.log(10, "[%s] %s", self.return_type, dice)
+
             if self.metric_mode == MetricMode.IGNORE_EMPTY_CLASS:
                 assert target_nonzeros is not None
                 dice *= weights

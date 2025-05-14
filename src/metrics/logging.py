@@ -22,6 +22,7 @@ from torchmetrics.classification import (
 
 # First party imports
 from metrics.dice import GeneralizedDiceScoreVariant
+from metrics.hausdorff import HausdorffDistanceVariant
 from metrics.jaccard import (
     BinaryMJaccardIndex,
     MulticlassMJaccardIndex,
@@ -66,9 +67,15 @@ def shared_metric_calculation(
                     masks_preds_one_hot > 0.5, masks_one_hot
                 )
                 module.other_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
+                module.hausdorff_metrics[prefix].update(
+                    masks_preds_one_hot > 0.5, masks_one_hot
+                )
             else:
                 module.dice_metrics[prefix].update(masks_preds_one_hot > 0.5, masks)
                 module.other_metrics[prefix].update(masks_preds_one_hot, masks)
+                module.hausdorff_metrics[prefix].update(
+                    masks_preds_one_hot > 0.5, masks_one_hot
+                )
         case ClassificationMode.MULTICLASS_MODE:
             # Output: BS x C x H x W
             masks_preds = masks_proba.softmax(dim=1)
@@ -77,11 +84,13 @@ def shared_metric_calculation(
             ).permute(0, -1, 1, 2)
             module.dice_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
             module.other_metrics[prefix].update(masks_preds, masks)
+            module.hausdorff_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
         case ClassificationMode.BINARY_CLASS_3_MODE:
             masks_preds = masks_proba.sigmoid()
             masks_preds_one_hot = masks_preds > 0.5
             module.dice_metrics[prefix].update(masks_preds, masks_one_hot)
             module.other_metrics[prefix].update(masks_preds, masks)
+            module.hausdorff_metrics[prefix].update(masks_preds_one_hot, masks_one_hot)
         case _:
             raise NotImplementedError(
                 f"The mode {module.eval_classification_mode.name} is not implemented."
@@ -122,6 +131,14 @@ def setup_metrics(
         )
         module.__setattr__(f"{stage}_dice_combined", dice_combined)
         module.dice_metrics[stage] = dice_combined
+        hausdorff_dict = _setup_hausdorff(
+            module, classes, metric_mode, division_by_zero
+        )
+        hausdorff = MetricCollection(
+            hausdorff_dict, prefix=f"{stage}/", compute_groups=True
+        )
+        module.__setattr__(f"{stage}_hausdorff", hausdorff)
+        module.hausdorff_metrics[stage] = hausdorff
 
         # (2) Setup Jaccard Index, Precision, and Recall collection.
         jaccard_combined_dict = _setup_jaccard(
@@ -330,6 +347,25 @@ def _setup_precision_recall(
     }
 
 
+def _setup_hausdorff(
+    module: CommonModelMixin,
+    classes: int,
+    _metric_mode: MetricMode,
+    _division_by_zero: float,
+) -> dict[str, Metric]:
+    match module.eval_classification_mode:
+        case ClassificationMode.MULTICLASS_MODE | ClassificationMode.MULTILABEL_MODE:
+            return {
+                "hausdorff_distance": HausdorffDistanceVariant(
+                    classes, [3], "euclidean", directed=True, input_format="one-hot"
+                )
+            }
+        case _:
+            raise NotImplementedError(
+                f"The mode {module.eval_classification_mode.name} is not implemented for Hausdorff distance."
+            )
+
+
 def shared_metric_logging_epoch_end(module: CommonModelMixin, prefix: str):
     """Log the metrics for the model. This is called at the end of the epoch.
 
@@ -342,6 +378,7 @@ def shared_metric_logging_epoch_end(module: CommonModelMixin, prefix: str):
     """
     dice_metric_obj = module.dice_metrics[prefix]
     other_metric_obj = module.other_metrics[prefix]
+    hausdorff_metric_obj = module.hausdorff_metrics[prefix]
 
     if isinstance(dice_metric_obj, GeneralizedDiceScoreVariant):
         # Handle the single metric case.
@@ -349,7 +386,7 @@ def shared_metric_logging_epoch_end(module: CommonModelMixin, prefix: str):
     elif isinstance(dice_metric_obj, MetricCollection):
         # Handle the grouped metric case.
         _grouped_generalized_metric_logging(
-            module, dice_metric_obj, other_metric_obj, prefix
+            module, dice_metric_obj, other_metric_obj, hausdorff_metric_obj, prefix
         )
 
 
@@ -405,6 +442,7 @@ def _grouped_generalized_metric_logging(
     module: CommonModelMixin,
     dice_metric_obj: MetricCollection,
     other_metric_obj: MetricCollection,
+    hausdorff_metric_obj: MetricCollection,
     prefix: str,
 ):
     """Log the metrics for the model for a MetricCollection of Dice metrics.
@@ -413,12 +451,14 @@ def _grouped_generalized_metric_logging(
         module: The LightningModule instance.
         dice_metric_obj: The dice metric collection object.
         other_metric_obj: The other metric collection object.
+        hausdorff_metric_obj: The hausdorff distance metric object.
         prefix: The runtime mode (train, val, test).
 
     """
     dice_results: dict[str, torch.Tensor] = dice_metric_obj.compute()
     other_results: dict[str, torch.Tensor] = other_metric_obj.compute()
-    results = dice_results | other_results
+    hausdorff_results: dict[str, torch.Tensor] = hausdorff_metric_obj.compute()
+    results = dice_results | other_results | hausdorff_results
     results_new: dict[str, torch.Tensor] = {}
     # (1) Log only validation metrics in hyperparameter tab.
     for k, v in results.items():
