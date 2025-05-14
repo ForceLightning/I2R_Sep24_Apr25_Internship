@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 import os
+import sys
 from typing import Literal, override
 
 # PyTorch
@@ -18,11 +20,13 @@ from cli.common import CommonCLI
 from dataset.dataset import get_trainval_data_subsets
 from dataset.vivim import VivimDataset
 from models.sota.vivim.lightning_module import VivimLightningModule
+from utils.logging import LOGGING_FORMAT
 from utils.types import ClassificationMode, DummyPredictMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
+logger = logging.getLogger(__name__)
 
 
 class VivimDataModule(L.LightningDataModule):
@@ -274,6 +278,12 @@ class VivimCLI(CommonCLI):
 
 
 if __name__ == "__main__":
+    file_handler = logging.FileHandler(filename="logs/vivim.log")
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    handlers = [file_handler, stdout_handler]
+    logging.basicConfig(level=15, format=LOGGING_FORMAT, handlers=handlers)
+    logger = logging.getLogger(__name__)
+
     cli = VivimCLI(
         VivimLightningModule,
         VivimDataModule,
