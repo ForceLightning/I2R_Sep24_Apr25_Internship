@@ -89,6 +89,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
         metric_div_zero: float = 1.0,
         single_attention_instance: bool = False,
+        no_guided_decoder: bool = False,
     ):
         """Initialise the Attention mechanism-based U-Net.
 
@@ -169,6 +170,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
         self.eval_classification_mode = eval_classification_mode
         self.classes = classes
         self.single_attention_instance = single_attention_instance
+        self._no_guided_decoder = no_guided_decoder
 
         # Trace memory usage
         if self.dump_memory_snapshot:
@@ -193,6 +195,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     reduce=attention_reduction,
                     single_attention_instance=single_attention_instance,
                     _attention_only=attention_only,
+                    _no_guided_decoder=no_guided_decoder,
                 )
             case ModelType.UNET_PLUS_PLUS:
                 self.model = ResidualAttentionUnetPlusPlus(  # pyright: ignore[reportAttributeAccessIssue]
@@ -209,6 +212,7 @@ class ResidualAttentionLightningModule(CommonModelMixin):
                     reduce=attention_reduction,
                     single_attention_instance=single_attention_instance,
                     _attention_only=attention_only,
+                    _no_guided_decoder=no_guided_decoder,
                 )
             case _:
                 raise NotImplementedError(f"{self.model_type} is not yet implemented!")
@@ -547,6 +551,9 @@ class ResidualAttentionLightningModule(CommonModelMixin):
             masks_preds: The predicted masks.
             prefix: The runtime mode (train, val, test).
             every_interval: The interval to log images.
+
+        Return:
+            None
 
         Raises:
             AssertionError: If the logger is not detected or is not an instance of

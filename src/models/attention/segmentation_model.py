@@ -23,7 +23,14 @@ from utils.types import ResidualMode
 from ..common import ENCODER_OUTPUT_SHAPES
 from ..tscse.tscse import TSCSENetEncoder
 from ..tscse.tscse import get_encoder as tscse_get_encoder
-from ..two_plus_one import DilatedOneD, OneD, Temporal3DConv, TemporalConvolutionalType
+from ..two_plus_one import (
+    DilatedOneD,
+    OneD,
+    Temporal3DConv,
+    TemporalConvolutionalType,
+    compress_2,
+    compress_dilated,
+)
 from .model import REDUCE_TYPES, AttentionLayer, SpatialAttentionBlock
 
 __all__ = ["ResidualAttentionUnet", "ResidualAttentionUnetPlusPlus"]
@@ -56,6 +63,7 @@ class ResidualAttentionUnet(SegmentationModel):
         reduce: REDUCE_TYPES = "prod",
         single_attention_instance: bool = False,
         _attention_only: bool = False,
+        _no_guided_decoder: bool = False,
     ):
         """Initialise the U-Net.
 
@@ -97,6 +105,7 @@ class ResidualAttentionUnet(SegmentationModel):
         self._attention_only = _attention_only
         self.classes = classes
         self.single_attention_instance = single_attention_instance
+        self._no_guided_decoder = _no_guided_decoder
 
         # Define encoder, decoder, segmentation head, and classification head.
         #
@@ -206,13 +215,14 @@ class ResidualAttentionUnet(SegmentationModel):
         res_layers: list[nn.Module] = []
         for i, out_channels in enumerate(self.skip_conn_channels):
             # (1): Create the 1D temporal convolutional layer.
-            oned: OneD | DilatedOneD | Temporal3DConv
+            oned_spatial: OneD | DilatedOneD | Temporal3DConv
+            oned_temporal: OneD | DilatedOneD | Temporal3DConv | None = None
             c, h, w = ENCODER_OUTPUT_SHAPES[self.encoder_name][i]
             if (
                 self.temporal_conv_type == TemporalConvolutionalType.DILATED
                 and self.num_frames in [5, 30]
             ):
-                oned = DilatedOneD(
+                oned_spatial = DilatedOneD(
                     1,
                     out_channels,
                     self.num_frames,
@@ -220,44 +230,79 @@ class ResidualAttentionUnet(SegmentationModel):
                     flat=self.flat_conv,
                     activation=self.res_conv_activation,
                 )
+                if self._no_guided_decoder:
+                    with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+                        oned_temporal = DilatedOneD(
+                            1,
+                            out_channels,
+                            self.num_frames,
+                            h * w,
+                            flat=self.flat_conv,
+                            activation=self.res_conv_activation,
+                        )
             elif self.temporal_conv_type == TemporalConvolutionalType.TEMPORAL_3D:
-                oned = Temporal3DConv(
+                oned_spatial = Temporal3DConv(
                     1,
                     out_channels,
                     self.num_frames,
                     flat=self.flat_conv,
                     activation=self.res_conv_activation,
                 )
+                if self._no_guided_decoder:
+                    with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+                        oned_temporal = Temporal3DConv(
+                            1,
+                            out_channels,
+                            self.num_frames,
+                            flat=self.flat_conv,
+                            activation=self.res_conv_activation,
+                        )
             else:
-                oned = OneD(
+                oned_spatial = OneD(
                     1,
                     out_channels,
                     self.num_frames,
                     self.flat_conv,
                     self.res_conv_activation,
                 )
+                if self._no_guided_decoder:
+                    with torch.random.fork_rng(devices=("cpu", "cuda:0")):
+                        oned_temporal = OneD(
+                            1,
+                            out_channels,
+                            self.num_frames,
+                            self.flat_conv,
+                            self.res_conv_activation,
+                        )
 
             # (2): Create the attention mechanism.
             # NOTE: This is to help with reproducibility during ablation studies.
             with torch.random.fork_rng(devices=("cpu", "cuda:0")):
-                attention = AttentionLayer(
-                    c,
-                    num_heads=1,
-                    num_frames=self.num_frames,
-                    reduce=self.reduce,
-                    need_weights=False,
-                    one_instance=self.single_attention_instance,
-                )
+                if self._no_guided_decoder:
+                    assert oned_temporal is not None
+                    res_layers.append(
+                        nn.ModuleDict(
+                            {"spatial": oned_spatial, "temporal": oned_temporal}
+                        )
+                    )
+                else:
+                    attention = AttentionLayer(
+                        c,
+                        num_heads=1,
+                        num_frames=self.num_frames,
+                        need_weights=False,
+                        one_instance=self.single_attention_instance,
+                    )
 
-                res_block = SpatialAttentionBlock(
-                    oned,
-                    attention,
-                    num_frames=self.num_frames,
-                    reduce=self.reduce,
-                    _attention_only=self._attention_only,
-                    one_instance=self.single_attention_instance,
-                )
-                res_layers.append(res_block)
+                    res_block = SpatialAttentionBlock(
+                        oned_spatial,
+                        attention,
+                        num_frames=self.num_frames,
+                        reduce=self.reduce,
+                        _attention_only=self._attention_only,
+                        one_instance=self.single_attention_instance,
+                    )
+                    res_layers.append(res_block)
 
         self.res_layers = nn.ModuleList(res_layers)
 
@@ -307,7 +352,7 @@ class ResidualAttentionUnet(SegmentationModel):
                 res_features = self.residual_encoder(r_imgs)
                 res_features_list.append(res_features)
 
-        residual_outputs: list[Tensor | list[str]] = [["EMPTY"]]
+        residual_outputs: list[Tensor | list[str] | tuple[Tensor, Tensor]] = [["EMPTY"]]
 
         for i in range(1, 6):
             if isinstance(self.encoder, TSCSENetEncoder):
@@ -319,13 +364,29 @@ class ResidualAttentionUnet(SegmentationModel):
                 img_outputs = torch.stack([outputs[i] for outputs in img_features_list])
                 res_outputs = torch.stack([outputs[i] for outputs in res_features_list])
 
-            res_block: SpatialAttentionBlock = self.res_layers[
+            res_block: SpatialAttentionBlock | nn.ModuleDict = self.res_layers[
                 i - 1
             ]  # pyright: ignore[reportAssignmentType] False positive
 
-            skip_output = res_block(
-                st_embeddings=img_outputs, res_embeddings=res_outputs
-            )
+            if self._no_guided_decoder:
+                assert isinstance(res_block, nn.ModuleDict)
+                outputs = []
+                for rb, st_embeddings in [
+                    (res_block["spatial"], img_outputs),
+                    (res_block["temporal"], res_outputs),
+                ]:
+                    if isinstance(rb, OneD):
+                        compress_output = compress_2(st_embeddings, rb)
+                    elif isinstance(rb, DilatedOneD):
+                        compress_output = compress_dilated(st_embeddings, rb)
+                    else:
+                        compress_output = rb(st_embeddings)
+                    outputs.append(compress_output)
+                skip_output = outputs[0] + outputs[1]
+            else:
+                skip_output = res_block(
+                    st_embeddings=img_outputs, res_embeddings=res_outputs
+                )
 
             if self.reduce == "cat":
                 d, b, c, h, w = skip_output.shape
@@ -378,6 +439,7 @@ class ResidualAttentionUnetPlusPlus(ResidualAttentionUnet):
         reduce: REDUCE_TYPES = "prod",
         single_attention_instance: bool = False,
         _attention_only: bool = False,
+        _no_guided_decoder: bool = False,
     ):
         """Initialise the U-Net++.
 
@@ -419,6 +481,7 @@ class ResidualAttentionUnetPlusPlus(ResidualAttentionUnet):
         self._attention_only = _attention_only
         self.classes = classes
         self.single_attention_instance = self.single_attention_instance
+        self._no_guided_decoder = _no_guided_decoder
 
         # Define encoder, decoder, segmentation head, and classification head.
         #
