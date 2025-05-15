@@ -1,0 +1,22 @@
+# lightning.pytorch==2.5.1
+trainer:
+  max_epochs: 50
+  check_val_every_n_epoch: 1
+  logger:
+    class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      save_dir: ./checkpoints/sota/swinunetr/lightning_logs
+model:
+  num_frames: 10
+  in_channels: 30
+  classes: 4
+  total_epochs: 50
+data:
+  batch_size: 8
+  data_dir: data/train_val/
+  test_dir: data/test/
+  indices_dir: data/indices/
+  select_frame_method: specific
+dl_classification_mode: MULTICLASS_MODE
+eval_classification_mode: MULTICLASS_MODE
+image_loading_mode: RGB
