@@ -467,6 +467,11 @@ def _grouped_generalized_metric_logging(
             "val/dice_weighted_avg",
             "val/dice_macro_class_2_3",
             "val/dice_weighted_class_2_3",
+            "val/infarct_area_r2",
+            "val/infarct_ratio_r2",
+            "val/infarct_span_r2",
+            "val/infarct_transmurality_r2",
+            "val/hausdorff_distance",
         ]:
             results_new[f"hp/{k}"] = v
 

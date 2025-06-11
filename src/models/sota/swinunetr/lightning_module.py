@@ -72,6 +72,7 @@ class SwinUnetRLightningModule(CommonModelMixin):
         dump_memory_snapshot: bool = False,
         metric_mode: MetricMode = MetricMode.INCLUDE_EMPTY_CLASS,
         metric_div_zero: float = 1.0,
+        dummy_predict: DummyPredictMode = DummyPredictMode.NONE,
     ):
         """Initialise the SwinUNetR lightning module.
 
@@ -98,6 +99,7 @@ class SwinUnetRLightningModule(CommonModelMixin):
             dump_memory_snapshot: Whether to dump memory snapshot.
             metric_mode: Metric calculation mode.
             metric_div_zero: How to handle division by zero operations.
+            dummy_predict: Whether to predict the ground truth for visualisation.
 
         """
         super().__init__()
@@ -109,6 +111,7 @@ class SwinUnetRLightningModule(CommonModelMixin):
         self.dump_memory_snapshot = dump_memory_snapshot
         self.classes = classes
         self.multiplier = multiplier
+        self.dummy_predict = dummy_predict
 
         if self.dump_memory_snapshot:
             torch.cuda.memory._record_memory_history(

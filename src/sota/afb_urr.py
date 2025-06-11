@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 # Standard Library
+import logging
 import os
+import sys
 from typing import Literal, override
 
 # PyTorch
@@ -18,11 +20,14 @@ from cli.common import CommonCLI
 from dataset.afb_urr import AFB_URRDataset
 from dataset.dataset import get_trainval_data_subsets
 from models.sota.afb_urr.lightning_module import AFB_URRLightningModule
+from utils.logging import LOGGING_FORMAT
 from utils.types import ClassificationMode, DummyPredictMode, LoadingMode
 
 BATCH_SIZE_TRAIN = 2  # Default batch size for training.
 NUM_FRAMES = 5  # Default number of frames.
 torch.set_float32_matmul_precision("medium")
+
+logger = logging.getLogger(__name__)
 
 
 class AFB_URRDataModule(L.LightningDataModule):
@@ -258,6 +263,12 @@ class AFB_URR_CLI(CommonCLI):
 
 
 if __name__ == "__main__":
+    file_handler = logging.FileHandler(filename="logs/afburr.log")
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    handlers = [file_handler, stdout_handler]
+    logging.basicConfig(level=logging.INFO, format=LOGGING_FORMAT, handlers=handlers)
+    logger = logging.getLogger(__name__)
+
     cli = AFB_URR_CLI(
         AFB_URRLightningModule,
         AFB_URRDataModule,
